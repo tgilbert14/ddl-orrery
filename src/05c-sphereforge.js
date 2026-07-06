@@ -6,14 +6,17 @@
    with no wrap seam; 24 fixed slices each take a per-frame sine
    x-nudge — the molten-skin illusion. Everything else is prebaked
    sprites. Zero external assets. No text in canvas. All original.
-   Per-frame cost: 24 slice blits + <=7 sprite blits + <=4 ring
-   strokes; zero allocations, zero gradient creation.
+   Per-frame cost: 24 slice blits + <=16 sprite blits (shading,
+   glosses, wanderer, 9-spot constellation) + <=4 ring strokes;
+   zero allocations, zero gradient creation.
    ============================================================ */
 'use strict';
 
 const SphereForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 512, TEX_H = 256;          /* gen size; baked doubled to 1024 */
+  const TEX_W = 768, TEX_H = 288;          /* gen size; baked doubled to 1536 —
+                                              near-1:1 texel:pixel at hub R, so the
+                                              hammered grain stays CRISP (metal, not cloud) */
   const NS = 24;                           /* fixed slice count */
   const RIM_S = 224, RIM_PR = 80;          /* rim sprite canvas / baked radius */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = R * 2.8 */
@@ -90,14 +93,18 @@ const SphereForge = (() => {
   /* ---------- prebaked assets ---------- */
   let baseTex = null, flowTex = null;
   let limbSpr = null, glossTL = null, glossBR = null, wanderSpr = null;
-  let pulseSpr = null, rimSpr = null, shadowSpr = null;
+  let pulseSpr = null, rimSpr = null, shadowSpr = null, hotSpr = null;
+  const hots = [];                         /* the specular constellation (seeded at init) */
   let su = 0.5, frozenT = 60000;           /* the seeded reduced-motion pose */
   let inited = false;
 
   function buildBase(rnd) {
     const c = cv(TEX_W, TEX_H), t = c.getContext('2d');
     const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3);
-    const L = makeLut([[0, '#4a2f10'], [0.42, '#c9a35c'], [0.75, '#ffdf9e'], [1, '#fff3d6']]);
+    const mid = makeFbm(rnd, 14, 8, 3);      /* mottling between the big forms */
+    const micro = makeFbm(rnd, 84, 32, 2);   /* the hammered-foil grain (reference match) */
+    /* deep-contrast gold LUT: near-black amber pools up to near-white blooms */
+    const L = makeLut([[0, '#2a1a05'], [0.32, '#7d5511'], [0.6, '#d3a02a'], [0.84, '#ffdd75'], [1, '#fffbe8']]);
     const img = t.createImageData(TEX_W, TEX_H); const d = img.data; let i = 0;
     for (let yy = 0; yy < TEX_H; yy++) {
       const v = yy / TEX_H;
@@ -105,8 +112,9 @@ const SphereForge = (() => {
         const u = xx / TEX_W;
         /* molten banding: horizontal bands bent by wrapped noise + a wrapped u-swell */
         const band = 0.5 + 0.5 * Math.sin(v * 14.5 + warp(u, v) * 4.6 + Math.sin(u * TAU) * 0.9);
-        let n = fb(u, v) * 0.58 + band * 0.42;
-        n = (n - 0.5) * 1.35 + 0.56;       /* stretch + lift into the gold */
+        let n = fb(u, v) * 0.46 + band * 0.28 + mid(u, v) * 0.26;
+        n += (micro(u, v) - 0.5) * 0.26;     /* frosted micro-texture riding the flow */
+        n = (n - 0.5) * 1.7 + 0.47;          /* hard stretch, low lift: real dark pools */
         if (n < 0) n = 0; else if (n > 1) n = 1;
         const k3 = ((n * 255) | 0) * 3;
         d[i++] = L[k3]; d[i++] = L[k3 + 1]; d[i++] = L[k3 + 2]; d[i++] = 255;
@@ -220,6 +228,17 @@ const SphereForge = (() => {
     gr.addColorStop(1, 'rgba(2,8,7,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
     shadowSpr = c;
+
+    /* one hotspot bloom: a BLOWN core like the reference's studio-light
+       reflections (drawn 9x at seeded positions; screen blend does the rest) */
+    c = cv(96, 96); g = c.getContext('2d');
+    gr = g.createRadialGradient(48, 48, 2, 48, 48, 46);
+    gr.addColorStop(0, 'rgba(255,254,246,1)');
+    gr.addColorStop(0.14, 'rgba(255,250,226,0.62)');
+    gr.addColorStop(0.4, 'rgba(255,240,190,0.18)');
+    gr.addColorStop(1, 'rgba(255,236,180,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 96, 96);
+    hotSpr = c;
   }
 
   /* ---------- runtime state (pooled; no per-frame allocation) ---------- */
@@ -236,6 +255,20 @@ const SphereForge = (() => {
       baseTex = buildBase(rnd);
       flowTex = buildFlow(rnd);
       buildSprites();
+      /* the constellation: 9 reflections pinned to the LIGHT, not the skin —
+         each breathes on its own clock; each rarely FLARES, like something
+         bright moving under the surface */
+      hots.length = 0;
+      for (let i = 0; i < 9; i++) {
+        const ha = rnd() * TAU, hr = Math.sqrt(rnd()) * 0.72;
+        hots.push({
+          x: Math.cos(ha) * hr, y: Math.sin(ha) * hr,
+          r: 0.16 + rnd() * 0.22,          /* bloom size, fraction of R */
+          ph: rnd() * TAU, rate: 0.0002 + rnd() * 0.0003,
+          fi: 18000 + rnd() * 26000,       /* flare interval */
+          fo: rnd() * 44000,               /* flare phase offset */
+        });
+      }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
     },
@@ -308,6 +341,30 @@ const SphereForge = (() => {
       g.globalAlpha = 0.55;
       g.drawImage(glossBR, x - R, y - R, D, D);
       g.globalAlpha = 1;
+
+      /* the hotspot constellation: reflections stay pinned while the metal
+         flows beneath them; each breathes, and rarely one FLARES. Additive
+         blend so the cores genuinely BLOW OUT like over-exposed reflections */
+      g.globalCompositeOperation = 'lighter';
+      for (let hI = 0; hI < hots.length; hI++) {
+        const h = hots[hI];
+        let ha2 = reduced2 ? 0.58 : 0.55 + 0.18 * Math.sin(t * h.rate + h.ph);
+        let hs2 = h.r * R * 2;
+        if (!reduced2) {
+          const ft = (t + h.fo) % h.fi;
+          if (ft < 2400) {                 /* the flare: 2.4s, sinusoid in and out */
+            const fe = Math.sin((ft / 2400) * Math.PI);
+            ha2 += fe * 0.45; hs2 *= 1 + 0.3 * fe;
+          }
+        }
+        if (rippling) ha2 += env * 0.2;    /* a disturbance lights the whole constellation */
+        /* MUST clamp: canvas IGNORES globalAlpha > 1 (assignment silently
+           dropped, previous spot's alpha would leak into this one) */
+        g.globalAlpha = ha2 > 1 ? 1 : ha2;
+        g.drawImage(hotSpr, x + h.x * R - hs2 / 2, y + h.y * R - hs2 / 2, hs2, hs2);
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
 
       /* the wandering specular: a slow lissajous orbit (parked when reduced) */
       const wa = reduced2 ? su * TAU : t * 0.00016;
