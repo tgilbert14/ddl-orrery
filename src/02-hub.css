@@ -174,3 +174,7 @@ html.warping .scene-hub .hub-copy { animation: hub-dolly var(--warp-ms) ease-in 
 html.rm .pa-dot, html.rm .hub-sub, html.rm .hub-hint { animation: none !important; }
 html.rm .scene, html.rm .scene.is-active { transition: opacity 0.25s linear; }
 html.rm #warpfx { display: none; }
+
+/* v3: the canvas planets ARE the worlds; the flat dot retires on desktop
+   (the 44px anchor, ring affordance, labels, and focus stay fully intact) */
+@media (min-width: 701px) { html.js .planet-anchor .pa-dot { opacity: 0; } }

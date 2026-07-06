@@ -33,17 +33,24 @@
 html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
 :root {
-  /* -- the night (base space) -- */
-  --void: #05070f;
-  --night: #0a0f22;
-  --horizon: #0d1330;      /* the sky's warm floor (hub gradient base) */
-  --ink: #e9eef9;          --ink-rgb: 233, 238, 249;   /* body text, 17.3:1 on void */
-  --ink-dim: #a9b6d0;      /* captions, 9.9:1 on void */
-  --ink-faint: #6b7994;    /* hints, 4.59:1 on void — the floor, respected */
-  --line: rgba(var(--ink-rgb), 0.14);
-  --glass: rgba(10, 15, 34, 0.55);
+  /* -- the deep (base water; was "the night") -- */
+  --void: #04100e;          --void-rgb: 4, 16, 14;      /* sea-glass black */
+  --night: #082019;                                     /* dark teal (skip-link, chips) */
+  --horizon: #103129;       /* lamplit depth floor (hub gradient base) */
+  --ink: #eee9da;           --ink-rgb: 238, 233, 218;   /* warm paper-white, 15.9:1 on void */
+  --ink-dim: #b3ae97;       /* captions, 8.7:1 on void */
+  --ink-faint: #857f68;     /* hints, 4.8:1 on void, the floor, respected */
+  --line: rgba(var(--brass-rgb), 0.26);                 /* every hairline is now brass */
+  --glass: rgba(6, 24, 20, 0.55);
 
-  /* -- world families: a (accent) · b (second) · glow · ground -- */
+  /* -- deco instrument chrome (NEW) -- */
+  --brass: #c9a35c;         --brass-rgb: 201, 163, 92;  /* 8.2:1 on void, 7.5:1 on plaque */
+  --brass-dim: #8a6f42;     --brass-dim-rgb: 138, 111, 66;  /* 4.1:1, DECORATIVE ONLY, never body text */
+  --cream: #efe4c8;         --cream-rgb: 239, 228, 200; /* engraved lettering, 15.3:1 on void */
+  --oxblood: #6f2b33;       --oxblood-rgb: 111, 43, 51; /* leather accent, decorative only */
+  --plaque: #0a1b17;        --plaque-rgb: 10, 27, 23;   /* brass-edged instrument surface */
+
+  /* -- world families: UNCHANGED, the worlds keep their identities -- */
   --w-dust-a: #ffb25e;      --w-dust-a-rgb: 255, 178, 94;
   --w-dust-b: #9fc07e;
   --w-dust-glow: #ff7a45;   --w-dust-glow-rgb: 255, 122, 69;
@@ -78,14 +85,14 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-un-b: #9fb4c8;
   --w-un-glow: #64d5f5;       --w-un-glow-rgb: 100, 213, 245;
   --w-un-ground: #0f141c;
-  --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* the ONE warm CTA accent */
-  --coral-ink: #2a0f0b;       /* text on coral, 6.55:1 — passes, but no headroom to lighten */
+  --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* still the ONE warm CTA accent */
+  --coral-ink: #2a0f0b;
 
   /* -- the live accent (retinted per hover / world; registered <color> above) -- */
   --acc: #64d5f5;
   --acc-rgb: 100, 213, 245;
 
-  /* -- type scale -- */
+  /* -- type scale (names kept; hub display duty moves to the plaque rules) -- */
   --font-display: ui-sans-serif, system-ui, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
   --fs-hero: clamp(1.9rem, 1.1rem + 4.2vw, 4.2rem);
@@ -94,8 +101,12 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --fs-body: clamp(0.98rem, 0.92rem + 0.35vw, 1.12rem);
   --fs-label: 0.72rem;
 
-  /* -- motion tokens (one clock: JS reads --beat for the shared tempo) -- */
-  --beat: 4s;                 /* one orrery beat; orbits/loops derive from it */
+  /* -- deco tracking vocabulary (NEW) -- */
+  --track-deco: 0.3em;        /* engraved display lines */
+  --track-plate: 0.18em;      /* plate labels */
+
+  /* -- motion tokens (unchanged) -- */
+  --beat: 4s;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --spring: linear(0, 0.32, 0.72, 1.03, 1.01, 0.99, 1);
   --warp-ms: 1100ms;
@@ -396,6 +407,10 @@ html.warping .scene-hub .hub-copy { animation: hub-dolly var(--warp-ms) ease-in 
 html.rm .pa-dot, html.rm .hub-sub, html.rm .hub-hint { animation: none !important; }
 html.rm .scene, html.rm .scene.is-active { transition: opacity 0.25s linear; }
 html.rm #warpfx { display: none; }
+
+/* v3: the canvas planets ARE the worlds; the flat dot retires on desktop
+   (the 44px anchor, ring affordance, labels, and focus stay fully intact) */
+@media (min-width: 701px) { html.js .planet-anchor .pa-dot { opacity: 0; } }
 
 
 /* ============================================================
@@ -708,6 +723,232 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
   a { color: #0b4d8c !important; }
 }
 
+
+/* ============================================================
+   03b-deco.css: The Deep Deco reskin. Brass, cream, sea-glass.
+   Everything here is STATIC (zero new animations, zero rAF).
+   ============================================================ */
+
+/* ---------- 1 · pre-boot / no-JS backdrop retint ----------
+   REPLACES the star-dot colors of #orrery in 02-hub.css (cool whites
+   become lamplight through water); html.js #orrery is already token-driven */
+#orrery {
+  background:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgba(var(--cream-rgb), 0.8), transparent 60%),
+    radial-gradient(1px 1px at 68% 12%, rgba(var(--cream-rgb), 0.6), transparent 60%),
+    radial-gradient(1.2px 1.2px at 33% 74%, rgba(var(--brass-rgb), 0.5), transparent 60%),
+    radial-gradient(1px 1px at 85% 55%, rgba(var(--cream-rgb), 0.5), transparent 60%),
+    radial-gradient(1.4px 1.4px at 52% 38%, rgba(var(--cream-rgb), 0.4), transparent 60%),
+    radial-gradient(1px 1px at 20% 92%, rgba(var(--cream-rgb), 0.35), transparent 60%),
+    radial-gradient(ellipse 120% 80% at 50% 120%, var(--horizon) 0%, var(--void) 60%);
+}
+
+/* ---------- 2 · the hub plaque (the Commission's order) ----------
+   REPLACES .hub-copy, .hub-h1, .hub-h1::after, .hub-sub, .hub-hint sizing
+   in 02-hub.css. The h1 stays real painted text: it remains the LCP. */
+.hub-copy {
+  margin-top: clamp(0.2rem, 1.5vh, 1rem);
+  padding: 0.75rem 1.8rem 0.9rem;
+  max-width: min(92vw, 44rem);
+  background:
+    linear-gradient(180deg, rgba(var(--brass-rgb), 0.07), rgba(var(--brass-rgb), 0.02) 45%, transparent),
+    var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.5);
+  /* double-rule effect: 1px border, 2px plaque gap, 1px inner brass line */
+  box-shadow: inset 0 0 0 3px var(--plaque), inset 0 0 0 4px rgba(var(--brass-rgb), 0.3);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px),
+                     calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
+}
+.hub-h1 {
+  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.35rem);
+  font-weight: 300;
+  letter-spacing: var(--track-deco);
+  text-transform: uppercase;
+  line-height: 1.4;
+  color: var(--cream);
+  text-wrap: balance;
+}
+/* brass double rules above AND below the engraved line
+   (::after REPLACES the old 72px coral-to-acc bar) */
+.hub-h1::before, .hub-h1::after {
+  content: ""; display: block; height: 5px;
+  width: min(300px, 72%);
+  margin: 0.45rem auto;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(var(--brass-rgb), 0.85) 18% 82%, transparent),
+    linear-gradient(90deg, transparent, rgba(var(--brass-rgb), 0.4) 28% 72%, transparent);
+  background-size: 100% 1px, 74% 1px;
+  background-position: center top, center bottom;
+  background-repeat: no-repeat;
+}
+.hub-sub {
+  font-size: 0.92rem; margin-top: 0.4rem; max-width: 42em;
+  color: var(--ink-dim);
+}
+.hub-hint {
+  margin-top: 0.6rem; font-size: 0.62rem;
+  letter-spacing: 0.22em; color: var(--ink-faint); font-weight: 600;
+}
+/* sunburst fan ornament under the lockup (pure gradient, no asset) */
+.hub-copy::after {
+  content: ""; display: block; width: 132px; height: 20px; margin: 0.5rem auto 0;
+  background: repeating-conic-gradient(from 270deg at 50% 100%,
+    rgba(var(--brass-rgb), 0.55) 0deg 1.6deg, transparent 1.6deg 11.25deg);
+  -webkit-mask-image: radial-gradient(ellipse 100% 200% at 50% 100%, #000 0 44%, transparent 72%);
+  mask-image: radial-gradient(ellipse 100% 200% at 50% 100%, #000 0 44%, transparent 72%);
+}
+
+/* ---------- 3 · brass HUD chrome ----------
+   EXTENDS .brand / .hud-title / #hud-clock; REPLACES the pill geometry of
+   .return-orbit and .audio-toggle (01-tokens.css); their hover transforms
+   and data-on accent states carry through untouched */
+.brand {
+  color: var(--cream);
+  padding: 0.4rem 0.75rem;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.4);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.2);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px),
+                     calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+.brand b { color: var(--brass); }          /* coral leaves the masthead; brass takes it */
+.hud-title { color: var(--brass); font-weight: 600; }
+#hud-clock { font-variant-numeric: tabular-nums; }
+
+.return-orbit, .audio-toggle {
+  border-radius: 0;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.45);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22);
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px),
+                     calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+}
+.return-orbit:hover, .return-orbit:focus-visible,
+.audio-toggle:hover, .audio-toggle:focus-visible { color: var(--cream); border-color: var(--brass); }
+
+/* clip-path swallows an OUTSIDE outline: chamfered controls get an inner focus ring */
+.brand:focus-visible, .return-orbit:focus-visible, .audio-toggle:focus-visible,
+.w-return:focus-visible, .w-toy:focus-visible { outline-offset: -4px; }
+
+/* ---------- 4 · the porthole + film grain (NEW elements) ---------- */
+/* z-order: scenes 10 < warpfx 90 < porthole 110 < grain 111 < HUD 120 < skip-link 300.
+   The warp flood blooms BEHIND the ring: the journey reads through-the-window. */
+.porthole {
+  position: fixed; inset: 0; z-index: 110; pointer-events: none;
+  background:
+    radial-gradient(ellipse 82% 86% at 50% 48%, transparent 0 63.5%,
+      rgba(var(--brass-rgb), 0.11) 64% 64.6%, transparent 65.4%),
+    radial-gradient(ellipse 125% 135% at 50% 50%, transparent 50%,
+      rgba(2, 10, 9, 0.4) 80%, rgba(1, 6, 5, 0.78) 100%);
+}
+.grain {
+  position: fixed; inset: 0; z-index: 111; pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+/* grain is deliberately STATIC (no flicker): nothing to gate under html.rm */
+
+/* ---------- 5 · the world-card: brass instrument plate ----------
+   REPLACES .world-card.glass background (03-worlds.css) and the .glass
+   radius/border for cards; rivets sit at 20px, inside the 18px chamfer */
+.world-card {
+  border-radius: 0;
+  padding-right: clamp(1.4rem, 3vw, 2.4rem);
+}
+.world-card.glass {
+  background-color: rgba(6, 22, 18, 0.8);       /* darker than old 0.72: captions keep 4.5:1 over FX */
+  background-image:
+    radial-gradient(4px 4px at 20px 20px,               rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    radial-gradient(4px 4px at calc(100% - 20px) 20px,  rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    radial-gradient(4px 4px at 20px calc(100% - 20px),  rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    radial-gradient(4px 4px at calc(100% - 20px) calc(100% - 20px), rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    linear-gradient(180deg, rgba(var(--brass-rgb), 0.06), transparent 32%);
+  border: 1px solid rgba(var(--brass-rgb), 0.5);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 3px rgba(6, 22, 18, 0.9), inset 0 0 0 4px rgba(var(--brass-rgb), 0.28);
+  clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px),
+                     calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
+}
+/* the medallion slot: integrator wires PlanetForge.drawMini into it */
+.card-planet {
+  position: absolute;
+  top: clamp(1.4rem, 3vw, 2.4rem);
+  right: clamp(1.4rem, 3vw, 2.4rem);
+  width: 46px; height: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #0e241e, #050f0c 78%);
+  box-shadow: 0 0 0 1px rgba(var(--brass-rgb), 0.7),
+              0 0 0 3px var(--plaque),
+              0 0 0 4px rgba(var(--brass-rgb), 0.35);
+}
+/* keep the eyebrow and the engraved name clear of the medallion */
+.world-card .w-eyebrow, .world-card h2 { padding-right: 62px; }
+
+/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css */
+.world-card h2 {
+  font-size: clamp(1.7rem, 1.2rem + 2.4vw, 3.1rem);
+  font-weight: 300;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.12;
+  color: var(--cream);
+}
+.w-eyebrow { letter-spacing: var(--track-plate); font-variant-numeric: lining-nums tabular-nums; }
+.w-return, .w-toy {
+  border-radius: 0;
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px),
+                     calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+}
+
+/* ---------- 6 · brochure list chrome (mobile / no-JS planet index) ----------
+   EXTENDS .planet-anchor (02-hub.css); desktop app-mode strips border/bg itself */
+.planet-anchor { border-radius: 4px; }
+.pa-label b { font-weight: 800; }
+.pa-label em { color: var(--ink-dim); }
+
+/* ---------- 7 · print keeps its own law: nothing to add ---------- */
+@media print { .porthole, .grain, .card-planet { display: none !important; } }
+
+
+/* ============================================================
+   The Konami rite — spin-up ring pulse + surveyor seal.
+   Compositor-only (transform/opacity); border-color is a one-time
+   state change eased by the ring's existing transition, not animated.
+   ============================================================ */
+
+/* the 6s spin-up: planet rings glow gold. Rings are display:block only in
+   desktop orbit mode (min-width:701px), so this is a desktop-orbit flourish. */
+html:not(.rm)[data-konami="1"] .planet-anchor .pa-ring {
+  border-color: rgba(255, 205, 90, 0.9);
+  animation: konami-ring 900ms var(--ease-out) infinite;
+  will-change: transform, opacity;
+}
+@keyframes konami-ring {
+  0%, 100% { opacity: 0.3; transform: scale(0.92); }
+  50%      { opacity: 1;   transform: scale(1.12); }
+}
+/* reduced-motion: a static gold ring highlight, no pulse (eases in/out via the
+   ring's own border-color transition when the flag is set / removed) */
+html.rm[data-konami="1"] .planet-anchor .pa-ring {
+  border-color: rgba(255, 205, 90, 0.85);
+}
+
+/* the surveyor seal — a tiny gold monogram dot in the HUD bottom line */
+.konami-seal {
+  display: inline-block;
+  width: 12px; height: 12px;
+  vertical-align: -1px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
+    radial-gradient(circle at 60% 65%, #ffcf6a 0%, #b8791f 90%);
+  box-shadow: 0 0 8px rgba(255, 205, 90, 0.6);
+}
+html:not(.rm) .konami-seal { animation: konami-seal-glow 3.2s var(--ease-out) infinite; will-change: opacity; }
+@keyframes konami-seal-glow { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+
 </style>
 <!-- Hand-built by Desert Data Labs. No frameworks, no build magic, no assets.
      You are standing in the source. https://desertdatalabs.com -->
@@ -814,6 +1055,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         <canvas class="fx-canvas" data-canvas="dune"></canvas>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 01 &middot; Desert giant</p>
         <h2 id="h-dust">Dust Sea</h2>
         <p class="w-copy">Two suns down. Something vast turns beneath the dunes.</p>
@@ -840,6 +1082,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         </svg>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 02 &middot; Neon metropolis</p>
         <h2 id="h-velocity">Velocity</h2>
         <p class="w-copy">Two riders. One horizon. The city never blinks.</p>
@@ -856,6 +1099,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         <div class="grid-static"></div>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 03 &middot; Cyberspace</p>
         <h2 id="h-grid">The Grid</h2>
         <p class="w-copy">The rain is code. It always was.</p>
@@ -913,6 +1157,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         </svg>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 04 &middot; Hadal zone</p>
         <h2 id="h-abyssal">Abyssal</h2>
         <p class="w-copy">Ten thousand meters down, the lights are alive.</p>
@@ -928,6 +1173,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         <div class="arc-crt"></div>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 05 &middot; Cabinet world</p>
         <h2 id="h-arcadia">Arcadia</h2>
         <p class="w-copy">Insert coin. The high score is still yours to lose.</p>
@@ -971,6 +1217,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         <div class="aurora-static"></div>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 06 &middot; Frozen world</p>
         <h2 id="h-aurora">Aurora</h2>
         <p class="w-copy">The sky rehearses its colors over the ice.</p>
@@ -987,6 +1234,7 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
         <canvas class="fx-canvas" data-canvas="draft"></canvas>
       </div>
       <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 07 &middot; Awaiting designation</p>
         <h2 id="h-uncharted">Uncharted</h2>
         <p class="w-copy">Every fleet needs a next world. This one is waiting for a name.</p>
@@ -1006,6 +1254,9 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
       &middot; no frameworks &middot; no assets &middot;
       <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
   </footer>
+
+  <div class="porthole" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
 
 </div>
 
@@ -1214,39 +1465,16 @@ function drawSky(dt, clockMs) {
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
         a.style.setProperty('--psize', w.size + 'px');
       }
-      /* the tells: halos behind the DOM dots */
-      const [r, g, b] = w.a;
+      /* the worlds themselves: rotating textured spheres (PlanetForge) */
       const hov = hovered === w.slug;
-      let glow = 0.22 + (hov ? 0.3 : 0);
-      if (!reduced()) {
-        if (w.tell === 'heat')    glow += 0.10 * (0.5 + 0.5 * Math.sin(t * 2.1 + i));
-        if (w.tell === 'pulse')   glow += (Math.sin(t * 6) > 0.72 ? 0.16 : 0);
-        if (w.tell === 'breathe') glow += 0.12 * (0.5 + 0.5 * Math.sin(t * 0.8));
-        if (w.tell === 'glint')   glow += (Math.sin(t * 0.9 + 2) > 0.985 ? 0.5 : 0);
-        if (w.tell === 'rain')    glow += (Math.sin(t * 9 + i * 3) > 0.6 ? 0.13 : 0);
-      }
-      const rad = w.size * (1.15 + glow * 0.4);
-      const grad = ctx.createRadialGradient(p.x, p.y, w.size * 0.3, p.x, p.y, rad);
-      grad.addColorStop(0, `rgba(${r},${g},${b},${glow})`);
-      grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
+      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
 
-      if (w.tell === 'dashed') {
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.55)`;
+      if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
+        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},0.55)`;
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72, 0, 7); ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      if (w.tell === 'pixel') {                        /* the cabinet world reads 8-bit even in orbit */
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`;
-        ctx.setLineDash([6, 5]);
-        ctx.lineDashOffset = reduced() ? 0 : Math.floor(t * 2) * 4;   /* stepped, not smooth */
-        ctx.lineWidth = 2;
-        const s2 = w.size * 0.68;
-        ctx.strokeRect(p.x - s2, p.y - s2, s2 * 2, s2 * 2);
         ctx.setLineDash([]);
       }
     });
@@ -1375,6 +1603,15 @@ function setScene(name, { instant = false } = {}) {
     Orrery.stopAmbient();                              /* one scene owns the frame budget */
     WorldFX.start(name);
     markSurveyed(name);
+    /* refresh this card's medallion so the little world advanced since last visit */
+    const med = next.querySelector('.card-planet');
+    if (med && window.PlanetForge) {
+      const g2 = med.getContext('2d');
+      const dpr2 = Math.min(devicePixelRatio || 1, 2);
+      med.width = 72 * dpr2; med.height = 72 * dpr2;
+      g2.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+      PlanetForge.drawMini(g2, name, 72, Ticker.clock);
+    }
     /* move focus to the world heading for keyboard/AT travelers */
     const h = next.querySelector('h2');
     if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
@@ -1469,13 +1706,526 @@ tickClock();
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
+  PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
   sizeSky();
   setRM();
   route(true);
   if (!reduced()) Orrery.startAmbient();
   /* re-measure the arc once type has settled (font metrics can shift the copy block) */
-  setTimeout(() => { measureArc(); drawStatic(); }, 350);
+  setTimeout(() => { measureArc(); drawStatic(); paintMedallions(); }, 350);
 }
+
+/* the brass card medallions: one small spinning-world portrait per card,
+   painted at boot and refreshed on each arrival (static between visits) */
+function paintMedallions() {
+  document.querySelectorAll('.card-planet').forEach(c => {
+    const sec = c.closest('.scene');
+    if (!sec || !window.PlanetForge) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const size = 72;
+    c.width = size * dpr; c.height = size * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
+  });
+}
+
+
+/* ============================================================
+   05b-planetforge.js — PlanetForge: rotating textured planets.
+   The classic 2D spinning-planet trick at high craft: seamless
+   noise textures scrolled under a circle clip, prebaked shading
+   sprites on top. All textures + sprites are pregenerated in
+   init(); per-frame work is drawImage + a few path strokes.
+   Zero external assets. No text in canvas. Original work only.
+   ============================================================ */
+'use strict';
+
+const PlanetForge = (() => {
+  const TAU = Math.PI * 2;
+  const TEX_W = 512, TEX_H = 256;          /* 2:1 -> drawn width is always 4r */
+  const RIM_S = 176, RIM_PR = 60;          /* rim sprite canvas / planet radius baked in it */
+  const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = r * RIM_DRAW */
+  const docEl = document.documentElement;
+
+  /* ---------- deterministic per-slug randomness ---------- */
+  function seedOf(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function mulberry(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ---------- tiny 2D value noise: bilinear-smoothed, wrap-x, 3-4 octave fBm ---------- */
+  function makeFbm(rnd, baseX, baseY, octaves) {
+    const layers = []; let amp = 1, total = 0, fx = baseX, fy = baseY;
+    for (let o = 0; o < octaves; o++) {
+      const g = new Float32Array(fx * fy);
+      for (let i = 0; i < g.length; i++) g[i] = rnd();
+      layers.push({ g, fx, fy, amp });
+      total += amp; amp *= 0.5; fx *= 2; fy = Math.min(fy * 2, 160);
+    }
+    return (u, v) => {                     /* u wraps (seamless x), v clamps */
+      let s = 0;
+      for (let L = 0; L < layers.length; L++) {
+        const ly = layers[L];
+        let x = (u * ly.fx) % ly.fx; if (x < 0) x += ly.fx;
+        let y = v * (ly.fy - 1); if (y < 0) y = 0; else if (y > ly.fy - 1.0001) y = ly.fy - 1.0001;
+        const x0 = x | 0, y0 = y | 0;
+        const x1 = (x0 + 1) % ly.fx, y1 = Math.min(y0 + 1, ly.fy - 1);
+        let tx = x - x0, ty = y - y0;
+        tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+        const a = ly.g[y0 * ly.fx + x0], b = ly.g[y0 * ly.fx + x1];
+        const c = ly.g[y1 * ly.fx + x0], d = ly.g[y1 * ly.fx + x1];
+        s += ly.amp * (a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty);
+      }
+      return s / total;
+    };
+  }
+  function sstep(e0, e1, x) {              /* smoothstep that tolerates e0 > e1 */
+    let t = (x - e0) / (e1 - e0);
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    return t * t * (3 - 2 * t);
+  }
+
+  /* ---------- palette ramps -> 256-entry LUTs (init-time only) ---------- */
+  function hex(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function makeLut(stops) {
+    const out = new Uint8Array(768); let si = 0;
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255;
+      while (si < stops.length - 2 && t > stops[si + 1][0]) si++;
+      const a = hex(stops[si][1]), b = hex(stops[si + 1][1]);
+      const span = Math.max(1e-6, stops[si + 1][0] - stops[si][0]);
+      let f = (t - stops[si][0]) / span; if (f < 0) f = 0; else if (f > 1) f = 1;
+      out[i * 3] = a[0] + (b[0] - a[0]) * f;
+      out[i * 3 + 1] = a[1] + (b[1] - a[1]) * f;
+      out[i * 3 + 2] = a[2] + (b[2] - a[2]) * f;
+    }
+    return out;
+  }
+
+  function cv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+  function paintBase(tctx, wpx, hpx, lutArr, field) {
+    const img = tctx.createImageData(wpx, hpx); const d = img.data; let i = 0;
+    for (let yy = 0; yy < hpx; yy++) {
+      const v = yy / hpx;
+      for (let xx = 0; xx < wpx; xx++) {
+        let n = field(xx / wpx, v);
+        if (n < 0) n = 0; else if (n > 1) n = 1;
+        const k3 = ((n * 255) | 0) * 3;
+        d[i++] = lutArr[k3]; d[i++] = lutArr[k3 + 1]; d[i++] = lutArr[k3 + 2]; d[i++] = 255;
+      }
+    }
+    tctx.putImageData(img, 0, 0);
+  }
+  /* draw a decoration callback 3 times at x offsets so it wraps seamlessly */
+  function wrapped(tctx, fn) {
+    for (let o = -1; o <= 1; o++) { tctx.save(); tctx.translate(o * TEX_W, 0); fn(); tctx.restore(); }
+  }
+
+  /* ---------- shared shading sprites (one of each, reused by every planet) ---------- */
+  const S = { shade: null, gloss: null, band: null };
+  function buildShared() {
+    /* shade: terminator (light upper-left) + limb darkening baked into ONE sprite */
+    const sz = 256, sc = cv(sz, sz), sg = sc.getContext('2d');
+    sg.beginPath(); sg.arc(128, 128, 128, 0, TAU); sg.clip();
+    let g = sg.createRadialGradient(92, 84, 26, 92, 84, 262);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.45, 'rgba(2,3,10,0.05)');
+    g.addColorStop(0.68, 'rgba(4,5,14,0.34)');
+    g.addColorStop(0.86, 'rgba(3,4,12,0.68)');
+    g.addColorStop(1, 'rgba(2,3,10,0.94)');
+    sg.fillStyle = g; sg.fillRect(0, 0, sz, sz);
+    g = sg.createRadialGradient(128, 128, 106, 128, 128, 128);
+    g.addColorStop(0, 'rgba(0,2,10,0)');
+    g.addColorStop(1, 'rgba(0,2,10,0.55)');
+    sg.fillStyle = g; sg.fillRect(0, 0, sz, sz);
+    S.shade = sc;
+
+    /* gloss: small specular hint at the light point */
+    const gc = cv(sz, sz), gg = gc.getContext('2d');
+    gg.beginPath(); gg.arc(128, 128, 128, 0, TAU); gg.clip();
+    g = gg.createRadialGradient(86, 78, 2, 86, 78, 66);
+    g.addColorStop(0, 'rgba(255,255,255,0.30)');
+    g.addColorStop(0.4, 'rgba(255,255,255,0.10)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    gg.fillStyle = g; gg.fillRect(0, 0, sz, sz);
+    S.gloss = gc;
+
+    /* scan-band strip for the hologram world */
+    const bc = cv(8, 48), bg = bc.getContext('2d');
+    g = bg.createLinearGradient(0, 0, 0, 48);
+    g.addColorStop(0, 'rgba(160,235,255,0)');
+    g.addColorStop(0.5, 'rgba(190,244,255,0.85)');
+    g.addColorStop(1, 'rgba(160,235,255,0)');
+    bg.fillStyle = g; bg.fillRect(0, 0, 8, 48);
+    S.band = bc;
+  }
+
+  /* per-world rim sprite: outer atmosphere glow ring, one shadowBlur at GEN time only */
+  function buildRim(rgbStr) {
+    const c = cv(RIM_S, RIM_S), x = c.getContext('2d'), cx = RIM_S / 2;
+    const g = x.createRadialGradient(cx, cx, RIM_PR * 0.92, cx, cx, RIM_PR * 1.44);
+    g.addColorStop(0, `rgba(${rgbStr},0.30)`);
+    g.addColorStop(0.35, `rgba(${rgbStr},0.15)`);
+    g.addColorStop(1, `rgba(${rgbStr},0)`);
+    x.fillStyle = g; x.fillRect(0, 0, RIM_S, RIM_S);
+    x.globalCompositeOperation = 'destination-out';   /* keep the glow OFF the disc */
+    x.beginPath(); x.arc(cx, cx, RIM_PR * 0.97, 0, TAU); x.fill();
+    x.globalCompositeOperation = 'source-over';
+    x.strokeStyle = `rgba(${rgbStr},0.9)`; x.lineWidth = 1.8;
+    x.shadowColor = `rgb(${rgbStr})`; x.shadowBlur = 10;
+    x.beginPath(); x.arc(cx, cx, RIM_PR + 1, 0, TAU); x.stroke();
+    return c;
+  }
+
+  function buildClouds(rnd, r, g2, b, gate, gain) {
+    const w2 = 256, h2 = 128, c = cv(w2, h2), t2 = c.getContext('2d');
+    const fb = makeFbm(rnd, 5, 3, 3);
+    const img = t2.createImageData(w2, h2); const d = img.data; let i = 0;
+    for (let yy = 0; yy < h2; yy++) {
+      const v = yy / h2;
+      for (let xx = 0; xx < w2; xx++) {
+        const n = fb(xx / w2, v);
+        let a = n > gate ? (n - gate) * gain : 0; if (a > 0.85) a = 0.85;
+        d[i++] = r; d[i++] = g2; d[i++] = b; d[i++] = (a * 255) | 0;
+      }
+    }
+    t2.putImageData(img, 0, 0);
+    return c;
+  }
+
+  /* ---------- per-world surface builders ---------- */
+  function buildDust(rnd, tctx) {
+    const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3), rid = makeFbm(rnd, 8, 5, 3);
+    const L = makeLut([[0, '#1c1030'], [0.35, '#5a2c4a'], [0.55, '#a34d3f'], [0.75, '#ff7a45'], [1, '#ffcf8e']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => {
+      const band = 0.5 + 0.5 * Math.sin(v * 19 + warp(u, v) * 4.2);   /* dune striations, noise-warped */
+      let n = fb(u, v) * 0.62 + band * 0.38;
+      n = (n - 0.5) * 1.5 + 0.5;
+      const rg = 1 - Math.abs(2 * rid(u, v) - 1);                     /* ridged: canyon veins */
+      if (rg > 0.86) n *= 0.5;
+      return n;
+    });
+    for (let i = 0; i < 3; i++) {                                     /* crater rings, wrap-safe */
+      const cx = rnd() * TEX_W, cy = TEX_H * (0.22 + rnd() * 0.5), cr = 9 + rnd() * 14;
+      wrapped(tctx, () => {
+        tctx.fillStyle = 'rgba(20,8,26,0.38)';
+        tctx.beginPath(); tctx.arc(cx, cy, cr, 0, TAU); tctx.fill();
+        tctx.strokeStyle = 'rgba(255,205,150,0.5)'; tctx.lineWidth = 1.6;
+        tctx.beginPath(); tctx.arc(cx, cy, cr, -2.6, 0.5); tctx.stroke();
+        tctx.strokeStyle = 'rgba(30,12,34,0.55)'; tctx.lineWidth = 1.4;
+        tctx.beginPath(); tctx.arc(cx, cy, cr * 0.8, 0.6, 2.4); tctx.stroke();
+      });
+    }
+  }
+
+  function buildVelocity(rnd, tctx) {
+    const fb = makeFbm(rnd, 6, 4, 4);
+    const L = makeLut([[0, '#0a0620'], [0.5, '#12092b'], [0.8, '#241344'], [1, '#341a5e']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => (fb(u, v) - 0.5) * 1.4 + 0.5);
+    /* city-light patches: geometry precomputed ONCE so all 3 wrap copies match */
+    const cols = ['rgba(255,46,151,', 'rgba(41,230,255,'];
+    const dots = [], lines = [];
+    for (let p = 0; p < 13; p++) {
+      const px0 = rnd() * TEX_W, py0 = TEX_H * (0.12 + rnd() * 0.7);
+      const rows = 2 + (rnd() * 4 | 0), cN = 3 + (rnd() * 5 | 0), sp = 4 + rnd() * 4;
+      const ang = (rnd() - 0.5) * 0.9, ca = Math.cos(ang), sa = Math.sin(ang), ci = p % 2;
+      for (let rI = 0; rI < rows; rI++) {
+        lines.push([px0 - rI * sa * sp, py0 + rI * ca * sp,
+          px0 + ((cN - 1) * ca - rI * sa) * sp, py0 + ((cN - 1) * sa + rI * ca) * sp, ci]);
+        for (let cI = 0; cI < cN; cI++) {
+          dots.push([px0 + (cI * ca - rI * sa) * sp + (rnd() - 0.5) * 1.7,
+            py0 + (cI * sa + rI * ca) * sp + (rnd() - 0.5) * 1.7,
+            0.6 + rnd() * 0.9, ci, 0.35 + rnd() * 0.6]);
+        }
+      }
+    }
+    wrapped(tctx, () => {
+      tctx.lineWidth = 0.8;
+      for (const ln of lines) {
+        tctx.strokeStyle = cols[ln[4]] + '0.10)';
+        tctx.beginPath(); tctx.moveTo(ln[0], ln[1]); tctx.lineTo(ln[2], ln[3]); tctx.stroke();
+      }
+      for (const d2 of dots) {
+        tctx.fillStyle = cols[d2[3]] + d2[4].toFixed(2) + ')';
+        tctx.beginPath(); tctx.arc(d2[0], d2[1], d2[2], 0, TAU); tctx.fill();
+      }
+    });
+  }
+
+  function buildGrid(rnd, tctx, brightCtx) {
+    const fb = makeFbm(rnd, 6, 4, 3);
+    const L = makeLut([[0, '#010806'], [0.6, '#02120a'], [1, '#04240f']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => (fb(u, v) - 0.5) * 1.2 + 0.45);
+    /* circuit traces: precomputed manhattan walks, stroked into BOTH layers */
+    const traces = [];
+    for (let i = 0; i < 24; i++) {
+      let X = rnd() * TEX_W, Y = TEX_H * (0.08 + rnd() * 0.84);
+      const pts = [X, Y]; let horiz = rnd() < 0.5;
+      const segs = 3 + (rnd() * 4 | 0);
+      for (let s2 = 0; s2 < segs; s2++) {
+        const len = (8 + rnd() * 34) * (rnd() < 0.5 ? -1 : 1);
+        if (horiz) X += len; else Y = Math.max(4, Math.min(TEX_H - 4, Y + len * 0.6));
+        pts.push(X, Y); horiz = !horiz;
+      }
+      traces.push(pts);
+    }
+    const strokeAll = (g2, core, dot, wdt, dr) => {
+      for (let o = -1; o <= 1; o++) {
+        g2.save(); g2.translate(o * TEX_W, 0);
+        g2.strokeStyle = core; g2.lineWidth = wdt; g2.lineJoin = 'miter';
+        for (const pts of traces) {
+          g2.beginPath(); g2.moveTo(pts[0], pts[1]);
+          for (let k = 2; k < pts.length; k += 2) g2.lineTo(pts[k], pts[k + 1]);
+          g2.stroke();
+          g2.fillStyle = dot;
+          for (let k = 0; k < pts.length; k += 2) { g2.beginPath(); g2.arc(pts[k], pts[k + 1], dr, 0, TAU); g2.fill(); }
+        }
+        g2.restore();
+      }
+    };
+    strokeAll(tctx, 'rgba(52,255,136,0.5)', 'rgba(184,255,217,0.75)', 1, 1.2);
+    brightCtx.shadowColor = '#34ff88'; brightCtx.shadowBlur = 4;   /* gen-time only */
+    strokeAll(brightCtx, 'rgba(52,255,136,0.95)', 'rgba(234,255,243,1)', 1.8, 1.8);
+    brightCtx.shadowBlur = 0;
+  }
+
+  function buildAbyssal(rnd, tctx) {
+    const fb = makeFbm(rnd, 6, 4, 4);
+    const L = makeLut([[0, '#020a16'], [0.45, '#03121f'], [0.7, '#0a3e52'], [0.88, '#12907e'], [1, '#35f0c8']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => (fb(u, v) - 0.5) * 1.45 + 0.42);
+    /* bioluminescent filaments: integer-frequency sinusoids wrap perfectly */
+    tctx.lineWidth = 1;
+    for (let f = 0; f < 8; f++) {
+      const y0 = TEX_H * (0.15 + rnd() * 0.7), amp = 6 + rnd() * 16;
+      const k = 1 + (rnd() * 3 | 0), ph = rnd() * TAU;
+      tctx.strokeStyle = f % 3 === 0 ? 'rgba(143,123,255,0.28)' : 'rgba(124,242,255,0.26)';
+      tctx.beginPath();
+      for (let xx = 0; xx <= TEX_W; xx += 6) {
+        const yy = y0 + Math.sin((xx / TEX_W) * TAU * k + ph) * amp;
+        if (xx === 0) tctx.moveTo(xx, yy); else tctx.lineTo(xx, yy);
+      }
+      tctx.stroke();
+    }
+  }
+
+  function buildArcadia(rnd) {
+    const c = cv(64, 32), t2 = c.getContext('2d');       /* PIXEL planet: tiny + nearest */
+    const fb = makeFbm(rnd, 5, 3, 3);
+    const PAL = [[10, 10, 18], [23, 61, 29], [125, 255, 90], [255, 210, 63], [255, 71, 87]];
+    const img = t2.createImageData(64, 32); const d = img.data; let i = 0;
+    for (let yy = 0; yy < 32; yy++) {
+      for (let xx = 0; xx < 64; xx++) {
+        const n = (fb(xx / 64, yy / 32) - 0.5) * 1.5 + 0.5;
+        let idx = n < 0.38 ? 0 : n < 0.55 ? 1 : n < 0.7 ? 2 : n < 0.84 ? 3 : 4;
+        if (rnd() < 0.012) idx = 4;                       /* scattered hot pixels */
+        const p = PAL[idx];
+        d[i++] = p[0]; d[i++] = p[1]; d[i++] = p[2]; d[i++] = 255;
+      }
+    }
+    t2.putImageData(img, 0, 0);
+    return c;
+  }
+
+  function buildAurora(rnd, tctx) {
+    const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3);
+    const L = makeLut([[0, '#4d6a91'], [0.4, '#7d9cc4'], [0.7, '#a8e9ff'], [0.9, '#e8f6ff'], [1, '#ffffff']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => {
+      let n = (fb(u, v) - 0.5) * 1.1 + 0.42 + 0.05 * Math.sin(v * 26 + warp(u, v) * 5);
+      const cap = sstep(0.2, 0.04, v) + sstep(0.8, 0.96, v);          /* polar cap bands */
+      return n + cap * 0.55;
+    });
+  }
+
+  /* fallback for unknown slugs: a generic noise ball in the world hue */
+  function buildGeneric(rnd, tctx, a) {
+    const fb = makeFbm(rnd, 6, 4, 4);
+    const hx = (arr) => '#' + arr.map(n => Math.max(0, Math.min(255, n | 0)).toString(16).padStart(2, '0')).join('');
+    const L = makeLut([[0, hx(a.map(n => n * 0.12))], [0.6, hx(a.map(n => n * 0.55))], [1, hx(a.map(n => Math.min(255, n * 1.1 + 40)))]]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => (fb(u, v) - 0.5) * 1.4 + 0.5);
+  }
+
+  /* ---------- registry ---------- */
+  const P = Object.create(null);
+  let inited = false;
+
+  function buildWorld(w) {
+    const rnd = mulberry(seedOf(w.slug));
+    const rgbStr = w.a.join(',');
+    const p = {
+      tex: null, bright: null, cloud: null, cloudA: 0,
+      rim: buildRim(rgbStr),
+      spin: (w.speed || 0.05) * 8e-4,      /* rotations per ms: full turn every ~18-33s */
+      cloudSpin: 0, su: rnd(),             /* su: the frozen reduced-motion pose */
+      tell: w.tell || '', pixel: false, holo: false, crown: false,
+      holoFill: '', holoLine: '', holoFront: '',
+    };
+    p.cloudSpin = p.spin * 0.62;
+    if (w.slug === 'uncharted') {
+      p.holo = true;
+      p.holoFill = `rgba(${rgbStr},0.07)`;
+      p.holoLine = `rgba(${rgbStr},0.34)`;
+      p.holoFront = 'rgba(150,232,255,0.62)';
+      return p;
+    }
+    if (w.slug === 'arcadia') { p.pixel = true; p.tex = buildArcadia(rnd); return p; }
+    const c = cv(TEX_W, TEX_H), tctx = c.getContext('2d');
+    p.tex = c;
+    switch (w.slug) {
+      case 'dust-sea':
+        buildDust(rnd, tctx);
+        p.cloud = buildClouds(rnd, 255, 220, 170, 0.62, 2.2); p.cloudA = 0.32; break;
+      case 'velocity': buildVelocity(rnd, tctx); break;
+      case 'grid': {
+        const b = cv(TEX_W, TEX_H);
+        buildGrid(rnd, tctx, b.getContext('2d'));
+        p.bright = b; break;
+      }
+      case 'abyssal':
+        buildAbyssal(rnd, tctx);
+        p.cloud = buildClouds(rnd, 235, 250, 255, 0.58, 2.6); p.cloudA = 0.5; break;
+      case 'aurora': buildAurora(rnd, tctx); p.crown = true; break;
+      default: buildGeneric(rnd, tctx, w.a);
+    }
+    return p;
+  }
+
+  /* ---------- per-frame pieces (no objects/arrays/closures allocated) ---------- */
+  function tellGlow(tell, t, rm) {
+    if (rm) return 0.12;
+    switch (tell) {
+      case 'heat': return 0.10 * (0.5 + 0.5 * Math.sin(t * 2.1));
+      case 'pulse': return Math.sin(t * 6) > 0.72 ? 0.22 : 0;
+      case 'breathe': return 0.14 * (0.5 + 0.5 * Math.sin(t * 0.8));
+      case 'glint': return Math.sin(t * 0.9 + 2) > 0.985 ? 0.5 : 0.06;
+      case 'rain': return Math.sin(t * 9) > 0.6 ? 0.14 : 0;
+      default: return 0.1;
+    }
+  }
+
+  const CROWN = ['rgba(126,255,178,', 'rgba(186,150,255,', 'rgba(216,255,242,'];
+  function drawCrown(g, x, y, r, t, rm) {
+    g.save(); g.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const a = rm ? 0.3 : 0.16 + 0.22 * (0.5 + 0.5 * Math.sin(t * (0.5 + i * 0.21) + i * 2.1));
+      const wob = rm ? 0 : 0.10 * Math.sin(t * 0.4 + i * 1.4);
+      g.strokeStyle = CROWN[i] + a.toFixed(3) + ')';
+      g.lineWidth = 1.6 + i * 0.5;
+      g.beginPath();
+      g.arc(x, y + r * 0.16, r * (1.10 + i * 0.13), Math.PI * (1.18 + wob), Math.PI * (1.82 - wob));
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  function drawHolo(g, p, x, y, r, tMs, rm) {
+    g.fillStyle = p.holoFill;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+    g.lineWidth = 1;
+    g.strokeStyle = p.holoLine;
+    for (let i = -1; i <= 1; i++) {                       /* latitude rings */
+      const h2 = i * 0.5 * r;
+      const lr = Math.sqrt(Math.max(0, r * r - h2 * h2));
+      g.beginPath(); g.ellipse(x, y + h2, lr, lr * 0.22, 0, 0, TAU); g.stroke();
+    }
+    const ph = rm ? p.su * TAU : tMs * 0.00045;           /* meridians rotate */
+    for (let k = 0; k < 4; k++) {
+      const cph = Math.cos(ph + k * (Math.PI / 4));
+      g.strokeStyle = cph > 0 ? p.holoFront : p.holoLine;
+      g.beginPath();
+      g.ellipse(x, y, Math.max(0.5, Math.abs(cph) * r * 0.98), r * 0.98, 0, 0, TAU);
+      g.stroke();
+    }
+    const prog = rm ? 0.32 : ((tMs * 0.00028) % 1.3) - 0.15;   /* scanning band sweep */
+    g.globalAlpha = 0.5;
+    g.drawImage(S.band, x - r, y - r + prog * r * 2 - r * 0.17, r * 2, r * 0.34);
+    g.globalAlpha = 1;
+  }
+
+  function render(g, p, x, y, r, tMs, hover, rm) {
+    const t = tMs / 1000;
+    g.save();
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.clip();
+    if (p.holo) {
+      drawHolo(g, p, x, y, r, tMs, rm);
+      g.globalAlpha = 0.45;                               /* light shade keeps the hologram airy */
+      g.drawImage(S.shade, x - r, y - r, r * 2, r * 2);
+      g.globalAlpha = 1;
+    } else {
+      const dw = r * 4;                                   /* all textures are 2:1 */
+      let rot = rm ? p.su : (tMs * p.spin) % 1;
+      if (p.pixel) { g.imageSmoothingEnabled = false; rot = Math.floor(rot * 48) / 48; }  /* stepped 8-bit spin */
+      const shift = (((rot % 1) + 1) % 1) * dw;
+      g.drawImage(p.tex, x - r - shift, y - r, dw, r * 2);
+      g.drawImage(p.tex, x - r - shift + dw, y - r, dw, r * 2);
+      if (p.bright) {                                     /* grid: circuit pulse crossfade */
+        g.globalAlpha = rm ? 0.34 : 0.16 + 0.34 * (0.5 + 0.5 * Math.sin(t * 2.2 + 1.3));
+        g.drawImage(p.bright, x - r - shift, y - r, dw, r * 2);
+        g.drawImage(p.bright, x - r - shift + dw, y - r, dw, r * 2);
+        g.globalAlpha = 1;
+      }
+      if (p.cloud) {                                      /* slower second layer, screen blend */
+        const cdw = dw * 1.15;
+        const crot = rm ? p.su * 0.6 : (tMs * p.cloudSpin) % 1;
+        const cshift = (((crot % 1) + 1) % 1) * cdw;
+        g.globalCompositeOperation = 'screen';
+        g.globalAlpha = p.cloudA;
+        g.drawImage(p.cloud, x - r - cshift, y - r, cdw, r * 2);
+        g.drawImage(p.cloud, x - r - cshift + cdw, y - r, cdw, r * 2);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
+      if (p.pixel) g.imageSmoothingEnabled = true;
+      g.drawImage(S.shade, x - r, y - r, r * 2, r * 2);
+      g.drawImage(S.gloss, x - r, y - r, r * 2, r * 2);
+      if (p.tell === 'glint' && !rm && Math.sin(t * 0.9 + 2) > 0.985) {
+        g.globalAlpha = 0.7;                              /* the rare ice glint */
+        g.drawImage(S.gloss, x - r, y - r, r * 2, r * 2);
+        g.globalAlpha = 1;
+      }
+    }
+    g.restore();
+    if (p.crown) drawCrown(g, x, y, r, t, rm);            /* aurora crown floats above the pole */
+    let ra = 0.72 + tellGlow(p.tell, t, rm) + (hover ? 0.28 : 0);
+    if (ra > 1) ra = 1;
+    g.globalAlpha = ra;
+    const rs = r * RIM_DRAW;
+    g.drawImage(p.rim, x - rs / 2, y - rs / 2, rs, rs);
+    g.globalAlpha = 1;
+  }
+
+  /* ---------- API ---------- */
+  return {
+    init(worlds) {
+      if (inited) return;
+      inited = true;
+      buildShared();
+      for (const w of worlds) P[w.slug] = buildWorld(w);
+    },
+    draw(ctx2, slug, x, y, r, clockMs, opts) {
+      if (!inited || r <= 0) return;
+      const p = P[slug]; if (!p) return;
+      render(ctx2, p, x, y, r, clockMs,
+        !!(opts && opts.hover), !!(opts && opts.rm));
+    },
+    drawMini(ctx2, slug, size, clockMs) {
+      if (!inited) return;
+      const p = P[slug]; if (!p) return;
+      render(ctx2, p, size / 2, size / 2, size * 0.42, clockMs,
+        false, docEl.classList.contains('rm'));
+    },
+  };
+})();
 
 
 /* ============================================================
@@ -2327,142 +3077,401 @@ window.WorldFX = WorldFX;
 
 
 /* ============================================================
-   07-audio.js — the score. Zero files, one synth graph, five voicings.
-   THE LAW (§2.6): never autoplay; start only on an activation-bearing
+   07-audio.js - Score v2: the cinematic engine. Zero files.
+   One synth graph, a generated concert hall, seven arrangements.
+   THE LAW (2.6): never autoplay; start only on an activation-bearing
    event; the UI claims "on" only after ctx.state === 'running'.
+   Persistent graph: 8 nodes (bus, dry, wet, convolver, compressor,
+   delay, delay-lowpass, delay-feedback). World rigs are scene-scoped
+   transients (<=21 nodes, self-stopping); notes are per-note transients.
    ============================================================ */
 'use strict';
 
 const Score = (() => {
-  /* one motif, re-voiced per world: {root Hz, scale intervals, step ms, brightness Hz, wave} */
-  const VOICES = {
-    hub:         { root: 220.0, scale: [0, 3, 5, 7, 10],     step: 500, bright: 900,  padGain: 0.05 },
-    'dust-sea':  { root: 98.0,  scale: [0, 3, 5, 7, 10],       step: 700, bright: 460,  padGain: 0.06 },
-    'velocity':  { root: 174.6, scale: [0, 3, 5, 7, 10, 12],   step: 220, bright: 1800, padGain: 0.05 },
-    'grid':      { root: 164.8, scale: [0, 3, 7, 12, 14],      step: 340, bright: 2400, padGain: 0.03 },
-    'abyssal':   { root: 130.8, scale: [0, 2, 4, 6, 8, 10],    step: 850, bright: 460,  padGain: 0.068 },
-    'arcadia':   { root: 261.6, scale: [0, 2, 4, 7, 9, 12],    step: 170, bright: 2600, padGain: 0.03, wave: 'square' },
-    'aurora':    { root: 196.0, scale: [0, 2, 4, 6, 7, 9, 11], step: 480, bright: 2000, padGain: 0.038 },
-    'uncharted': { root: 220.0, scale: [0, 3, 5, 8],           step: 900, bright: 1100, padGain: 0.04 },
+  /* ---------- the seven arrangements + the hub (all original) ----------
+     root Hz, scale (semitones), step ms, bright Hz, gap (silent steps after
+     the motif so it breathes), layer gains dr/pd/ch, padIv (pad chord),
+     lead voice, perc pattern (16 steps: K taiko, s shaker, . rest) */
+  const N = (d, o, dur, v) => ({ d, o, dur, v });
+  const R = null;
+  const ARR = {
+    /* observatory at night: glassy, mid reverb */
+    hub: {
+      root: 220.0, scale: [0, 3, 5, 7, 10], step: 500, bright: 900, gap: 8,
+      dr: 0.028, pd: 0.03, ch: 0.014, padIv: [0, 7, 12],
+      lead: { wave: 'triangle', dly: 0.3, wet: 0.15 },
+      motif: [N(0,1,2,.09), R, N(2,1,1,.07), R, N(1,1,2,.08), R, R, N(3,1,1,.07), R, R, N(4,0,2,.06), R, N(2,1,1,.07), R, R, R],
+      perc: '................',
+    },
+    /* vast desert epic: low slow Phrygian-dominant over heavy drone, sparse taiko */
+    'dust-sea': {
+      root: 98.0, scale: [0, 1, 4, 5, 7, 8, 10], step: 700, bright: 460, gap: 10,
+      dr: 0.07, pd: 0.032, ch: 0, padIv: [0, 7, 12],
+      lead: { wave: 'sawtooth', dly: 0.15, wet: 0.2 },
+      motif: [N(0,0,2,.10), R, N(1,0,1,.07), N(0,0,2,.09), R, N(2,0,2,.08), R, R, N(3,0,1,.07), N(2,0,2,.08), R, R, N(1,0,1,.06), N(0,0,3,.09), R, R],
+      perc: 'K.......K.....s.',
+    },
+    /* driving minor bass ostinato + bright octave sparks */
+    velocity: {
+      root: 174.6, scale: [0, 2, 3, 5, 7, 8, 10], step: 220, bright: 1800, gap: 4,
+      dr: 0.03, pd: 0.024, ch: 0, padIv: [0, 3, 7], spark: true,
+      lead: { wave: 'square', dly: 0.22, wet: 0 },
+      motif: [N(0,-1,1,.12), R, N(0,-1,1,.09), N(2,-1,1,.10), N(0,-1,1,.09), R, N(3,-1,1,.10), N(4,-1,1,.11), N(0,-1,1,.12), R, N(0,-1,1,.09), N(2,-1,1,.10), N(5,-1,1,.10), N(4,-1,1,.10), N(3,-1,1,.09), N(2,-1,1,.09)],
+      perc: 'K...s...K...s.s.',
+    },
+    /* minor add9 plucks, heavy delay, sparse */
+    grid: {
+      root: 164.8, scale: [0, 2, 3, 7, 10], step: 340, bright: 2400, gap: 8,
+      dr: 0.02, pd: 0.02, ch: 0, padIv: [0, 7, 14],
+      lead: { wave: 'triangle', dly: 0.55, wet: 0.1 },
+      motif: [N(0,1,1,.10), R, R, N(1,1,1,.08), R, R, N(2,1,1,.09), R, R, R, N(4,0,1,.08), R, N(3,1,1,.07), R, R, R],
+      perc: '........s.......',
+    },
+    /* submerged cathedral: whole-tone swells, low choir, the deep call */
+    abyssal: {
+      root: 130.8, scale: [0, 2, 4, 6, 8, 10], step: 850, bright: 460, gap: 12,
+      dr: 0.045, pd: 0.04, ch: 0.026, chOct: -1, padIv: [0, 4, 8], call: true,
+      lead: { wave: 'sine', dly: 0.2, wet: 0.4 },
+      motif: [N(0,0,4,.07), R, R, R, N(1,0,4,.06), R, R, R, N(2,0,6,.06), R, R, R, R, N(4,-1,4,.05), R, R],
+      perc: '................',
+    },
+    /* bright major chiptune: dry square lead, light pad only */
+    arcadia: {
+      root: 261.6, scale: [0, 2, 4, 7, 9], step: 170, bright: 2600, gap: 6,
+      dr: 0, pd: 0.016, ch: 0, padIv: [0, 4, 7],
+      lead: { wave: 'square', dly: 0, wet: 0, dry: true },
+      motif: [N(0,1,1,.08), N(1,1,1,.07), N(2,1,1,.08), N(3,1,1,.07), N(2,1,1,.07), N(1,1,1,.07), N(0,1,2,.08), R, N(4,1,1,.07), N(3,1,1,.07), N(2,1,2,.08), R, N(1,1,1,.07), N(2,1,1,.07), N(0,1,3,.09), R],
+      perc: 's...s...s...s...',
+    },
+    /* high-fantasy wonder: mixolydian rising fifth, pad + choir forward */
+    aurora: {
+      root: 196.0, scale: [0, 2, 4, 5, 7, 9, 10], step: 480, bright: 2000, gap: 8,
+      dr: 0.024, pd: 0.05, ch: 0.03, padIv: [0, 7, 12],
+      lead: { wave: 'triangle', dly: 0.3, wet: 0.3 },
+      motif: [N(0,0,2,.08), N(4,0,2,.07), R, N(5,0,1,.06), N(4,0,2,.07), R, R, N(0,1,2,.08), R, N(6,0,1,.06), N(5,0,1,.06), N(4,0,2,.07), R, N(1,1,2,.06), R, R],
+      perc: '............s...',
+    },
+    /* suspended 4ths that never resolve; thin pad */
+    uncharted: {
+      root: 220.0, scale: [0, 2, 5, 7, 10], step: 900, bright: 1100, gap: 10,
+      dr: 0.022, pd: 0.018, ch: 0, padIv: [0, 5, 12],
+      lead: { wave: 'sine', dly: 0.25, wet: 0.3 },
+      motif: [N(2,0,3,.07), R, R, N(3,0,2,.06), R, N(2,0,3,.06), R, R, N(1,0,2,.05), R, N(2,0,4,.06), R, R, R, R, R],
+      perc: '................',
+    },
   };
 
-  let ctx = null, master = null, padA = null, padB = null, padFilter = null, padGainNode = null;
-  let arpTimer = null, nextNote = 0, stepIdx = 0;
-  let on = false, voice = VOICES.hub;
+  /* ---------- state ---------- */
+  let ctx = null, bus = null, dry = null, wet = null, verb = null, comp = null;
+  let dly = null, dlyLP = null, dlyFB = null, noiseBuf = null;
+  let schedTimer = null, nextNote = 0, stepIdx = 0, holdUntil = 0, nextCallAt = 0, lastFanfare = -9;
+  let on = false, cfg = ARR.hub, rig = null;
 
   const btn = document.getElementById('audio-toggle');
   const label = btn.querySelector('.audio-label');
 
+  /* ---------- one-time buffers (never per frame, never per note) ---------- */
+  function makeIR(seconds) {
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        lp += 0.22 * (white - lp);                     /* slight lowpass tilt */
+        d[i] = lp * Math.exp(-4.6 * i / len) * (1 - i / len);
+      }
+    }
+    return buf;
+  }
+  function makeNoise() {
+    const len = Math.floor(ctx.sampleRate * 1.2);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  const noiseSrc = () => { const s = ctx.createBufferSource(); s.buffer = noiseBuf; return s; };
+
+  /* ---------- the persistent master chain (8 nodes) ---------- */
   function buildGraph() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    master = ctx.createGain(); master.gain.value = 0.0;
-    const comp = ctx.createDynamicsCompressor();
-    master.connect(comp).connect(ctx.destination);
+    noiseBuf = makeNoise();
 
-    /* the pad: two detuned oscillators through a slow-breathing lowpass */
-    padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 800; padFilter.Q.value = 0.7;
-    padGainNode = ctx.createGain(); padGainNode.gain.value = 0.0;
-    padA = ctx.createOscillator(); padA.type = 'sawtooth';
-    padB = ctx.createOscillator(); padB.type = 'triangle'; padB.detune.value = 7;
-    padA.connect(padFilter); padB.connect(padFilter);
-    padFilter.connect(padGainNode).connect(master);
-    padA.start(); padB.start();
+    bus = ctx.createGain(); bus.gain.value = 0.0;
+    dry = ctx.createGain(); dry.gain.value = 0.85;
+    wet = ctx.createGain(); wet.gain.value = 0.3;      /* ~30% hall */
+    verb = ctx.createConvolver(); verb.buffer = makeIR(3.0);
+    comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 20; comp.ratio.value = 3.5;
+    comp.attack.value = 0.006; comp.release.value = 0.28;
 
-    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
-    const lfoGain = ctx.createGain(); lfoGain.gain.value = 260;
-    lfo.connect(lfoGain).connect(padFilter.frequency); lfo.start();
+    bus.connect(dry).connect(comp);
+    bus.connect(verb); verb.connect(wet).connect(comp);
+    comp.connect(ctx.destination);
+
+    /* shared feedback delay send: voices tap dly per note */
+    dly = ctx.createDelay(1.0); dly.delayTime.value = 0.38;
+    dlyLP = ctx.createBiquadFilter(); dlyLP.type = 'lowpass'; dlyLP.frequency.value = 2400;
+    dlyFB = ctx.createGain(); dlyFB.gain.value = 0.35;
+    dly.connect(dlyLP); dlyLP.connect(dlyFB).connect(dly);
+    dlyLP.connect(bus);                                /* repeats land in the hall too */
   }
 
-  function tunePad(v, when = 0) {
-    const t = ctx.currentTime + when;
-    padA.frequency.setTargetAtTime(v.root, t, 0.8);
-    padB.frequency.setTargetAtTime(v.root * 1.5, t, 0.8);
-    padFilter.frequency.setTargetAtTime(v.bright, t, 1.2);
-    padGainNode.gain.setTargetAtTime(v.padGain, t, 1.0);
+  /* ---------- world rig: drone + pad + choir, scene-scoped ---------- */
+  function buildRig(v) {
+    const t = ctx.currentTime;
+    const r = { g: ctx.createGain(), srcs: [], pd: null, bp1: null, bp2: null, b1: 0, b2: 0, ph: Math.random() * 6.28 };
+    r.g.gain.value = 1; r.g.connect(bus);
+
+    if (v.dr > 0) {                                    /* drone: 2 detuned saws + sub, breathing lowpass */
+      const dRoot = v.root > 150 ? v.root / 2 : v.root;
+      const lpf = ctx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 300 + v.bright * 0.1; lpf.Q.value = 0.8;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v.dr, t + 1.4);
+      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = dRoot; a.detune.value = -6;
+      const b = ctx.createOscillator(); b.type = 'sawtooth'; b.frequency.value = dRoot; b.detune.value = 6;
+      const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = dRoot / 2;
+      a.connect(lpf); b.connect(lpf); sub.connect(lpf); lpf.connect(g).connect(r.g);
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06 + Math.random() * 0.03;
+      const lg = ctx.createGain(); lg.gain.value = 120 + v.bright * 0.08;
+      lfo.connect(lg).connect(lpf.frequency);
+      [a, b, sub, lfo].forEach(o => { o.start(); r.srcs.push(o); });
+    }
+    if (v.pd > 0) {                                    /* pad: 3-osc stack through two parallel bandpasses, 2s attack */
+      r.bp1 = ctx.createBiquadFilter(); r.bp1.type = 'bandpass'; r.b1 = 500 + v.bright * 0.15; r.bp1.frequency.value = r.b1; r.bp1.Q.value = 1.1;
+      r.bp2 = ctx.createBiquadFilter(); r.bp2.type = 'bandpass'; r.b2 = 1100 + v.bright * 0.35; r.bp2.frequency.value = r.b2; r.bp2.Q.value = 1.6;
+      r.pd = ctx.createGain(); r.pd.gain.setValueAtTime(0, t); r.pd.gain.linearRampToValueAtTime(v.pd, t + 2.2);
+      const waves = ['triangle', 'sawtooth', 'triangle'], dets = [0, 6, -5];
+      v.padIv.forEach((iv, i) => {
+        const o = ctx.createOscillator(); o.type = waves[i % 3];
+        o.frequency.value = v.root * Math.pow(2, iv / 12); o.detune.value = dets[i % 3];
+        o.connect(r.bp1); o.connect(r.bp2);
+        o.start(); r.srcs.push(o);
+      });
+      r.bp1.connect(r.pd); r.bp2.connect(r.pd); r.pd.connect(r.g);
+    }
+    if (v.ch > 0) {                                    /* choir: detuned triangles through a vowel filter pair */
+      const cRoot = v.root * 2 * Math.pow(2, (v.chOct || 0));
+      const bpA = ctx.createBiquadFilter(); bpA.type = 'bandpass'; bpA.frequency.value = 700; bpA.Q.value = 5;
+      const bpB = ctx.createBiquadFilter(); bpB.type = 'bandpass'; bpB.frequency.value = 1100; bpB.Q.value = 5;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v.ch, t + 2.6);
+      const t1 = ctx.createOscillator(); t1.type = 'triangle'; t1.frequency.value = cRoot; t1.detune.value = -5;
+      const t2 = ctx.createOscillator(); t2.type = 'triangle'; t2.frequency.value = cRoot; t2.detune.value = 7;
+      t1.connect(bpA); t1.connect(bpB); t2.connect(bpA); t2.connect(bpB);
+      bpA.connect(g); bpB.connect(g); g.connect(r.g);
+      const vib = ctx.createOscillator(); vib.frequency.value = 4.2;
+      const vg = ctx.createGain(); vg.gain.value = 5;  /* cents */
+      vib.connect(vg); vg.connect(t1.detune); vg.connect(t2.detune);
+      [t1, t2, vib].forEach(o => { o.start(); r.srcs.push(o); });
+    }
+    r.fade = (at) => {
+      r.g.gain.setValueAtTime(r.g.gain.value, at);
+      r.g.gain.linearRampToValueAtTime(0.0001, at + 2);
+      r.srcs.forEach(s => { try { s.stop(at + 2.3); } catch (_) {} });
+      if (r.srcs[0]) r.srcs[0].onended = () => r.g.disconnect();
+    };
+    let nb = 0;
+    r.breathe = (now) => {                             /* slow formant drift, re-aimed every ~2.4s */
+      if (now < nb || !r.bp1) return;
+      nb = now + 2.4;
+      r.bp1.frequency.setTargetAtTime(r.b1 * (1 + 0.16 * Math.sin(now * 0.12 + r.ph)), now, 1.2);
+      r.bp2.frequency.setTargetAtTime(r.b2 * (1 + 0.13 * Math.sin(now * 0.09 + r.ph * 1.7)), now, 1.2);
+    };
+    return r;
   }
 
-  function pluck(freq, when, gain = 0.14, dur = 0.55) {
-    /* the cabinet world plucks in square waves — everyone else keeps the soft voice */
-    const wave = voice.wave || 'sine';
+  /* ---------- per-note transient voices ---------- */
+  function note(freq, when, vel, dur, wave, dest, dlyAmt, wetAmt) {
     const o = ctx.createOscillator(); o.type = wave;
-    const o2 = ctx.createOscillator(); o2.type = wave === 'square' ? 'square' : 'triangle'; o2.detune.value = 5;
-    if (wave === 'square') gain *= 0.55;               /* squares are loud; keep the mix polite */
+    const o2 = ctx.createOscillator(); o2.type = wave === 'square' ? 'square' : 'triangle'; o2.detune.value = 6;
+    if (wave === 'square') vel *= 0.55;                /* squares are loud; keep the mix polite */
+    if (wave === 'sawtooth') vel *= 0.6;
     const g = ctx.createGain();
     o.frequency.value = freq; o2.frequency.value = freq;
     g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(gain, when + 0.02);
+    g.gain.linearRampToValueAtTime(vel, when + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-    o.connect(g); o2.connect(g); g.connect(master);
+    o.connect(g); o2.connect(g); g.connect(dest);
+    if (dlyAmt > 0) { const s = ctx.createGain(); s.gain.value = dlyAmt; g.connect(s).connect(dly); }
+    if (wetAmt > 0) { const s = ctx.createGain(); s.gain.value = wetAmt; g.connect(s).connect(verb); }
     o.start(when); o2.start(when); o.stop(when + dur + 0.1); o2.stop(when + dur + 0.1);
+    o.onended = () => g.disconnect();
+  }
+  function playLead(v, st, when) {
+    const L = v.lead;
+    const semis = v.scale[st.d % v.scale.length] + 12 * (st.o + Math.floor(st.d / v.scale.length));
+    const f = v.root * Math.pow(2, semis / 12);
+    const dur = st.dur * v.step / 1000 * 0.92 + 0.08;
+    note(f, when, st.v, dur, L.wave, L.dry ? dry : bus, L.dly, L.wet);
+    if (v.spark && st.v >= 0.11) note(f * 2, when + 0.03, st.v * 0.5, dur * 0.8, 'triangle', bus, 0.35, 0);
+  }
+  function taiko(when, vel) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(84, when);
+    o.frequency.exponentialRampToValueAtTime(46, when + 0.28);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(vel, when + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.45);
+    o.connect(g); g.connect(bus);
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1150; bp.Q.value = 0.9;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(vel * 0.35, when);
+    ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.06);
+    n.connect(bp); bp.connect(ng); ng.connect(bus);
+    o.start(when); o.stop(when + 0.5); n.start(when); n.stop(when + 0.08);
+    o.onended = () => { g.disconnect(); ng.disconnect(); };
+  }
+  function shaker(when) {
+    const n = noiseSrc();
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6400;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.045, when);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
+    n.connect(hp); hp.connect(g); g.connect(dry);      /* crisp, no wash */
+    n.start(when); n.stop(when + 0.09);
+    n.onended = () => g.disconnect();
+  }
+  function deepCall(when) {                            /* abyssal: a sine call sliding down a fifth */
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(cfg.root, when);
+    o.frequency.exponentialRampToValueAtTime(cfg.root * 0.667, when + 2.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.055, when + 0.7);
+    g.gain.setTargetAtTime(0.0001, when + 2.6, 0.5);
+    const w = ctx.createGain(); w.gain.value = 0.5;
+    o.connect(g); g.connect(bus); g.connect(w).connect(verb);
+    o.start(when); o.stop(when + 4.5);
+    o.onended = () => g.disconnect();
+  }
+  function riser(when) {                               /* pre-warp reverse-swell into the arrival */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2;
+    bp.frequency.setValueAtTime(300, when);
+    bp.frequency.exponentialRampToValueAtTime(2400, when + 0.3);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(0.3, when + 0.28);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.36);
+    n.connect(bp); bp.connect(g); g.connect(bus);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(160, when);
+    o.frequency.exponentialRampToValueAtTime(640, when + 0.3);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, when);
+    og.gain.exponentialRampToValueAtTime(0.05, when + 0.26);
+    og.gain.exponentialRampToValueAtTime(0.0001, when + 0.34);
+    o.connect(og); og.connect(bus);
+    n.start(when); n.stop(when + 0.4); o.start(when); o.stop(when + 0.4);
+    n.onended = () => { g.disconnect(); og.disconnect(); };
+  }
+  function whoosh(when) {
+    const dur = 1.0;
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
+    const g = ctx.createGain();
+    bp.frequency.setValueAtTime(220, when);
+    bp.frequency.exponentialRampToValueAtTime(2400, when + dur * 0.7);
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(0.45, when + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    n.connect(bp); bp.connect(g); g.connect(bus);      /* the hall gives it a tail now */
+    n.start(when); n.stop(when + dur);
+    n.onended = () => g.disconnect();
+  }
+  function fanfare(when) {                             /* original 7-note brass-ish call, big reverb */
+    const F = [[0, 0, .16], [5, .16, .16], [7, .32, .34], [12, .7, .16], [14, .86, .16], [12, 1.02, .22], [19, 1.28, .9]];
+    for (const [s, at, dur] of F) {
+      const f = 196 * Math.pow(2, s / 12);
+      note(f, when + at, 0.11, dur + 0.15, 'sawtooth', bus, 0, 0.5);
+      note(f / 2, when + at, 0.05, dur + 0.15, 'sawtooth', bus, 0, 0.5);
+    }
   }
 
-  /* the arp: lookahead scheduler with a catch-up snap (never a burst after a hidden tab) */
-  function armArp() {
-    clearInterval(arpTimer);
+  /* ---------- the scheduler: lookahead with a catch-up snap ---------- */
+  function armSched() {
+    clearInterval(schedTimer);
     nextNote = ctx.currentTime + 0.1;
-    arpTimer = setInterval(() => {
+    stepIdx = 0;
+    nextCallAt = ctx.currentTime + 15;
+    schedTimer = setInterval(() => {
       if (!on || ctx.state !== 'running') return;
-      if (nextNote < ctx.currentTime - 0.25) nextNote = ctx.currentTime + 0.05;  /* snap forward */
-      while (nextNote < ctx.currentTime + 0.3) {
-        const v = voice;
-        if (Math.random() < 0.62) {                    /* sparse: silence is part of the score */
-          const deg = v.scale[stepIdx % v.scale.length];
-          const oct = Math.random() < 0.3 ? 2 : 1;
-          pluck(v.root * Math.pow(2, deg / 12) * oct, nextNote, 0.1 + Math.random() * 0.05);
+      const now = ctx.currentTime;
+      if (rig) rig.breathe(now);
+      if (nextNote < now - 0.25) nextNote = now + 0.05;   /* snap forward */
+      while (nextNote < now + 0.3) {
+        const v = cfg;
+        if (nextNote >= holdUntil) {
+          const span = v.motif.length + v.gap;
+          const pos = stepIdx % span;
+          if (pos < v.motif.length) { const st = v.motif[pos]; if (st) playLead(v, st, nextNote); }
+          const pc = v.perc[stepIdx % 16];
+          if (pc === 'K') taiko(nextNote, 0.4); else if (pc === 's') shaker(nextNote);
         }
-        stepIdx += (Math.random() < 0.8 ? 1 : 2);
+        if (v.call && nextNote >= nextCallAt) { deepCall(nextNote); nextCallAt = nextNote + 17 + Math.random() * 7; }
+        stepIdx += 1;
         nextNote += v.step / 1000;
       }
     }, 100);
   }
 
-  function whoosh() {
-    if (!ready()) return;
-    const dur = 1.0;
-    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
-    const g = ctx.createGain();
-    const t = ctx.currentTime;
-    bp.frequency.setValueAtTime(220, t);
-    bp.frequency.exponentialRampToValueAtTime(2400, t + dur * 0.7);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.5, t + 0.18);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(bp).connect(g).connect(master);
-    src.start(t); src.stop(t + dur);
+  /* ---------- scene transitions: 2s rig crossfade + arrival breath ---------- */
+  function setWorld(name) {
+    const next = ARR[name] || ARR.hub;
+    if (next === cfg) return;
+    cfg = next;
+    stepIdx = 0;
+    if (!ready()) return;                              /* rig is built on the next turnOn */
+    holdUntil = ctx.currentTime + 1.6;                 /* pads land first; the motif enters after the breath */
+    nextCallAt = ctx.currentTime + 12;
+    if (rig) rig.fade(ctx.currentTime);
+    rig = buildRig(cfg);
   }
 
   const ready = () => on && ctx && ctx.state === 'running';
 
-  /* two-note preview of a world's motif on hover (only when already on) */
+  /* two-note preview of a world's scale on hover, sent through the hall */
   window.Orrery.events.addEventListener('preview', (e) => {
     if (!ready()) return;
-    const v = VOICES[e.detail.slug] || VOICES.hub;
-    pluck(v.root * 2, ctx.currentTime + 0.02, 0.07, 0.3);
-    pluck(v.root * Math.pow(2, v.scale[2] / 12) * 2, ctx.currentTime + 0.14, 0.06, 0.35);
+    const v = ARR[e.detail.slug] || ARR.hub;
+    note(v.root * 2, ctx.currentTime + 0.02, 0.06, 0.3, 'sine', bus, 0, 0.45);
+    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, ctx.currentTime + 0.14, 0.05, 0.35, 'sine', bus, 0, 0.45);
   });
 
-  /* the warp gets its wind; the new world retunes over the crossing */
-  window.Orrery.events.addEventListener('warp', () => { if (ready()) whoosh(); });
-  window.Orrery.events.addEventListener('scene', (e) => {
-    voice = VOICES[e.detail.name] || VOICES.hub;
-    if (ready()) tunePad(voice, 0.15);
+  /* the warp: riser swells into the whoosh, which blooms in the hall */
+  window.Orrery.events.addEventListener('warp', () => {
+    if (!ready()) return;
+    riser(ctx.currentTime);
+    whoosh(ctx.currentTime + 0.22);
   });
+  window.Orrery.events.addEventListener('scene', (e) => setWorld(e.detail.name));
   window.Orrery.events.addEventListener('query', () => {
     if (!ready()) return;
-    const v = VOICES.aurora;
-    v.scale.slice(0, 4).forEach((deg, i) => pluck(v.root * Math.pow(2, deg / 12) * 2, ctx.currentTime + i * 0.09, 0.08, 0.3));
+    const v = ARR.aurora;
+    v.scale.slice(0, 4).forEach((deg, i) =>
+      note(v.root * Math.pow(2, deg / 12) * 2, ctx.currentTime + i * 0.09, 0.07, 0.32, 'triangle', bus, 0.2, 0.3));
+  });
+  window.Orrery.events.addEventListener('konami', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastFanfare < 2.5) return;
+    lastFanfare = ctx.currentTime;
+    fanfare(ctx.currentTime + 0.05);
   });
 
-  /* the unresolved cadence resolves only at the CTA (galadriel's beat) */
+  /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */
   const cta = document.querySelector('.cta-btn');
   if (cta) cta.addEventListener('click', () => {
     if (!ready()) return;
-    const r = VOICES.uncharted.root;
-    [0, 4, 7, 12].forEach((deg, i) => pluck(r * Math.pow(2, deg / 12), ctx.currentTime + i * 0.06, 0.12, 1.4));
+    const r = ARR.uncharted.root, t = ctx.currentTime;
+    [5, 9, 12].forEach(s => note(r * Math.pow(2, s / 12), t + 0.02, 0.085, 1.8, 'triangle', bus, 0, 0.4));
+    [0, 4, 7, 12].forEach(s => note(r * Math.pow(2, s / 12), t + 0.68, 0.085, 2.4, 'triangle', bus, 0, 0.4));
+    if (rig && rig.pd) {                               /* the pad swells under the resolve */
+      rig.pd.gain.setTargetAtTime(cfg.pd * 1.7, t, 0.4);
+      rig.pd.gain.setTargetAtTime(cfg.pd, t + 1.8, 0.8);
+    }
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
@@ -2475,17 +3484,20 @@ const Score = (() => {
     try { await ctx.resume(); } catch (_) { /* stays off */ }
     if (ctx.state !== 'running') { setUI(false); return false; }
     on = true;
-    master.gain.setTargetAtTime(0.9, ctx.currentTime, 0.4);
-    tunePad(voice, 0);
-    armArp();
+    bus.gain.setTargetAtTime(0.75, ctx.currentTime, 0.4);
+    if (!rig) { rig = buildRig(cfg); holdUntil = ctx.currentTime + 0.4; }
+    armSched();
     setUI(true);
     safeStore.set('orrery-score', 'on');
     return true;
   }
   function turnOff() {
     on = false;
-    if (ctx) master.gain.setTargetAtTime(0.0, ctx.currentTime, 0.2);
-    clearInterval(arpTimer);
+    if (ctx) {
+      bus.gain.setTargetAtTime(0.0, ctx.currentTime, 0.2);
+      if (rig) { rig.fade(ctx.currentTime); rig = null; }   /* no oscillators burn while silent */
+    }
+    clearInterval(schedTimer);
     setUI(false);
     safeStore.set('orrery-score', 'off');
   }
@@ -2498,7 +3510,7 @@ const Score = (() => {
   btn.addEventListener('click', () => (on ? turnOff() : turnOn()));
 
   /* returning visitor who had it on: ARM the intent; START on the next gesture
-     that truly carries activation — and KEEP listening until one does (a consumed
+     that truly carries activation - and KEEP listening until one does (a consumed
      one-shot on a non-activating gesture killed the score for the whole visit:
      Smaug kill 9). pointerup/click carry activation on touch; Escape does not. */
   if (safeStore.get('orrery-score') === 'on') {
@@ -2532,6 +3544,202 @@ const Score = (() => {
    rather than a blank app shell (Smaug kill 6 / gimli G3) ---------- */
 try { bootOrrery(); }
 catch (e) { document.documentElement.classList.remove('js'); }
+
+
+/* ============================================================
+   08-konami.js — the Konami rite. A self-contained fragment that
+   attaches lazily to window.Orrery (already booted by the end of 07).
+   Keyboard: up up down down left right left right b a.
+   Touch:    seven taps on the HUD brand link within 4s.
+   Unlock →  the Colossus flyby (sky) · the orrery spin-up · the seal.
+   No text in canvas. No IP. Compositor-only CSS. Pooled, no per-frame alloc.
+   ============================================================ */
+'use strict';
+
+(() => {
+  const O = window.Orrery;
+  if (!O || !O.events || !O.ticker) return;          /* engine absent → nothing to gate */
+  const html = document.documentElement;
+
+  const reduced = () => (O.reduced ? O.reduced() : matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const store = {
+    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
+  };
+
+  /* ---------- the colossus geometry (all precomputed, zero per-frame alloc) ---------- */
+  const FLY_DUR = 16000;                              /* ~16s crossing */
+  /* [fraction-along-body, radius-scale] — an immense leviathan, head → tail */
+  const COL_SEG = [[0, 1], [0.14, 0.95], [0.28, 0.88], [0.42, 0.76], [0.55, 0.60], [0.68, 0.44], [0.80, 0.30], [0.90, 0.18]];
+  const COL_LIGHTS = [0.10, 0.22, 0.34, 0.46, 0.58, 0.70];   /* gold running lights along the flank */
+  const COL_DUST = (() => {                           /* faint interior star-dust: deterministic */
+    let seed = 91; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const out = [];
+    for (let i = 0; i < 14; i++) out.push([0.05 + rnd() * 0.80, (rnd() * 2 - 1) * 0.7, 0.5 + rnd() * 0.8]);
+    return out;
+  })();
+  function colRadiusAt(u) {
+    const S = COL_SEG;
+    if (u <= S[0][0]) return S[0][1];
+    for (let i = 1; i < S.length; i++) {
+      if (u <= S[i][0]) { const t = (u - S[i - 1][0]) / (S[i][0] - S[i - 1][0]); return S[i - 1][1] + (S[i][1] - S[i - 1][1]) * t; }
+    }
+    return S[S.length - 1][1];
+  }
+
+  /* ---------- flyby state ---------- */
+  let flyActive = false, flyPending = false, flyElapsed = 0, flyDir = 1, flyYRel = 0.22;
+  let skyCanvas = null, skyCtx = null;
+
+  function drawColossus(p, clock) {
+    if (!skyCtx) { skyCanvas = document.getElementById('sky'); if (!skyCanvas) return; skyCtx = skyCanvas.getContext('2d'); }
+    const g = skyCtx, W = innerWidth, H = innerHeight;
+    const env = Math.sin(Math.PI * p);
+    if (env <= 0.01) return;
+    const L = Math.max(W * 1.35, 820);
+    const dir = flyDir;
+    const x0 = dir > 0 ? p * (W + L) : W - p * (W + L);
+    const ry0 = Math.min(120, H * 0.14);
+    const y = H * flyYRel + Math.sin(clock / 2600) * 8;
+
+    g.save();
+    /* body silhouette — occludes the stars behind it (drawn AFTER the engine's star pass) */
+    g.fillStyle = 'rgba(2,4,12,' + (0.9 * Math.min(1, env * 2.4)).toFixed(3) + ')';
+    g.beginPath();
+    for (let i = 0; i < COL_SEG.length; i++) {
+      const cx = x0 - dir * COL_SEG[i][0] * L, rx = L * 0.11 * COL_SEG[i][1];
+      g.moveTo(cx + rx, y);
+      g.ellipse(cx, y, rx, ry0 * COL_SEG[i][1], 0, 0, 7);
+    }
+    /* dorsal fin near the head */
+    const fx0 = x0 - dir * 0.18 * L;
+    g.moveTo(fx0, y - ry0 * 0.55);
+    g.quadraticCurveTo(fx0 - dir * 0.05 * L, y - ry0 * 2.5, fx0 - dir * 0.13 * L, y - ry0 * 0.5);
+    /* tail fluke */
+    const tx = x0 - dir * 0.9 * L;
+    g.moveTo(tx, y);
+    g.quadraticCurveTo(tx - dir * 0.06 * L, y - ry0 * 1.5, tx - dir * 0.12 * L, y - ry0 * 0.9);
+    g.quadraticCurveTo(tx - dir * 0.05 * L, y, tx - dir * 0.12 * L, y + ry0 * 0.9);
+    g.quadraticCurveTo(tx - dir * 0.06 * L, y + ry0 * 1.5, tx, y);
+    g.closePath();
+    g.fill();
+
+    /* faint interior star-dust (decorative dots — no text) */
+    g.fillStyle = 'rgba(207,216,255,1)';
+    for (let i = 0; i < COL_DUST.length; i++) {
+      const u = COL_DUST[i][0], rr = colRadiusAt(u);
+      const cx = x0 - dir * u * L, cy = y + COL_DUST[i][1] * ry0 * rr * 0.8;
+      const tw = 0.5 + 0.5 * Math.sin(clock / 700 + i * 1.3);
+      g.globalAlpha = env * (0.18 + 0.32 * tw);
+      g.beginPath(); g.arc(cx, cy, COL_DUST[i][2], 0, 7); g.fill();
+    }
+
+    /* gold running lights, blinking along the ventral flank */
+    g.shadowColor = 'rgba(255,205,90,0.9)';
+    g.shadowBlur = 6;
+    g.fillStyle = 'rgba(255,214,120,1)';
+    for (let i = 0; i < COL_LIGHTS.length; i++) {
+      const u = COL_LIGHTS[i], rr = colRadiusAt(u);
+      const cx = x0 - dir * u * L, cy = y + ry0 * rr * 0.5;
+      g.globalAlpha = env * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(clock / 300 + i * 1.7)));
+      g.beginPath(); g.arc(cx, cy, 2.0, 0, 7); g.fill();
+    }
+    g.restore();                                       /* never leak shadow/alpha into the engine's next star pass */
+  }
+
+  /* the flyby task: added AFTER the engine's ambient task so it paints on top each frame */
+  function flyTask(dt, clock) {
+    if (!flyActive) return false;
+    if (reduced()) { flyActive = false; return false; }   /* live reduced-motion flip → bow out */
+    const active = document.querySelector('.scene.is-active');
+    if (!active || active.dataset.scene !== 'hub') { flyPending = true; return false; }  /* inside a world → pause */
+    flyElapsed += dt;
+    const p = flyElapsed / FLY_DUR;
+    if (p >= 1) { flyActive = false; return false; }
+    drawColossus(p, clock);
+    return true;
+  }
+  function addFlyTask() { O.ticker.add(flyTask); }     /* Set dedups, so a double-add is harmless */
+  function startFlyby() {
+    if (reduced()) return;
+    flyElapsed = 0; flyActive = true;
+    flyDir = Math.random() < 0.5 ? 1 : -1;
+    flyYRel = 0.18 + Math.random() * 0.22;
+    const onHub = document.querySelector('.scene.is-active')?.dataset.scene === 'hub';
+    if (onHub) { flyPending = false; addFlyTask(); } else { flyPending = true; }
+  }
+  /* resume a deferred/paused flyby when the traveler returns to orbit (ambient is
+     re-added by setScene BEFORE this 'scene' event, so we land after it in the Set) */
+  O.events.addEventListener('scene', (e) => {
+    if (e.detail && e.detail.name === 'hub' && flyActive && flyPending) { flyPending = false; addFlyTask(); }
+  });
+
+  /* ---------- the spin-up: 6s gold pulse flag on <html> ---------- */
+  let spinTimer = null;
+  function spinUp() {
+    html.dataset.konami = '1';
+    clearTimeout(spinTimer);
+    spinTimer = setTimeout(() => { html.removeAttribute('data-konami'); spinTimer = null; }, 6000);
+  }
+
+  /* ---------- the surveyor seal ---------- */
+  function showSeal() {
+    const host = document.querySelector('.hud-bottom span');
+    if (!host || host.querySelector('.konami-seal')) return;
+    host.appendChild(document.createTextNode(' \u00b7 '));
+    const seal = document.createElement('span');
+    seal.className = 'konami-seal';
+    seal.title = 'You know the old code.';
+    seal.setAttribute('role', 'img');
+    seal.setAttribute('aria-label', 'Secret unlocked: you know the old code.');
+    host.appendChild(seal);
+  }
+
+  /* ---------- unlock ---------- */
+  function unlock() {
+    store.set('orrery-konami', '1');
+    showSeal();
+    try { O.events.dispatchEvent(new CustomEvent('konami')); } catch (_) {}   /* the score's fanfare hook */
+    spinUp();
+    if (!reduced()) startFlyby();                       /* reduced-motion: seal + event + static ring only */
+  }
+
+  /* ---------- keyboard rite (never preventDefault: arrows keep scrolling world cards) ---------- */
+  const SEQ = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+  let pos = 0;
+  addEventListener('keydown', (e) => {
+    if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    const k = (e.key || '').toLowerCase();             /* case-insensitive b/a */
+    if (k === SEQ[pos]) pos++;
+    else pos = (k === SEQ[0]) ? 1 : 0;                  /* wrong key resets (restart if it was the first) */
+    if (pos === SEQ.length) { pos = 0; unlock(); }
+  }, { passive: true });
+
+  /* ---------- touch rite: seven taps on the brand within 4s ---------- */
+  const brand = document.querySelector('.brand');
+  if (brand) {
+    brand.setAttribute('title', 'seven taps for the old code');
+    let taps = 0, firstT = 0, idle = null;
+    brand.addEventListener('click', (e) => {
+      if (e.detail === 0) return;                       /* keyboard activation → let the link navigate normally */
+      e.preventDefault();                               /* pointer taps are held on-page so we can count them */
+      const now = performance.now();
+      if (taps === 0 || now - firstT > 4000) { taps = 0; firstT = now; }
+      taps++;
+      clearTimeout(idle);
+      if (taps >= 7) { taps = 0; unlock(); return; }
+      idle = setTimeout(() => {                          /* a lone tap was a real click → honor the link (slight delay) */
+        const lone = taps === 1; taps = 0;
+        if (lone) { try { location.href = brand.href; } catch (_) {} }
+      }, 480);
+    });
+  }
+
+  /* ---------- on load: seal only if already earned this session (no flyby replay) ---------- */
+  if (store.get('orrery-konami') === '1') showSeal();
+})();
 
 </script>
 </body>

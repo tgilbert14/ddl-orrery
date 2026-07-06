@@ -195,39 +195,16 @@ function drawSky(dt, clockMs) {
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
         a.style.setProperty('--psize', w.size + 'px');
       }
-      /* the tells: halos behind the DOM dots */
-      const [r, g, b] = w.a;
+      /* the worlds themselves: rotating textured spheres (PlanetForge) */
       const hov = hovered === w.slug;
-      let glow = 0.22 + (hov ? 0.3 : 0);
-      if (!reduced()) {
-        if (w.tell === 'heat')    glow += 0.10 * (0.5 + 0.5 * Math.sin(t * 2.1 + i));
-        if (w.tell === 'pulse')   glow += (Math.sin(t * 6) > 0.72 ? 0.16 : 0);
-        if (w.tell === 'breathe') glow += 0.12 * (0.5 + 0.5 * Math.sin(t * 0.8));
-        if (w.tell === 'glint')   glow += (Math.sin(t * 0.9 + 2) > 0.985 ? 0.5 : 0);
-        if (w.tell === 'rain')    glow += (Math.sin(t * 9 + i * 3) > 0.6 ? 0.13 : 0);
-      }
-      const rad = w.size * (1.15 + glow * 0.4);
-      const grad = ctx.createRadialGradient(p.x, p.y, w.size * 0.3, p.x, p.y, rad);
-      grad.addColorStop(0, `rgba(${r},${g},${b},${glow})`);
-      grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
+      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
 
-      if (w.tell === 'dashed') {
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.55)`;
+      if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
+        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},0.55)`;
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72, 0, 7); ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      if (w.tell === 'pixel') {                        /* the cabinet world reads 8-bit even in orbit */
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`;
-        ctx.setLineDash([6, 5]);
-        ctx.lineDashOffset = reduced() ? 0 : Math.floor(t * 2) * 4;   /* stepped, not smooth */
-        ctx.lineWidth = 2;
-        const s2 = w.size * 0.68;
-        ctx.strokeRect(p.x - s2, p.y - s2, s2 * 2, s2 * 2);
         ctx.setLineDash([]);
       }
     });
@@ -356,6 +333,15 @@ function setScene(name, { instant = false } = {}) {
     Orrery.stopAmbient();                              /* one scene owns the frame budget */
     WorldFX.start(name);
     markSurveyed(name);
+    /* refresh this card's medallion so the little world advanced since last visit */
+    const med = next.querySelector('.card-planet');
+    if (med && window.PlanetForge) {
+      const g2 = med.getContext('2d');
+      const dpr2 = Math.min(devicePixelRatio || 1, 2);
+      med.width = 72 * dpr2; med.height = 72 * dpr2;
+      g2.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+      PlanetForge.drawMini(g2, name, 72, Ticker.clock);
+    }
     /* move focus to the world heading for keyboard/AT travelers */
     const h = next.querySelector('h2');
     if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
@@ -450,10 +436,26 @@ tickClock();
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
+  PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
   sizeSky();
   setRM();
   route(true);
   if (!reduced()) Orrery.startAmbient();
   /* re-measure the arc once type has settled (font metrics can shift the copy block) */
-  setTimeout(() => { measureArc(); drawStatic(); }, 350);
+  setTimeout(() => { measureArc(); drawStatic(); paintMedallions(); }, 350);
+}
+
+/* the brass card medallions: one small spinning-world portrait per card,
+   painted at boot and refreshed on each arrival (static between visits) */
+function paintMedallions() {
+  document.querySelectorAll('.card-planet').forEach(c => {
+    const sec = c.closest('.scene');
+    if (!sec || !window.PlanetForge) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const size = 72;
+    c.width = size * dpr; c.height = size * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
+  });
 }

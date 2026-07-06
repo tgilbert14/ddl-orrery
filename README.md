@@ -5,8 +5,10 @@
 An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of seven
 themed universes, each with its own atmosphere, palette, motion identity, and
 musical voicing. Click a planet, warp there, return to orbit. No frameworks, no build magic beyond
-concatenation, no image assets, no audio files: every star, planet, ember, current, and note is
-procedural.
+concatenation, no image assets, no audio files: every star, planet texture, ember, current, and note is
+procedural. v3 "The Deep Orrery": rotating noise-textured planets rendered in pure Canvas 2D,
+a submerged art-deco brass observatory chrome, a cinematic score engine with a generated concert
+hall, and one old code that summons something enormous.
 
 **Live:** https://tgilbert14.github.io/ddl-orrery/
 

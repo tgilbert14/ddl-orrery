@@ -12,17 +12,24 @@
 html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
 :root {
-  /* -- the night (base space) -- */
-  --void: #05070f;
-  --night: #0a0f22;
-  --horizon: #0d1330;      /* the sky's warm floor (hub gradient base) */
-  --ink: #e9eef9;          --ink-rgb: 233, 238, 249;   /* body text, 17.3:1 on void */
-  --ink-dim: #a9b6d0;      /* captions, 9.9:1 on void */
-  --ink-faint: #6b7994;    /* hints, 4.59:1 on void — the floor, respected */
-  --line: rgba(var(--ink-rgb), 0.14);
-  --glass: rgba(10, 15, 34, 0.55);
+  /* -- the deep (base water; was "the night") -- */
+  --void: #04100e;          --void-rgb: 4, 16, 14;      /* sea-glass black */
+  --night: #082019;                                     /* dark teal (skip-link, chips) */
+  --horizon: #103129;       /* lamplit depth floor (hub gradient base) */
+  --ink: #eee9da;           --ink-rgb: 238, 233, 218;   /* warm paper-white, 15.9:1 on void */
+  --ink-dim: #b3ae97;       /* captions, 8.7:1 on void */
+  --ink-faint: #857f68;     /* hints, 4.8:1 on void, the floor, respected */
+  --line: rgba(var(--brass-rgb), 0.26);                 /* every hairline is now brass */
+  --glass: rgba(6, 24, 20, 0.55);
 
-  /* -- world families: a (accent) · b (second) · glow · ground -- */
+  /* -- deco instrument chrome (NEW) -- */
+  --brass: #c9a35c;         --brass-rgb: 201, 163, 92;  /* 8.2:1 on void, 7.5:1 on plaque */
+  --brass-dim: #8a6f42;     --brass-dim-rgb: 138, 111, 66;  /* 4.1:1, DECORATIVE ONLY, never body text */
+  --cream: #efe4c8;         --cream-rgb: 239, 228, 200; /* engraved lettering, 15.3:1 on void */
+  --oxblood: #6f2b33;       --oxblood-rgb: 111, 43, 51; /* leather accent, decorative only */
+  --plaque: #0a1b17;        --plaque-rgb: 10, 27, 23;   /* brass-edged instrument surface */
+
+  /* -- world families: UNCHANGED, the worlds keep their identities -- */
   --w-dust-a: #ffb25e;      --w-dust-a-rgb: 255, 178, 94;
   --w-dust-b: #9fc07e;
   --w-dust-glow: #ff7a45;   --w-dust-glow-rgb: 255, 122, 69;
@@ -57,14 +64,14 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-un-b: #9fb4c8;
   --w-un-glow: #64d5f5;       --w-un-glow-rgb: 100, 213, 245;
   --w-un-ground: #0f141c;
-  --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* the ONE warm CTA accent */
-  --coral-ink: #2a0f0b;       /* text on coral, 6.55:1 — passes, but no headroom to lighten */
+  --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* still the ONE warm CTA accent */
+  --coral-ink: #2a0f0b;
 
   /* -- the live accent (retinted per hover / world; registered <color> above) -- */
   --acc: #64d5f5;
   --acc-rgb: 100, 213, 245;
 
-  /* -- type scale -- */
+  /* -- type scale (names kept; hub display duty moves to the plaque rules) -- */
   --font-display: ui-sans-serif, system-ui, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
   --fs-hero: clamp(1.9rem, 1.1rem + 4.2vw, 4.2rem);
@@ -73,8 +80,12 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --fs-body: clamp(0.98rem, 0.92rem + 0.35vw, 1.12rem);
   --fs-label: 0.72rem;
 
-  /* -- motion tokens (one clock: JS reads --beat for the shared tempo) -- */
-  --beat: 4s;                 /* one orrery beat; orbits/loops derive from it */
+  /* -- deco tracking vocabulary (NEW) -- */
+  --track-deco: 0.3em;        /* engraved display lines */
+  --track-plate: 0.18em;      /* plate labels */
+
+  /* -- motion tokens (unchanged) -- */
+  --beat: 4s;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --spring: linear(0, 0.32, 0.72, 1.03, 1.01, 0.99, 1);
   --warp-ms: 1100ms;

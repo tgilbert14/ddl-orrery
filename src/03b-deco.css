@@ -1,0 +1,224 @@
+/* ============================================================
+   03b-deco.css: The Deep Deco reskin. Brass, cream, sea-glass.
+   Everything here is STATIC (zero new animations, zero rAF).
+   ============================================================ */
+
+/* ---------- 1 · pre-boot / no-JS backdrop retint ----------
+   REPLACES the star-dot colors of #orrery in 02-hub.css (cool whites
+   become lamplight through water); html.js #orrery is already token-driven */
+#orrery {
+  background:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgba(var(--cream-rgb), 0.8), transparent 60%),
+    radial-gradient(1px 1px at 68% 12%, rgba(var(--cream-rgb), 0.6), transparent 60%),
+    radial-gradient(1.2px 1.2px at 33% 74%, rgba(var(--brass-rgb), 0.5), transparent 60%),
+    radial-gradient(1px 1px at 85% 55%, rgba(var(--cream-rgb), 0.5), transparent 60%),
+    radial-gradient(1.4px 1.4px at 52% 38%, rgba(var(--cream-rgb), 0.4), transparent 60%),
+    radial-gradient(1px 1px at 20% 92%, rgba(var(--cream-rgb), 0.35), transparent 60%),
+    radial-gradient(ellipse 120% 80% at 50% 120%, var(--horizon) 0%, var(--void) 60%);
+}
+
+/* ---------- 2 · the hub plaque (the Commission's order) ----------
+   REPLACES .hub-copy, .hub-h1, .hub-h1::after, .hub-sub, .hub-hint sizing
+   in 02-hub.css. The h1 stays real painted text: it remains the LCP. */
+.hub-copy {
+  margin-top: clamp(0.2rem, 1.5vh, 1rem);
+  padding: 0.75rem 1.8rem 0.9rem;
+  max-width: min(92vw, 44rem);
+  background:
+    linear-gradient(180deg, rgba(var(--brass-rgb), 0.07), rgba(var(--brass-rgb), 0.02) 45%, transparent),
+    var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.5);
+  /* double-rule effect: 1px border, 2px plaque gap, 1px inner brass line */
+  box-shadow: inset 0 0 0 3px var(--plaque), inset 0 0 0 4px rgba(var(--brass-rgb), 0.3);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px),
+                     calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
+}
+.hub-h1 {
+  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.35rem);
+  font-weight: 300;
+  letter-spacing: var(--track-deco);
+  text-transform: uppercase;
+  line-height: 1.4;
+  color: var(--cream);
+  text-wrap: balance;
+}
+/* brass double rules above AND below the engraved line
+   (::after REPLACES the old 72px coral-to-acc bar) */
+.hub-h1::before, .hub-h1::after {
+  content: ""; display: block; height: 5px;
+  width: min(300px, 72%);
+  margin: 0.45rem auto;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(var(--brass-rgb), 0.85) 18% 82%, transparent),
+    linear-gradient(90deg, transparent, rgba(var(--brass-rgb), 0.4) 28% 72%, transparent);
+  background-size: 100% 1px, 74% 1px;
+  background-position: center top, center bottom;
+  background-repeat: no-repeat;
+}
+.hub-sub {
+  font-size: 0.92rem; margin-top: 0.4rem; max-width: 42em;
+  color: var(--ink-dim);
+}
+.hub-hint {
+  margin-top: 0.6rem; font-size: 0.62rem;
+  letter-spacing: 0.22em; color: var(--ink-faint); font-weight: 600;
+}
+/* sunburst fan ornament under the lockup (pure gradient, no asset) */
+.hub-copy::after {
+  content: ""; display: block; width: 132px; height: 20px; margin: 0.5rem auto 0;
+  background: repeating-conic-gradient(from 270deg at 50% 100%,
+    rgba(var(--brass-rgb), 0.55) 0deg 1.6deg, transparent 1.6deg 11.25deg);
+  -webkit-mask-image: radial-gradient(ellipse 100% 200% at 50% 100%, #000 0 44%, transparent 72%);
+  mask-image: radial-gradient(ellipse 100% 200% at 50% 100%, #000 0 44%, transparent 72%);
+}
+
+/* ---------- 3 · brass HUD chrome ----------
+   EXTENDS .brand / .hud-title / #hud-clock; REPLACES the pill geometry of
+   .return-orbit and .audio-toggle (01-tokens.css); their hover transforms
+   and data-on accent states carry through untouched */
+.brand {
+  color: var(--cream);
+  padding: 0.4rem 0.75rem;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.4);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.2);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px),
+                     calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+.brand b { color: var(--brass); }          /* coral leaves the masthead; brass takes it */
+.hud-title { color: var(--brass); font-weight: 600; }
+#hud-clock { font-variant-numeric: tabular-nums; }
+
+.return-orbit, .audio-toggle {
+  border-radius: 0;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.45);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22);
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px),
+                     calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+}
+.return-orbit:hover, .return-orbit:focus-visible,
+.audio-toggle:hover, .audio-toggle:focus-visible { color: var(--cream); border-color: var(--brass); }
+
+/* clip-path swallows an OUTSIDE outline: chamfered controls get an inner focus ring */
+.brand:focus-visible, .return-orbit:focus-visible, .audio-toggle:focus-visible,
+.w-return:focus-visible, .w-toy:focus-visible { outline-offset: -4px; }
+
+/* ---------- 4 · the porthole + film grain (NEW elements) ---------- */
+/* z-order: scenes 10 < warpfx 90 < porthole 110 < grain 111 < HUD 120 < skip-link 300.
+   The warp flood blooms BEHIND the ring: the journey reads through-the-window. */
+.porthole {
+  position: fixed; inset: 0; z-index: 110; pointer-events: none;
+  background:
+    radial-gradient(ellipse 82% 86% at 50% 48%, transparent 0 63.5%,
+      rgba(var(--brass-rgb), 0.11) 64% 64.6%, transparent 65.4%),
+    radial-gradient(ellipse 125% 135% at 50% 50%, transparent 50%,
+      rgba(2, 10, 9, 0.4) 80%, rgba(1, 6, 5, 0.78) 100%);
+}
+.grain {
+  position: fixed; inset: 0; z-index: 111; pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+/* grain is deliberately STATIC (no flicker): nothing to gate under html.rm */
+
+/* ---------- 5 · the world-card: brass instrument plate ----------
+   REPLACES .world-card.glass background (03-worlds.css) and the .glass
+   radius/border for cards; rivets sit at 20px, inside the 18px chamfer */
+.world-card {
+  border-radius: 0;
+  padding-right: clamp(1.4rem, 3vw, 2.4rem);
+}
+.world-card.glass {
+  background-color: rgba(6, 22, 18, 0.8);       /* darker than old 0.72: captions keep 4.5:1 over FX */
+  background-image:
+    radial-gradient(4px 4px at 20px 20px,               rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    radial-gradient(4px 4px at calc(100% - 20px) 20px,  rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    radial-gradient(4px 4px at 20px calc(100% - 20px),  rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    radial-gradient(4px 4px at calc(100% - 20px) calc(100% - 20px), rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
+    linear-gradient(180deg, rgba(var(--brass-rgb), 0.06), transparent 32%);
+  border: 1px solid rgba(var(--brass-rgb), 0.5);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 3px rgba(6, 22, 18, 0.9), inset 0 0 0 4px rgba(var(--brass-rgb), 0.28);
+  clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px),
+                     calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
+}
+/* the medallion slot: integrator wires PlanetForge.drawMini into it */
+.card-planet {
+  position: absolute;
+  top: clamp(1.4rem, 3vw, 2.4rem);
+  right: clamp(1.4rem, 3vw, 2.4rem);
+  width: 46px; height: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #0e241e, #050f0c 78%);
+  box-shadow: 0 0 0 1px rgba(var(--brass-rgb), 0.7),
+              0 0 0 3px var(--plaque),
+              0 0 0 4px rgba(var(--brass-rgb), 0.35);
+}
+/* keep the eyebrow and the engraved name clear of the medallion */
+.world-card .w-eyebrow, .world-card h2 { padding-right: 62px; }
+
+/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css */
+.world-card h2 {
+  font-size: clamp(1.7rem, 1.2rem + 2.4vw, 3.1rem);
+  font-weight: 300;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.12;
+  color: var(--cream);
+}
+.w-eyebrow { letter-spacing: var(--track-plate); font-variant-numeric: lining-nums tabular-nums; }
+.w-return, .w-toy {
+  border-radius: 0;
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px),
+                     calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+}
+
+/* ---------- 6 · brochure list chrome (mobile / no-JS planet index) ----------
+   EXTENDS .planet-anchor (02-hub.css); desktop app-mode strips border/bg itself */
+.planet-anchor { border-radius: 4px; }
+.pa-label b { font-weight: 800; }
+.pa-label em { color: var(--ink-dim); }
+
+/* ---------- 7 · print keeps its own law: nothing to add ---------- */
+@media print { .porthole, .grain, .card-planet { display: none !important; } }
+
+
+/* ============================================================
+   The Konami rite — spin-up ring pulse + surveyor seal.
+   Compositor-only (transform/opacity); border-color is a one-time
+   state change eased by the ring's existing transition, not animated.
+   ============================================================ */
+
+/* the 6s spin-up: planet rings glow gold. Rings are display:block only in
+   desktop orbit mode (min-width:701px), so this is a desktop-orbit flourish. */
+html:not(.rm)[data-konami="1"] .planet-anchor .pa-ring {
+  border-color: rgba(255, 205, 90, 0.9);
+  animation: konami-ring 900ms var(--ease-out) infinite;
+  will-change: transform, opacity;
+}
+@keyframes konami-ring {
+  0%, 100% { opacity: 0.3; transform: scale(0.92); }
+  50%      { opacity: 1;   transform: scale(1.12); }
+}
+/* reduced-motion: a static gold ring highlight, no pulse (eases in/out via the
+   ring's own border-color transition when the flag is set / removed) */
+html.rm[data-konami="1"] .planet-anchor .pa-ring {
+  border-color: rgba(255, 205, 90, 0.85);
+}
+
+/* the surveyor seal — a tiny gold monogram dot in the HUD bottom line */
+.konami-seal {
+  display: inline-block;
+  width: 12px; height: 12px;
+  vertical-align: -1px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
+    radial-gradient(circle at 60% 65%, #ffcf6a 0%, #b8791f 90%);
+  box-shadow: 0 0 8px rgba(255, 205, 90, 0.6);
+}
+html:not(.rm) .konami-seal { animation: konami-seal-glow 3.2s var(--ease-out) infinite; will-change: opacity; }
+@keyframes konami-seal-glow { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
