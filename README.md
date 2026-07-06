@@ -1,6 +1,6 @@
 # The Orrery
 
-**Seven worlds. One clock. Everything you see is code.**
+**Eleven worlds. One clock. One artifact, holding the center.**
 
 An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of seven
 themed universes, each with its own atmosphere, palette, motion identity, and
@@ -28,6 +28,14 @@ a dread score of hull groans and a slow heartbeat, and a low, slightly-wrong ans
 | Arcadia | the 8-bit cabinet: marching invaders, a patrol ship, CRT scanlines, square-wave chiptune |
 | Aurora | ribbons rehearsing their colors over a self-drawing crystal constellation |
 | Uncharted | a survey that drafts wherever you look; the only world that never finishes (and the one soft contact note) |
+| The Archive | probability fans branching over the indigo stacks, collapsing to the one future worth planning for |
+| The Drillyard | three squads drilling zero-g formations in a slowly turning arena; down is a direction you choose |
+| Stormwall | a living storm front rolls the horizon; sparks race ahead of it and the rockbuds close up safe |
+| The Beacons | seven watch-fires catch one by one across a dusk range; when one lights, the next answers |
+
+Plus: a first-visit approach cinematic, a hands-free Grand Tour autopilot (the client-demo button),
+a surveyor's log that fills gold as you travel and honors a completed survey, and the Artifact itself,
+wearing a different hand-made face for every world you consider.
 
 ## Build
 

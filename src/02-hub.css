@@ -118,7 +118,9 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
   html.js .planet-anchor .pa-ring {
     display: block; position: absolute; inset: -10px; border-radius: 50%;
-    border: 1px solid rgba(var(--pa-rgb), 0.0);
+    /* --acc-rgb fallback: a world missing its tint rule degrades to the live
+       accent instead of an invalid declaration killing the focus ring */
+    border: 1px solid rgba(var(--pa-rgb, var(--acc-rgb)), 0.0);
     transition: border-color 0.35s, inset 0.35s;
   }
   html.js .planet-anchor .pa-label {
@@ -133,9 +135,9 @@ html.js .hub-hint { animation-delay: 0.55s; }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
   html.js .planet-anchor .pa-label em { font-size: 0.72rem; opacity: 0; transform: translateY(-4px); transition: opacity 0.3s, transform 0.3s; }
   html.js .planet-anchor:hover .pa-dot,
-  html.js .planet-anchor:focus-visible .pa-dot { transform: scale(1.12); box-shadow: 0 0 34px rgba(var(--pa-rgb), 0.65); }
+  html.js .planet-anchor:focus-visible .pa-dot { transform: scale(1.12); box-shadow: 0 0 34px rgba(var(--pa-rgb, var(--acc-rgb)), 0.65); }
   html.js .planet-anchor:hover .pa-ring,
-  html.js .planet-anchor:focus-visible .pa-ring { border-color: rgba(var(--pa-rgb), 0.6); inset: -14px; }
+  html.js .planet-anchor:focus-visible .pa-ring { border-color: rgba(var(--pa-rgb, var(--acc-rgb)), 0.6); inset: -14px; }
   html.js .planet-anchor:hover .pa-label em,
   html.js .planet-anchor:focus-visible .pa-label em { opacity: 1; transform: none; }
   html.js .pa-unnamed .pa-dot {

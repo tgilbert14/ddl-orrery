@@ -34,9 +34,9 @@ const page = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Orrery · a Desert Data Labs experience</title>
-<meta name="description" content="Seven worlds, hand-built from code: a desert giant under two suns, a neon metropolis, glyph rain, the hadal deep, a cabinet world, dancing auroras, and one world still unnamed. Travel between them.">
+<meta name="description" content="Eleven worlds, hand-built from code: a desert giant under two suns, a neon metropolis, glyph rain, the hadal deep, a cabinet world, dancing auroras, a hall of predictive mathematics, a zero-gravity drillyard, a living storm, a chain of signal-fires, and one world still unnamed. Travel between them.">
 <meta property="og:title" content="The Orrery · Desert Data Labs">
-<meta property="og:description" content="Seven worlds orbit a golden artifact that changes its face when you look at it. Warp between hand-built universes, each with its own weather, physics, and music.">
+<meta property="og:description" content="Eleven worlds orbit a golden artifact that changes its face when you look at it. Warp between hand-built universes, each with its own weather, physics, and music.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tgilbert14.github.io/ddl-orrery/">
 <meta property="og:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">

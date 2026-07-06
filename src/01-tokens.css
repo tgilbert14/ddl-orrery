@@ -64,6 +64,27 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-un-b: #9fb4c8;
   --w-un-glow: #64d5f5;       --w-un-glow-rgb: 100, 213, 245;
   --w-un-ground: #0f141c;
+
+  /* -- Sector 11 · The Beacons: dusk indigo range · firelight gold · cold star-white -- */
+  --w-beacon-a: #ffa53a;      --w-beacon-a-rgb: 255, 165, 58;    /* firelight gold (the signature accent) */
+  --w-beacon-b: #dfe9ff;      --w-beacon-b-rgb: 223, 233, 255;   /* cold star-white */
+  --w-beacon-glow: #ff7e33;   --w-beacon-glow-rgb: 255, 126, 51; /* ember bloom / slope-glow */
+  --w-beacon-ground: #0b1230;                                    /* dusk indigo deep */
+
+  --w-storm-a: #7fb3ff;       --w-storm-a-rgb: 127, 179, 255;
+  --w-storm-b: #cfe6ff;       --w-storm-b-rgb: 207, 230, 255;
+  --w-storm-glow: #b9a9ff;    --w-storm-glow-rgb: 185, 169, 255;
+  --w-storm-ground: #131022;
+
+  --w-drill-a: #7fb2e5;       --w-drill-a-rgb: 127, 178, 229;
+  --w-drill-b: #66ff9e;       --w-drill-b-rgb: 102, 255, 158;
+  --w-drill-glow: #ffc45e;    --w-drill-glow-rgb: 255, 196, 94;
+  --w-drill-ground: #070d18;
+
+  --w-archive-a: #ecc27a;     --w-archive-a-rgb: 236, 194, 122;   /* parchment amber (the chosen future) */
+  --w-archive-b: #8ea2e8;     --w-archive-b-rgb: 142, 162, 232;   /* cool indigo (the branches not taken) */
+  --w-archive-glow: #ffd98f;  --w-archive-glow-rgb: 255, 217, 143;/* the bright path's burn */
+  --w-archive-ground: #0b1030;                                    /* deep indigo night */
   --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* still the ONE warm CTA accent */
   --coral-ink: #2a0f0b;
 

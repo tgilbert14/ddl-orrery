@@ -88,6 +88,43 @@ const Score = (() => {
       motif: [N(2,0,3,.07), R, R, N(3,0,2,.06), R, N(2,0,3,.06), R, R, N(1,0,2,.05), R, N(2,0,4,.06), R, R, R, R, R],
       perc: '................',
     },
+    /* the predictive hall: lydian wonder (raised 4th shimmer), slow deliberate
+       triangle over a thin drone + maj7 pad, echoes like equations cascading */
+    archive: {
+      root: 155.6, scale: [0, 2, 4, 6, 7, 9, 11], step: 520, bright: 2200, gap: 8,
+      dr: 0.03, pd: 0.046, ch: 0.02, padIv: [0, 7, 11],
+      lead: { wave: 'triangle', dly: 0.42, wet: 0.32 },
+      motif: [N(0,0,3,.07), R, R, N(2,0,2,.06), R, N(4,0,2,.06), R, R, N(3,0,2,.06), R, N(5,0,3,.06), R, R, N(4,0,2,.05), R, R],
+      perc: '....s.......s...',
+    },
+    /* the drillyard: a calm zero-g cadence, dorian over a quartal pad;
+       commands land clean, the hall holds the space between them */
+    drillyard: {
+      root: 146.8, scale: [0, 2, 3, 5, 7, 9, 10], step: 260, bright: 1500, gap: 6,
+      dr: 0.028, pd: 0.022, ch: 0, padIv: [0, 5, 10],
+      lead: { wave: 'triangle', dly: 0.3, wet: 0.22 },
+      motif: [N(0,0,1,.09), R, N(3,0,1,.07), R, N(4,0,2,.08), R, R, N(0,1,1,.08), R, N(4,0,1,.06), R, N(3,0,2,.07), R, N(0,0,3,.08), R, R],
+      perc: 'K...s.s.....K.s.',
+    },
+    /* the living weather: low natural-minor drone that throbs like a far
+       front (wide detune), a 4th-stack pad that never resolves, taiko as
+       distant impacts; the hull-groan voice reads as far thunder here */
+    stormwall: {
+      root: 110.0, scale: [0, 2, 3, 5, 7, 8, 10], step: 520, bright: 700, gap: 9,
+      dr: 0.055, drDet: 11, pd: 0.028, ch: 0, padIv: [0, 5, 10], groan: true,
+      lead: { wave: 'triangle', dly: 0.3, wet: 0.35 },
+      motif: [N(0,0,2,.08), R, R, N(2,0,1,.06), N(3,0,2,.07), R, N(5,0,1,.06), R, N(0,1,3,.08), R, R, N(6,0,1,.05), N(5,0,2,.06), R, N(1,0,3,.05), R],
+      perc: 'K.........K...s.',
+    },
+    /* distant horn-like calls over a cold drone: a rising call, then its
+       falling answer, echoed down the delay like the fire chain. sparse. */
+    beacons: {
+      root: 110.0, scale: [0, 2, 4, 7, 9], step: 640, bright: 700, gap: 14,
+      dr: 0.05, drDet: 7, pd: 0.03, ch: 0, padIv: [0, 7, 12],
+      lead: { wave: 'sawtooth', dly: 0.28, wet: 0.4 },
+      motif: [N(0,0,3,.09), R, R, N(2,0,2,.08), N(4,0,3,.10), R, R, R, N(4,0,2,.07), R, N(2,0,3,.07), R, N(0,0,4,.08), R, R, R],
+      perc: 'K.......s.......',
+    },
   };
 
   /* ---------- state ---------- */

@@ -63,6 +63,10 @@ const WORLDS = [
   { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065 },
   { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
   { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
+  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042 },
+  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058 },
+  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
+  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
 
@@ -247,36 +251,56 @@ function drawSky(dt, clockMs) {
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
-  /* comet, when one is in flight */
-  if (comet.alive) drawComet(dt);
+  /* comets, when any are in flight */
+  if (cometAlive()) drawComets(dt);
   if (warp.active) { warp.p = Math.min(1, warp.p + dt / 700); }
 }
 
 function drawStatic() { drawSky(16, Ticker.clock); }
 
-/* ---------- ambient: the idle loop + random-cadence comet (fxLock, §2.10) ---------- */
-let fxLock = false;
-const comet = { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 };
+/* ---------- ambient: the idle loop + random-cadence comets (pooled, §2.10)
+   A 3-slot pool: the usual lone wanderer, and one visit in three a
+   SHOWER of three staggered streaks. The pool is its own lock. ---------- */
+const comets = [
+  { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 },
+  { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 },
+  { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 },
+];
+const cometAlive = () => comets[0].alive || comets[1].alive || comets[2].alive;
 function launchComet() {
-  if (fxLock || document.hidden || reduced() || Scenes.current !== 'hub') return;
-  fxLock = true;
-  comet.alive = true; comet.life = 0;
-  comet.x = -40; comet.y = H * (0.1 + Math.random() * 0.3);
-  comet.vx = 0.38 + Math.random() * 0.2; comet.vy = 0.06 + Math.random() * 0.05;
+  if (document.hidden || reduced() || Scenes.current !== 'hub') return;
+  let c = null;
+  for (const k of comets) if (!k.alive) { c = k; break; }
+  if (!c) return;
+  c.alive = true; c.life = 0;
+  c.x = -40; c.y = H * (0.1 + Math.random() * 0.3);
+  c.vx = 0.38 + Math.random() * 0.2; c.vy = 0.06 + Math.random() * 0.05;
 }
-function drawComet(dt) {
-  comet.life += dt; comet.x += comet.vx * dt; comet.y += comet.vy * dt;
-  const fade = Math.min(1, comet.life / 300) * Math.max(0, 1 - (comet.x / (W + 80)));
-  ctx.strokeStyle = `rgba(207,216,255,${0.7 * fade})`;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.moveTo(comet.x, comet.y);
-  ctx.lineTo(comet.x - 90 * comet.vx, comet.y - 90 * comet.vy); ctx.stroke();
-  if (comet.x > W + 80) { comet.alive = false; fxLock = false; }
+function drawComets(dt) {
+  for (const c of comets) {
+    if (!c.alive) continue;
+    c.life += dt; c.x += c.vx * dt; c.y += c.vy * dt;
+    const fade = Math.min(1, c.life / 300) * Math.max(0, 1 - (c.x / (W + 80)));
+    ctx.strokeStyle = `rgba(207,216,255,${0.7 * fade})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x - 90 * c.vx, c.y - 90 * c.vy); ctx.stroke();
+    if (c.x > W + 80) c.alive = false;
+  }
 }
-let cometTimer = null;
+let cometTimer = null, showerT1 = null, showerT2 = null;
 function scheduleComet() {
   clearTimeout(cometTimer);
-  cometTimer = setTimeout(() => { launchComet(); scheduleComet(); }, 24000 + Math.random() * 26000);
+  cometTimer = setTimeout(() => {
+    launchComet();
+    /* one visit in three, the comet arrives as a shower of three */
+    if (Math.random() < 0.34) {
+      clearTimeout(showerT1); clearTimeout(showerT2);
+      showerT1 = setTimeout(launchComet, 700 + Math.random() * 500);
+      showerT2 = setTimeout(launchComet, 1600 + Math.random() * 700);
+    }
+    scheduleComet();
+  }, 24000 + Math.random() * 26000);
 }
 
 /* ---------- the sonar: the Artifact calls out on its own slow clock.
@@ -390,6 +414,73 @@ function markSurveyed(slug) {
   if (a) a.querySelector('.pa-tick').hidden = false;
 }
 surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-tick').hidden = false; });
+
+/* ---------- The Surveyor's Log: make the surveyed set visible + rewarding.
+   Builds on markSurveyed / 'orrery-surveyed' (above). Data-driven off WORLDS,
+   so it is correct at 7 worlds or 10. Event-driven: zero rAF, zero canvas.
+   ANCHOR: directly after the `surveyed.forEach(...)` tick-restore line. ---------- */
+(() => {
+  const plate = document.getElementById('survey-log');
+  if (!plate) return;                                 /* no plate → nothing to log */
+  const dotsWrap = plate.querySelector('.survey-dots');
+  const countEl  = plate.querySelector('.survey-count');
+  const total = WORLDS.length;
+  const COMPLETE_KEY = 'orrery-survey-complete';
+  const HONOR = 'Master surveyor. The orrery remembers.';
+
+  /* one ringed dot per world, in registry order, built once */
+  const dots = WORLDS.map((w) => {
+    const d = document.createElement('span');
+    d.className = 'survey-dot';
+    d.dataset.world = w.slug;
+    d.title = w.label;                                /* sighted hover tooltip */
+    dotsWrap.appendChild(d);
+    return d;
+  });
+
+  const countSurveyed = () => WORLDS.reduce((n, w) => n + (surveyed.has(w.slug) ? 1 : 0), 0);
+
+  let sealed = false;
+  function showSeal() {                               /* reuse the konami seal's look; distinct node */
+    if (sealed || plate.querySelector('.log-seal')) { sealed = true; return; }
+    const seal = document.createElement('span');
+    seal.className = 'konami-seal log-seal';          /* inherits the gold visual + rm-gated glow */
+    seal.title = HONOR;
+    (plate.querySelector('.survey-plate') || plate).appendChild(seal);
+    sealed = true;
+  }
+
+  function paint() {
+    const n = countSurveyed();
+    for (const d of dots) d.classList.toggle('is-surveyed', surveyed.has(d.dataset.world));
+    if (countEl) countEl.textContent = n + '/' + total;
+    const done = n >= total;
+    plate.setAttribute('aria-label',
+      done ? ('All ' + total + ' worlds surveyed. Master surveyor.')
+           : (n + ' of ' + total + ' worlds surveyed'));
+    if (done && store.get(COMPLETE_KEY) === '1') showSeal();   /* already earned this tab */
+  }
+
+  function maybeCompletionRite() {
+    if (countSurveyed() < total) return;
+    if (store.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once per session */
+    store.set(COMPLETE_KEY, '1');
+    showSeal();
+    try { Orrery.events.dispatchEvent(new CustomEvent('query')); } catch (_) {}  /* aurora chime answers */
+    const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
+    if (hint) {
+      const prior = hint.dataset.home || hint.textContent;       /* restore the TRUE resting line */
+      hint.textContent = HONOR;
+      setTimeout(() => { if (hint.textContent === HONOR) hint.textContent = prior; }, 10000);
+    }
+  }
+
+  /* live: setScene runs markSurveyed, THEN dispatches 'scene' — by the time we
+     hear it the set already holds the world just entered. Re-read + repaint. */
+  Orrery.events.addEventListener('scene', () => { paint(); maybeCompletionRite(); });
+
+  paint();                                            /* initial pose from the restored set */
+})();
 
 function setScene(name, { instant = false } = {}) {
   if (Scenes.current === name) return;
@@ -515,6 +606,138 @@ addEventListener('hashchange', () => {
   route(false);
 });
 
+/* ============================================================
+   THE GRAND TOUR — a hands-free kiosk autopilot that surveys every
+   world in WORLDS order. It travels ONLY through the public router:
+   travel() (which sets location.hash = '#/world/<slug>') to go out,
+   location.hash = '#/' to come home — so the warp streak, the score
+   events, and markSurveyed all fire naturally. It never calls setScene.
+   The tour clock rides the shared Ticker, so a hidden tab pauses it
+   (document.hidden) and a revealed tab resumes it. Any user input
+   (pointerdown / keydown / wheel / touchstart) ends it at once:
+   timers cleared, label restored, the current scene left as-is.
+   ============================================================ */
+const TourController = (() => {
+  const btn = document.getElementById('tour-toggle');
+  if (!btn) return null;                               /* no control (no-JS) → no tour */
+  const labelEl = btn.querySelector('.tour-label');
+  const plate = document.getElementById('tour-progress');
+  const hint = document.querySelector('.hub-hint');
+  /* the one true resting line, stashed at parse: every swap-and-restore
+     feature (tour closing note, surveyor honor) restores THIS, never a
+     captured value (two features on one node were trading lies) */
+  if (hint && !hint.dataset.home) hint.dataset.home = hint.textContent;
+
+  const DWELL = 9000, BREATHE = 2500, CLOSING_MS = 8000;
+  const CLOSING_NOTE = 'The survey is complete. The instruments are yours.';
+  const N = WORLDS.length;
+
+  /* the itinerary: world · breathe · world · breathe · … · world · closing */
+  const legs = [];
+  for (let i = 0; i < N; i++) { legs.push({ t: 'world', i }); if (i < N - 1) legs.push({ t: 'orbit' }); }
+  legs.push({ t: 'closing' });
+
+  const CANCEL = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+  const OPTS = { capture: true, passive: true };
+  let running = false, legIx = 0, legMs = 0, closeT = null, armT = null, hintSaved = null, suppressUntil = 0;
+  let expectedHash = null;                              /* browser Back/Forward must end the tour;
+                                                           null = between legs, accept any land */
+  const onHash = () => { if (running && expectedHash !== null && (location.hash || '#/') !== expectedHash) stop(); };
+
+  const onInput = () => { if (running) stop(); };       /* ANY input ends the tour immediately */
+  function addCancel() { for (const e of CANCEL) addEventListener(e, onInput, OPTS); }
+  function rmCancel()  { for (const e of CANCEL) removeEventListener(e, onInput, OPTS); }
+
+  function setUI(run) {
+    btn.setAttribute('aria-pressed', String(run));
+    btn.setAttribute('aria-label', run ? 'End the grand tour' : 'Start the grand tour');
+    if (labelEl) labelEl.textContent = run ? 'End tour' : 'Tour';
+  }
+  function plateSay(txt) { if (plate) { plate.hidden = false; plate.textContent = txt; } }  /* aria-live */
+  function plateHide()   { if (plate) { plate.hidden = true; plate.textContent = ''; } }
+
+  function showClosing() {
+    if (hint && hintSaved === null) hintSaved = hint.textContent;   /* capture live, never hardcode */
+    if (hint) hint.textContent = CLOSING_NOTE;
+    clearTimeout(closeT);
+    closeT = setTimeout(restore, CLOSING_MS);
+  }
+  function restore() {
+    clearTimeout(closeT); closeT = null;
+    if (hint && hintSaved !== null) { hint.textContent = hint.dataset.home || hintSaved; hintSaved = null; }
+    plateHide();
+  }
+
+  function enterLeg(ix) {
+    legIx = ix; legMs = 0;
+    const leg = legs[ix];
+    if (!leg || leg.t === 'closing') { finish(); return; }
+    if (leg.t === 'world') {
+      expectedHash = '#/world/' + WORLDS[leg.i].slug;
+      plateSay('Stop ' + (leg.i + 1) + ' of ' + N);
+      travel(WORLDS[leg.i].slug);
+    }
+    else { expectedHash = '#/'; location.hash = '#/'; } /* orbit breather: home via the router */
+  }
+
+  function tick(dt) {
+    if (!running) return false;                          /* stopped → self-remove from the Ticker */
+    if (document.hidden) return true;                    /* hidden tab pauses the tour clock */
+    const leg = legs[legIx];
+    if (!leg || leg.t === 'closing') return false;
+    legMs += dt;
+    if (legMs >= (leg.t === 'world' ? DWELL : BREATHE)) enterLeg(legIx + 1);
+    return running;                                      /* finish() flips this false mid-tick */
+  }
+
+  function teardown() {                                  /* shared reset for stop + finish */
+    running = false;
+    Ticker.remove(tick);
+    clearTimeout(armT); armT = null;
+    rmCancel();
+    removeEventListener('hashchange', onHash);
+    setUI(false);
+    suppressUntil = performance.now() + 350;             /* a click trailing a cancel must not restart */
+  }
+  function stop() {                                      /* user cancel: scene stays, no closing note */
+    if (!running) return;
+    teardown();
+    plateHide();
+  }
+  function finish() {                                    /* natural completion: land home + closing note */
+    if (!running) return;
+    teardown();
+    location.hash = '#/';
+    plateSay('Survey complete');                         /* the accessible completion cue */
+    showClosing();
+  }
+  function advance() { if (running) enterLeg(legIx + 1); }
+
+  function start() {
+    if (running) return;
+    restore();                                           /* a lingering closing note yields to the new run */
+    running = true; legIx = 0; legMs = 0; expectedHash = null;
+    setUI(true);
+    /* a start inside the ~0.5s warp window would be swallowed by
+       Scenes.transitioning and silently skip stop 1: defer past the land
+       (expectedHash stays null so the pending land does not read as Back) */
+    if (Scenes.transitioning) { setTimeout(() => { if (running) enterLeg(0); }, 560); }
+    else enterLeg(0);                                    /* from the hub: warp to world 1 */
+    Ticker.add(tick);                                    /* the tour clock joins the shared rAF */
+    addEventListener('hashchange', onHash);              /* Back/Forward ends the tour */
+    clearTimeout(armT);
+    armT = setTimeout(() => { if (running) addCancel(); }, 0);  /* let the starting gesture finish first */
+  }
+
+  btn.addEventListener('click', () => {
+    if (running) { stop(); return; }                     /* explicit toggle-off (pointer + keyboard) */
+    if (performance.now() < suppressUntil) return;       /* swallow the click riding a just-fired cancel */
+    start();
+  });
+
+  return { start, stop, advance, get running() { return running; } };
+})();
+
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
    ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
@@ -536,6 +759,7 @@ function bootOrrery() {
   setRM();
   route(true);
   if (!reduced()) Orrery.startAmbient();
+  runApproach();                                     /* first-visit arrival cinematic */
   /* re-measure the arc once type has settled (font metrics can shift the copy block) */
   setTimeout(() => { measureOrbit(); drawStatic(); paintMedallions(); }, 350);
   /* no sonar arm here: setScene('hub') schedules it on every hub arrival,
@@ -555,4 +779,47 @@ function paintMedallions() {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
   });
+}
+
+/* ---------- THE APPROACH: the once-per-session arrival cinematic ----------
+   First hub visit only. You drift in from the dark and the instruments wake.
+   All motion lives in CSS (03c), keyed off html.approaching; this only flips
+   the class, sounds one sonar mid-drift, and guarantees the settle. Skips
+   entirely for reduced motion, for a return visit (sessionStorage), and for
+   any deep link into a world. ANY input aborts straight to the settled pose. */
+function runApproach() {
+  if (reduced()) return;                        /* rm: the page simply arrives settled */
+  if (Scenes.current !== 'hub') return;         /* a deep link owns the frame; no intro */
+  if (store.get('orrery-approach')) return;     /* seen this session: reloads skip */
+  store.set('orrery-approach', '1');            /* mark NOW: even an abort counts as seen */
+
+  html.classList.add('approached');             /* permanent: suppresses the base hub rise-in */
+  html.classList.add('approaching');            /* transient: drives the cinematic */
+
+  let done = false, endT = 0, pingT = 0;
+  const finish = () => {
+    if (done) return; done = true;
+    clearTimeout(endT); clearTimeout(pingT);
+    html.classList.remove('approaching');       /* every animation resolves to its settled base */
+    removeEventListener('pointerdown', skip, true);
+    removeEventListener('keydown', skip, true);
+    removeEventListener('wheel', skip, true);
+  };
+  const skip = () => finish();                   /* any input drops instantly to settled */
+  /* capture-phase + non-blocking: we never preventDefault, so the audio
+     ignition's own pointerup/keydown/click listeners still fire underneath */
+  addEventListener('pointerdown', skip, { capture: true, passive: true });
+  addEventListener('keydown', skip, { capture: true });
+  addEventListener('wheel', skip, { capture: true, passive: true });
+
+  /* ~2.2s in, the instrument calls once: the visual ring + its wet blip. The
+     score answers only if it is truly running (the sonar handler guards ready). */
+  pingT = setTimeout(() => {
+    if (done || document.hidden || Scenes.current !== 'hub') return;
+    if (!skyTask) Orrery.startAmbient();         /* the ring needs the loop */
+    if (window.SphereForge && !reduced()) SphereForge.ping();
+    Orrery.events.dispatchEvent(new CustomEvent('sonar'));
+  }, 2200);
+
+  endT = setTimeout(finish, 4600);               /* ~4.5s: the settle, class removed */
 }

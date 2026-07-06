@@ -335,3 +335,218 @@ html.js .artifact-label { display: block; }
 html.rm .scene-hub::before,
 html.rm #hud-loc-name, html.rm .hud-title,
 html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
+
+
+/* ============================================================
+   THE GRAND TOUR — brass autopilot control + engraved progress plate.
+   Matches the .return-orbit / .audio-toggle chamfer idiom; the beacon
+   is the only motion and it is double-gated for reduced motion.
+   ============================================================ */
+
+/* the control is JS-only chrome (mirrors #artifact-hit): no engine, no button */
+#tour-toggle { display: none; }
+html.js #tour-toggle {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-dim);
+  padding: 0.45rem 0.9rem;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.45);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22);
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px),
+                     calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+  transition: color 0.25s, border-color 0.25s;
+}
+#tour-toggle:hover, #tour-toggle:focus-visible { color: var(--cream); border-color: var(--brass); }
+#tour-toggle:focus-visible { outline-offset: -4px; }   /* chamfer swallows an outside ring */
+
+/* the beacon: a brass eye, dim at rest, lit while the autopilot runs */
+.tour-eye {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 34%,
+    rgba(var(--cream-rgb), 0.95), rgba(var(--brass-rgb), 0.5) 55%,
+    rgba(20, 13, 4, 0.9) 78%, transparent 82%);
+  box-shadow: 0 0 0 1px rgba(var(--brass-rgb), 0.4);
+  opacity: 0.5;                                         /* designed rest pose */
+}
+#tour-toggle[aria-pressed="true"] { color: var(--brass); border-color: var(--brass); }
+#tour-toggle[aria-pressed="true"] .tour-eye { opacity: 1; }   /* rm-safe static "on" pose */
+@media (prefers-reduced-motion: no-preference) {
+  html.js:not(.rm) #tour-toggle[aria-pressed="true"] .tour-eye {
+    animation: tour-scan 1.8s var(--ease-out) infinite;
+    will-change: transform, opacity;                    /* compositor-only */
+  }
+}
+@keyframes tour-scan {
+  0%, 100% { opacity: 0.5; transform: scale(0.82); }
+  50%      { opacity: 1;   transform: scale(1.12); }
+}
+
+/* the progress plate: engraved brass readout, announced politely */
+.tour-plate {
+  color: var(--brass);
+  letter-spacing: var(--track-plate);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tour-plate[hidden] { display: none; }
+
+/* let the control + plate sit beside the credits on desktop, wrap on mobile */
+.hud-bottom { flex-wrap: wrap; row-gap: 0.4rem; }
+
+/* ============================================================
+   The Surveyor's Log — a brass tally plate in the bottom HUD.
+   JS-only (the brochure has no journey to record; mirrors #artifact-hit).
+   Static by law: the only motion is the seal glow, which reuses
+   .konami-seal's already-rm-gated rule. Dots snap under rm.
+   ============================================================ */
+
+/* brochure / boot-throw fallback: no engine, no log */
+.survey-log { display: none; }
+html.js .survey-log {
+  display: flex; align-items: center;
+  position: absolute;                 /* pinned left; the credits stay centred by flex */
+  left: 1.4rem; top: 0; bottom: 0;
+  pointer-events: auto;
+}
+
+.survey-plate {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.28rem 0.6rem;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.45);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px),
+                     calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+
+.survey-dots { display: inline-flex; align-items: center; gap: 5px; }
+.survey-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid rgba(var(--brass-rgb), 0.6);    /* unsurveyed: an empty ring */
+  background: transparent;
+}
+.survey-dot.is-surveyed {                             /* surveyed: a filled gold dot */
+  background:
+    radial-gradient(circle at 36% 34%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 46%),
+    radial-gradient(circle at 60% 66%, #ffcf6a 0%, #b8791f 92%);
+  border-color: rgba(var(--brass-rgb), 0.9);
+  box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
+}
+/* the fill eases only where motion is welcome (konami-ring precedent); rm snaps */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .survey-dot {
+    transition: border-color 0.5s var(--ease-out), box-shadow 0.5s var(--ease-out);
+  }
+}
+
+.survey-count {
+  display: none;                       /* desktop reads the dot strip */
+  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
+  color: var(--brass); font-variant-numeric: tabular-nums;
+}
+
+/* completion seal: a distinct node reusing .konami-seal's gold + rm-gated glow */
+.log-seal { margin-left: 2px; }
+
+/* phone: stand the dot strip down, collapse to a compact N/total + seal on its
+   own centred row ABOVE the credits so it never crowds the 375px footer */
+@media (max-width: 1100px) {
+  .hud-bottom { flex-wrap: wrap; row-gap: 0.3rem; }
+  html.js .survey-log {
+    position: static; left: auto;
+    order: -1; flex-basis: 100%; justify-content: center;
+  }
+  .survey-dots { display: none; }
+  .survey-count { display: inline-block; }
+  .survey-plate { padding: 0.2rem 0.5rem; gap: 0.35rem; }
+}
+
+/* ============================================================
+   03c-approach.css — THE APPROACH: the first-visit arrival cinematic.
+   You drift toward the Artifact out of the dark; the instruments wake.
+   All timing lives here, keyed off html.approaching (JS adds/removes it).
+   LAWS honoured: compositor-only (transform/opacity), double reduced-motion
+   gate, and the h1 is NEVER opacity:0 / display:none / visibility:hidden —
+   the words ride the plaque's 0.4 floor (readable throughout); only the
+   DECORATION fades 0->1. Removing .approaching resolves every element to its
+   settled base state, so a skip is an instant, flash-free snap.
+   ============================================================ */
+
+/* the base hub entrance (02-hub.css: rise-in on .hub-sub/.hub-hint) must not
+   RE-FIRE when .approaching is stripped at settle — that would re-fade the
+   copy. The permanent .approached marker (set once, never removed) suppresses
+   it. Specificity (0,3,1) beats the base (0,2,1); the approach entrance below
+   is (0,4,1) so it still wins WHILE drifting. Order-independent. */
+html.js.approached .hub-sub,
+html.js.approached .hub-hint { animation: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+
+  /* (2) 0.8-2.6s · the drift: the SKY LAYER eases 1.14 -> 1.0.
+     Element transform only — the engine draws via ctx.setTransform, never a
+     CSS transform on #sky, so there is no collision. The 0.8s delay + `both`
+     holds 1.14 through phase (1), the void-alone beat. */
+  html.js.approaching:not(.rm) #sky {
+    transform-origin: 50% 50%;
+    will-change: transform;
+    animation: approach-sky 1.8s var(--ease-out) 0.8s both;
+  }
+
+  /* (2) the porthole draws tighter, then relaxes. Gradient-stop animation is
+     not compositor-safe, so a dark IRIS pseudo presses in and dissolves via
+     opacity+scale. It sits above the base vignette; corners stay dark, so the
+     inward pull never reveals a bright edge. */
+  html.js.approaching:not(.rm) .porthole::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 92% 92% at 50% 50%,
+      transparent 0 26%, rgba(1, 6, 5, 0.72) 58%, rgba(0, 3, 2, 0.95) 100%);
+    will-change: transform, opacity;
+    animation: approach-iris 2.6s var(--ease-out) both;
+  }
+
+  /* (3) 2.2-3.6s · the plaque lockup rises + brightens. Opacity floors at 0.4
+     (never 0): the h1 is painted from the first frame, so it stays the LCP and
+     stays readable. translateY is transform-only (no CLS). */
+  html.js.approaching:not(.rm) .hub-copy {
+    will-change: transform, opacity;
+    animation: approach-plaque 1.4s var(--ease-out) 2.2s both;
+  }
+  /* the DECORATION wakes harder than the words: brass rules draw outward and
+     the sunburst blooms from 0 (they composite over the plaque's rising 0.4). */
+  html.js.approaching:not(.rm) .hub-h1::before,
+  html.js.approaching:not(.rm) .hub-h1::after {
+    animation: approach-rule 1.0s var(--ease-out) 2.6s both;
+  }
+  html.js.approaching:not(.rm) .hub-copy::after {
+    animation: approach-bloom 1.0s var(--ease-out) 2.7s both;
+  }
+  html.js.approaching:not(.rm) .hub-sub  { animation: approach-copy 0.9s var(--ease-out) 2.8s both; }
+  html.js.approaching:not(.rm) .hub-hint { animation: approach-copy 0.9s var(--ease-out) 3.05s both; }
+
+  /* the Artifact's plate fades in with the lockup. OPACITY ONLY — the engine
+     owns its transform (translateX(-50%) over --ax/--ay); its base breathe
+     resumes harmlessly after settle. Ends at 0.82 to match its base opacity. */
+  html.js.approaching:not(.rm) .artifact-label {
+    animation: approach-plate 1.0s var(--ease-out) 2.6s both;
+  }
+
+  /* (4) 3.6-4.5s · the orbit anchors engrave in, staggered by --i (set inline
+     per anchor). OPACITY ONLY — the engine writes --pax/--pay/--psize/--pdim
+     into each anchor's transform every frame; animating transform here would
+     collapse the planets to center. Labels keep their depth-dim (--pdim). */
+  html.js.approaching:not(.rm) .planet-anchor {
+    animation: approach-anchor 0.65s var(--ease-out) both;
+    animation-delay: calc(3.45s + var(--i, 0) * 0.07s);
+  }
+}
+
+/* keyframes (inert until referenced; kept outside the gate for tidiness) */
+@keyframes approach-sky    { from { transform: scale(1.14); } to { transform: scale(1); } }
+@keyframes approach-iris   { from { opacity: 1; transform: scale(0.92); } to { opacity: 0; transform: scale(1.14); } }
+@keyframes approach-plaque { from { opacity: 0.4; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes approach-rule   { from { opacity: 0; transform: scaleX(0.3); } to { opacity: 1; transform: none; } }
+@keyframes approach-bloom  { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes approach-copy   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes approach-plate  { from { opacity: 0; } to { opacity: 0.82; } }
+@keyframes approach-anchor { from { opacity: 0.001; } to { opacity: 1; } }

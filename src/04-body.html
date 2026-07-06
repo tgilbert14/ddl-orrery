@@ -32,8 +32,8 @@
     <!-- ============ THE HUB ============ -->
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
-        <h1 class="hub-h1">Seven worlds. One clock.<br>Everything you see is code.</h1>
-        <p class="hub-sub">Seven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
+        <h1 class="hub-h1">Eleven worlds. One clock.<br>One artifact, holding the center.</h1>
+        <p class="hub-sub">Eleven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
 
@@ -43,7 +43,7 @@
       <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
-      <nav class="orbits" id="worlds-index" aria-label="The seven worlds">
+      <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
@@ -78,6 +78,26 @@
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
           <span class="pa-label"><b>Uncharted</b><em>yours is still unnamed</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="archive" href="#world-archive" style="--i:7">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Archive</b><em>it has already read tomorrow</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="drillyard" href="#world-drillyard" style="--i:8">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Drillyard</b><em>down is a direction you choose</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="stormwall" href="#world-stormwall" style="--i:9">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Stormwall</b><em>the light runs ahead of the weather</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="beacons" href="#world-beacons" style="--i:10">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Beacons</b><em>one fire lights the next</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
       </nav>
     </section>
@@ -301,12 +321,250 @@
       </div>
     </section>
 
+    <!-- ============ SECTOR 08 · THE ARCHIVE ============ -->
+    <section id="world-archive" class="scene world" data-scene="archive" data-fx="archive" aria-labelledby="h-archive">
+      <div class="world-fx" aria-hidden="true">
+        <div class="archive-hall"></div>
+        <canvas class="fx-canvas" data-canvas="archive"></canvas>
+        <!-- the same hall, frozen: one grown fan with the chosen path lit (rm keeps the canvas; this is the no-JS pose) -->
+        <svg class="archive-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <g stroke="rgba(142,162,232,0.30)" stroke-width="1.4" fill="none" stroke-linecap="round">
+            <path d="M600,600 L445,470"/><path d="M600,600 L762,478"/>
+            <path d="M445,470 L360,372"/><path d="M445,470 L452,360"/>
+            <path d="M600,452 L536,346"/><path d="M762,478 L720,372"/>
+            <path d="M762,478 L838,382"/><path d="M452,360 L430,262"/>
+            <path d="M720,372 L742,268"/><path d="M648,332 L600,228"/>
+          </g>
+          <g fill="rgba(142,162,232,0.42)">
+            <circle cx="445" cy="470" r="3"/><circle cx="762" cy="478" r="3"/>
+            <circle cx="360" cy="372" r="2.4"/><circle cx="452" cy="360" r="2.4"/>
+            <circle cx="536" cy="346" r="2.4"/><circle cx="720" cy="372" r="2.4"/>
+            <circle cx="838" cy="382" r="2.4"/><circle cx="430" cy="262" r="2"/>
+            <circle cx="742" cy="268" r="2"/><circle cx="600" cy="228" r="2"/>
+          </g>
+          <path d="M600,600 L600,452 L648,332 L712,222 L760,132" fill="none"
+                stroke="rgba(255,217,143,0.16)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M600,600 L600,452 L648,332 L712,222 L760,132" fill="none"
+                stroke="rgba(255,232,172,0.95)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#ffe7aa">
+            <circle cx="600" cy="600" r="4"/><circle cx="600" cy="452" r="3.2"/>
+            <circle cx="648" cy="332" r="3.2"/><circle cx="712" cy="222" r="3.2"/>
+          </g>
+          <circle cx="760" cy="132" r="14" fill="rgba(255,217,143,0.28)"/>
+          <circle cx="760" cy="132" r="4.5" fill="#fff2cf"/>
+          <g fill="rgba(236,194,122,0.13)">
+            <rect x="147" y="120" width="6" height="1.4"/><circle cx="220" cy="300" r="1.1"/>
+            <rect x="179" y="516" width="1.4" height="6"/><rect x="1017" y="160" width="6" height="1.4"/>
+            <circle cx="1080" cy="360" r="1.1"/><rect x="979" y="518" width="1.4" height="6"/>
+            <rect x="337" y="180" width="6" height="1.4"/><circle cx="1120" cy="262" r="1.1"/>
+            <rect x="89" y="400" width="1.4" height="6"/><circle cx="300" cy="560" r="1.1"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 08 &middot; Predictive archive</p>
+        <h2 id="h-archive">The Archive</h2>
+        <p class="w-copy">Ten thousand years of records, and the mathematics to read them forward. Every branch is a future the numbers weigh; the brightest is the one worth planning for.</p>
+        <p class="w-note w-note--live microlabel">The fans branch and weight, then every few seconds collapse to the single lit path.</p>
+        <p class="w-note"><button class="w-toy" id="consult-archive" type="button">Consult the archive</button>
+          <span class="microlabel">re-roll the futures</span></p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 09 · THE DRILLYARD ============ -->
+    <section id="world-drillyard" class="scene world" data-scene="drillyard" data-fx="drillyard" aria-labelledby="h-drillyard">
+      <div class="world-fx" aria-hidden="true">
+        <div class="dy-void"></div>
+        <canvas class="fx-canvas" data-canvas="drillyard"></canvas>
+        <!-- the same drill, held: shown only when JS is absent (rm is painted by the canvas) -->
+        <svg class="dy-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid slice">
+          <g fill="none" stroke="rgba(127,178,229,0.2)" stroke-width="1.5">
+            <path d="M540,140 L880,140 L880,420 L540,420 Z"/>
+            <path d="M430,190 L540,140 M830,190 L880,140 M830,510 L880,420 M430,510 L540,420"/>
+          </g>
+          <path d="M430,510 L830,510 L880,420 L540,420 Z" fill="rgba(255,196,94,0.05)" stroke="rgba(255,196,94,0.16)" stroke-width="1"/>
+          <path d="M430,190 L830,190 L830,510 L430,510 Z" fill="none" stroke="rgba(127,178,229,0.45)" stroke-width="1.5"/>
+          <path d="M858,244 L886,282 L858,320 L830,282 Z" fill="none" stroke="rgba(255,196,94,0.7)" stroke-width="2"/>
+          <g fill="rgba(102,255,158,0.9)">
+            <circle cx="700" cy="468" r="5"/><circle cx="664" cy="478" r="5"/><circle cx="736" cy="478" r="5"/>
+            <circle cx="628" cy="488" r="5"/><circle cx="772" cy="488" r="5"/><circle cx="592" cy="498" r="5"/><circle cx="808" cy="498" r="5"/>
+          </g>
+          <g fill="rgba(127,178,229,0.9)">
+            <circle cx="530" cy="240" r="5"/><circle cx="505" cy="275" r="5"/><circle cx="555" cy="275" r="5"/>
+            <circle cx="480" cy="310" r="5"/><circle cx="580" cy="310" r="5"/><circle cx="455" cy="345" r="5"/><circle cx="605" cy="345" r="5"/>
+          </g>
+          <g fill="rgba(255,196,94,0.9)">
+            <circle cx="806" cy="300" r="5"/><circle cx="776" cy="308" r="5"/><circle cx="792" cy="330" r="5"/>
+            <circle cx="746" cy="316" r="5"/><circle cx="778" cy="360" r="5"/><circle cx="716" cy="324" r="5"/><circle cx="764" cy="390" r="5"/>
+          </g>
+          <g>
+            <circle cx="640" cy="330" r="4" fill="rgba(150,165,190,0.55)"/>
+            <circle cx="640" cy="330" r="8" fill="none" stroke="rgba(150,165,190,0.4)" stroke-width="1.2"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 09 &middot; Training arena</p>
+        <h2 id="h-drillyard">The Drillyard</h2>
+        <p class="w-copy">Zero gravity. Three squads. The floor is wherever they agree it is.</p>
+        <p class="w-note w-note--live microlabel">Wait for the slow turn: the arena picks a new down, and the drills simply continue.</p>
+        <p class="w-note"><button class="w-toy" id="call-drill" type="button">Call a drill</button>
+          <span class="microlabel">cycle the next formation</span></p>
+        <p class="w-proof microlabel">Desert Data Labs drills real teams the same way: training tools, practice runs, and live operational dashboards that keep every crew oriented when the ground moves.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 10 · STORMWALL ============ -->
+    <section id="world-stormwall" class="scene world" data-scene="stormwall" data-fx="storm" aria-labelledby="h-stormwall">
+      <div class="world-fx" aria-hidden="true">
+        <div class="sw-sky"></div>
+        <canvas class="fx-canvas" data-canvas="storm"></canvas>
+        <!-- the same weather, held: shown when motion is off or JS is absent.
+             Pose: the wall one-third across, sparks mid-stream, the buds half closed. -->
+        <svg class="sw-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <linearGradient id="sw-skyg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#141126"/>
+              <stop offset="0.55" stop-color="#1c1b33"/>
+              <stop offset="1" stop-color="#262a40"/>
+            </linearGradient>
+            <radialGradient id="sw-flashg" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stop-color="#e2ecff" stop-opacity="0.5"/>
+              <stop offset="0.45" stop-color="#b9a9ff" stop-opacity="0.2"/>
+              <stop offset="1" stop-color="#b9a9ff" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="1200" height="640" fill="url(#sw-skyg)"/>
+          <!-- the wall, one-third across: pale fringe leads, dark core follows -->
+          <path d="M1200,0 L742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512 L1200,512 Z" fill="#2e344e"/>
+          <path d="M1200,0 L806,0 L784,72 L818,140 L790,208 L824,276 L796,344 L828,412 L802,470 L818,512 L1200,512 Z" fill="#1e2238"/>
+          <path d="M1200,0 L840,0 L862,60 L836,124 L866,188 L842,252 L872,316 L848,380 L876,444 L854,512 L1200,512 Z" fill="#111322"/>
+          <ellipse cx="960" cy="170" rx="150" ry="120" fill="url(#sw-flashg)"/>
+          <ellipse cx="1090" cy="340" rx="110" ry="88" fill="url(#sw-flashg)" opacity="0.7"/>
+          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(185,169,255,0.3)" stroke-width="2"/>
+          <!-- the plain -->
+          <rect y="512" width="1200" height="128" fill="#17142a"/>
+          <path d="M0,640 L0,584 C220,568 480,596 720,580 C920,568 1080,590 1200,578 L1200,640 Z" fill="#0d0b18"/>
+          <!-- sparks mid-stream, heads leading left; two curl around unseen stones -->
+          <g stroke="#cfe6ff" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.85">
+            <path d="M612,486 L648,485"/>
+            <path d="M540,498 L570,497"/>
+            <path d="M470,478 q-22,-10 -46,-8"/>
+            <path d="M420,500 L452,499"/>
+            <path d="M330,488 q-18,10 -40,6"/>
+            <path d="M250,496 L276,495"/>
+            <path d="M168,482 L190,481"/>
+            <path d="M100,502 L118,501"/>
+          </g>
+          <g fill="#ecf4ff">
+            <circle cx="612" cy="486" r="2"/><circle cx="540" cy="498" r="2"/>
+            <circle cx="424" cy="470" r="2"/><circle cx="420" cy="500" r="2"/>
+            <circle cx="290" cy="494" r="2"/><circle cx="168" cy="482" r="2"/>
+          </g>
+          <!-- the shelled flora, half closed -->
+          <g fill="#0b0916">
+            <path d="M158,566 a22,17 0 0 1 44,0 Z"/><path d="M151,566 a14,12 0 0 1 28,0 Z"/><path d="M181,566 a14,12 0 0 1 28,0 Z"/>
+            <path d="M424,600 a31,25 0 0 1 62,0 Z"/><path d="M413,600 a20,17 0 0 1 40,0 Z"/><path d="M457,600 a20,17 0 0 1 40,0 Z"/>
+            <path d="M694,580 a26,20 0 0 1 52,0 Z"/><path d="M685,580 a17,14 0 0 1 34,0 Z"/><path d="M721,580 a17,14 0 0 1 34,0 Z"/>
+            <path d="M974,622 a36,28 0 0 1 72,0 Z"/><path d="M962,622 a23,19 0 0 1 46,0 Z"/><path d="M1012,622 a23,19 0 0 1 46,0 Z"/>
+          </g>
+          <g fill="#cfe6ff">
+            <circle cx="180" cy="543" r="1.8" opacity="0.5"/><circle cx="455" cy="569" r="1.8" opacity="0.45"/>
+            <circle cx="720" cy="554" r="1.8" opacity="0.35"/><circle cx="1010" cy="588" r="1.8" opacity="0.2"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 10 &middot; Tempest plain</p>
+        <h2 id="h-stormwall">Stormwall</h2>
+        <p class="w-copy">The weather here is a wall. The light knows before you do.</p>
+        <p class="w-note"><button class="w-toy" id="brace-wall" type="button">Brace for the wall</button>
+          <span class="microlabel">call the front in early</span></p>
+        <p class="w-proof microlabel">Desert Data Labs schedules pipelines the way this plain reads weather: jobs that see the front coming, close up safe, and reopen with nothing lost.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 11 · THE BEACONS ============ -->
+    <section id="world-beacons" class="scene world" data-scene="beacons" data-fx="beacons" aria-labelledby="h-beacons">
+      <div class="world-fx" aria-hidden="true">
+        <div class="beacon-sky"></div>
+        <canvas class="fx-canvas" data-canvas="beacons"></canvas>
+        <!-- the same range, frozen mid-burn: shown when motion is off or JS is absent -->
+        <svg class="beacon-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <radialGradient id="bcn-glow" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stop-color="rgba(255,196,120,0.95)"/>
+              <stop offset="0.4" stop-color="rgba(255,140,60,0.42)"/>
+              <stop offset="1" stop-color="rgba(255,120,50,0)"/>
+            </radialGradient>
+          </defs>
+          <g fill="rgba(223,233,255,0.7)">
+            <circle cx="120" cy="80" r="1.4"/><circle cx="300" cy="130" r="1.1"/><circle cx="470" cy="70" r="1.5"/>
+            <circle cx="640" cy="120" r="1.1"/><circle cx="820" cy="78" r="1.4"/><circle cx="980" cy="128" r="1.2"/>
+            <circle cx="1120" cy="86" r="1.3"/><circle cx="210" cy="188" r="1"/><circle cx="720" cy="196" r="1"/>
+          </g>
+          <polygon points="0,300 120,258 200,290 300,250 390,286 500,246 600,284 710,252 820,288 930,258 1040,290 1150,262 1200,286 1200,640 0,640" fill="rgba(42,58,100,1)"/>
+          <polygon points="0,340 110,300 210,332 320,292 430,330 540,296 650,334 770,300 880,336 990,304 1100,338 1200,312 1200,640 0,640" fill="rgba(31,44,82,1)"/>
+          <polygon points="0,392 130,352 240,388 360,344 470,384 590,350 700,388 820,352 940,390 1060,356 1170,392 1200,384 1200,640 0,640" fill="rgba(21,32,64,1)"/>
+          <polygon points="0,452 140,414 260,450 380,408 500,448 620,414 740,452 860,418 980,454 1100,420 1200,450 1200,640 0,640" fill="rgba(13,22,46,1)"/>
+          <polygon points="0,520 160,486 300,522 440,484 580,520 720,488 860,522 1000,490 1140,522 1200,506 1200,640 0,640" fill="rgba(8,14,32,1)"/>
+          <g class="beacon-pyres">
+            <g transform="translate(150,300) scale(0.86)"><ellipse cx="0" cy="-6" rx="34" ry="20" fill="url(#bcn-glow)"/><path d="M-6,4 Q-4,-16 0,-28 Q4,-16 6,4 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-14" r="2.4" fill="rgba(255,246,210,0.95)"/><path d="M0,-28 q-8,-24 2,-52" stroke="rgba(150,162,190,0.14)" stroke-width="5" fill="none"/></g>
+            <g transform="translate(330,344) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q9,-26 -2,-58" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
+            <g transform="translate(510,414) scale(1.18)"><ellipse cx="0" cy="-8" rx="46" ry="26" fill="url(#bcn-glow)"/><path d="M-8,6 Q-4,-20 0,-36 Q4,-20 8,6 Z" fill="rgba(255,150,50,0.92)"/><circle cx="0" cy="-18" r="3" fill="rgba(255,246,210,0.95)"/><path d="M0,-36 q-10,-28 2,-62" stroke="rgba(150,162,190,0.13)" stroke-width="7" fill="none"/></g>
+            <g transform="translate(690,300) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q8,-26 -2,-56" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
+            <g transform="translate(860,414) scale(1.18)"><ellipse cx="0" cy="-8" rx="46" ry="26" fill="url(#bcn-glow)"/><path d="M-8,6 Q-4,-20 0,-36 Q4,-20 8,6 Z" fill="rgba(255,150,50,0.92)"/><circle cx="0" cy="-18" r="3" fill="rgba(255,246,210,0.95)"/><path d="M0,-36 q10,-28 -2,-62" stroke="rgba(150,162,190,0.13)" stroke-width="7" fill="none"/></g>
+            <g transform="translate(1010,352) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q-8,-26 2,-56" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
+            <g transform="translate(1150,300) scale(0.86)"><ellipse cx="0" cy="-6" rx="34" ry="20" fill="url(#bcn-glow)"/><path d="M-6,4 Q-4,-16 0,-28 Q4,-16 6,4 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-14" r="2.4" fill="rgba(255,246,210,0.95)"/><path d="M0,-28 q9,-24 -2,-52" stroke="rgba(150,162,190,0.14)" stroke-width="5" fill="none"/></g>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 11 &middot; Watch-fire range</p>
+        <h2 id="h-beacons">The Beacons</h2>
+        <p class="w-copy">One pyre catches at dusk, and the next answers down the range, faster than any rider could carry the word.</p>
+        <p class="w-note"><button class="w-toy" id="light-beacons" type="button">Light the beacons</button>
+          <span class="microlabel">run the signal down the range</span></p>
+        <p class="w-proof microlabel">Desert Data Labs wires the same chain into your systems: when one lights, the next answers within the minute. Nobody rides all night to find out.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
   </main>
 
   <footer class="hud hud-bottom">
     <span>Hand-built by <a href="https://desertdatalabs.com/" rel="noopener">Desert Data Labs</a>
-      &middot; no frameworks &middot; seven worlds, one artifact &middot;
+      &middot; no frameworks &middot; eleven worlds, one artifact &middot;
       <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
+
+    <!-- THE GRAND TOUR: autopilot readout + control. Both hidden without JS
+         (#tour-toggle is display:none until html.js; the plate stays [hidden]
+         until the walk begins). The plate follows the credits span so konami's
+         `.hud-bottom span` first-match still lands on the credits, not here. -->
+    <span class="tour-plate microlabel" id="tour-progress"
+          aria-live="polite" aria-atomic="true" hidden></span>
+    <button class="tour-toggle" id="tour-toggle" type="button"
+            aria-pressed="false" aria-label="Start the grand tour">
+      <span class="tour-eye" aria-hidden="true"></span>
+      <span class="tour-label">Tour</span>
+    </button>
+
+    <!-- The Surveyor's Log: the visited set, made visible. JS-only (html.js);
+         dots + count filled by 05-core.js from WORLDS. role="img" carries the
+         one summary label; dots keep per-world title tooltips for sighted hover. -->
+    <div id="survey-log" class="survey-log" role="img" aria-label="Surveyor's log">
+      <span class="survey-plate">
+        <span class="survey-dots"></span>
+        <span class="survey-count">0/0</span>
+      </span>
+    </div>
   </footer>
 
   <div class="porthole" aria-hidden="true"></div>

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Orrery · a Desert Data Labs experience</title>
-<meta name="description" content="Seven worlds, hand-built from code: a desert giant under two suns, a neon metropolis, glyph rain, the hadal deep, a cabinet world, dancing auroras, and one world still unnamed. Travel between them.">
+<meta name="description" content="Eleven worlds, hand-built from code: a desert giant under two suns, a neon metropolis, glyph rain, the hadal deep, a cabinet world, dancing auroras, a hall of predictive mathematics, a zero-gravity drillyard, a living storm, a chain of signal-fires, and one world still unnamed. Travel between them.">
 <meta property="og:title" content="The Orrery · Desert Data Labs">
-<meta property="og:description" content="Seven worlds orbit a golden artifact that changes its face when you look at it. Warp between hand-built universes, each with its own weather, physics, and music.">
+<meta property="og:description" content="Eleven worlds orbit a golden artifact that changes its face when you look at it. Warp between hand-built universes, each with its own weather, physics, and music.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tgilbert14.github.io/ddl-orrery/">
 <meta property="og:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">
@@ -85,6 +85,27 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-un-b: #9fb4c8;
   --w-un-glow: #64d5f5;       --w-un-glow-rgb: 100, 213, 245;
   --w-un-ground: #0f141c;
+
+  /* -- Sector 11 · The Beacons: dusk indigo range · firelight gold · cold star-white -- */
+  --w-beacon-a: #ffa53a;      --w-beacon-a-rgb: 255, 165, 58;    /* firelight gold (the signature accent) */
+  --w-beacon-b: #dfe9ff;      --w-beacon-b-rgb: 223, 233, 255;   /* cold star-white */
+  --w-beacon-glow: #ff7e33;   --w-beacon-glow-rgb: 255, 126, 51; /* ember bloom / slope-glow */
+  --w-beacon-ground: #0b1230;                                    /* dusk indigo deep */
+
+  --w-storm-a: #7fb3ff;       --w-storm-a-rgb: 127, 179, 255;
+  --w-storm-b: #cfe6ff;       --w-storm-b-rgb: 207, 230, 255;
+  --w-storm-glow: #b9a9ff;    --w-storm-glow-rgb: 185, 169, 255;
+  --w-storm-ground: #131022;
+
+  --w-drill-a: #7fb2e5;       --w-drill-a-rgb: 127, 178, 229;
+  --w-drill-b: #66ff9e;       --w-drill-b-rgb: 102, 255, 158;
+  --w-drill-glow: #ffc45e;    --w-drill-glow-rgb: 255, 196, 94;
+  --w-drill-ground: #070d18;
+
+  --w-archive-a: #ecc27a;     --w-archive-a-rgb: 236, 194, 122;   /* parchment amber (the chosen future) */
+  --w-archive-b: #8ea2e8;     --w-archive-b-rgb: 142, 162, 232;   /* cool indigo (the branches not taken) */
+  --w-archive-glow: #ffd98f;  --w-archive-glow-rgb: 255, 217, 143;/* the bright path's burn */
+  --w-archive-ground: #0b1030;                                    /* deep indigo night */
   --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* still the ONE warm CTA accent */
   --coral-ink: #2a0f0b;
 
@@ -351,7 +372,9 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
   html.js .planet-anchor .pa-ring {
     display: block; position: absolute; inset: -10px; border-radius: 50%;
-    border: 1px solid rgba(var(--pa-rgb), 0.0);
+    /* --acc-rgb fallback: a world missing its tint rule degrades to the live
+       accent instead of an invalid declaration killing the focus ring */
+    border: 1px solid rgba(var(--pa-rgb, var(--acc-rgb)), 0.0);
     transition: border-color 0.35s, inset 0.35s;
   }
   html.js .planet-anchor .pa-label {
@@ -366,9 +389,9 @@ html.js .hub-hint { animation-delay: 0.55s; }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
   html.js .planet-anchor .pa-label em { font-size: 0.72rem; opacity: 0; transform: translateY(-4px); transition: opacity 0.3s, transform 0.3s; }
   html.js .planet-anchor:hover .pa-dot,
-  html.js .planet-anchor:focus-visible .pa-dot { transform: scale(1.12); box-shadow: 0 0 34px rgba(var(--pa-rgb), 0.65); }
+  html.js .planet-anchor:focus-visible .pa-dot { transform: scale(1.12); box-shadow: 0 0 34px rgba(var(--pa-rgb, var(--acc-rgb)), 0.65); }
   html.js .planet-anchor:hover .pa-ring,
-  html.js .planet-anchor:focus-visible .pa-ring { border-color: rgba(var(--pa-rgb), 0.6); inset: -14px; }
+  html.js .planet-anchor:focus-visible .pa-ring { border-color: rgba(var(--pa-rgb, var(--acc-rgb)), 0.6); inset: -14px; }
   html.js .planet-anchor:hover .pa-label em,
   html.js .planet-anchor:focus-visible .pa-label em { opacity: 1; transform: none; }
   html.js .pa-unnamed .pa-dot {
@@ -729,6 +752,127 @@ html:not(.js) [data-scene="aurora"] .fx-canvas { display: none; }
 
 
 /* ============================================================
+   SECTOR 08 · THE ARCHIVE — probability fans over the indigo stacks
+   ============================================================ */
+[data-scene="archive"] { --wa: var(--w-archive-a); --wa-rgb: var(--w-archive-a-rgb); --wglow-rgb: var(--w-archive-glow-rgb); --wground: var(--w-archive-ground); }
+.planet-anchor[data-world="archive"] { --pa: var(--w-archive-a); --pa-rgb: var(--w-archive-a-rgb); }
+.planet-anchor[data-world="drillyard"] { --pa: var(--w-drill-a);  --pa-rgb: var(--w-drill-a-rgb); }
+.planet-anchor[data-world="stormwall"] { --pa: var(--w-storm-a);  --pa-rgb: var(--w-storm-a-rgb); }
+.planet-anchor[data-world="beacons"]   { --pa: var(--w-beacon-a); --pa-rgb: var(--w-beacon-a-rgb); }
+
+.archive-hall {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 108%, rgba(var(--w-archive-glow-rgb), 0.10), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(var(--w-archive-a-rgb), 0.035) 0 1px, transparent 1px 92px),
+    radial-gradient(ellipse 90% 60% at 50% -12%, rgba(var(--w-archive-b-rgb), 0.10), transparent 60%),
+    linear-gradient(180deg, #0a0e2a 0%, var(--w-archive-ground) 68%);
+}
+/* faint horizontal shelving over the vertical stacks — the reading hall recedes */
+.archive-hall::after {
+  content: ""; position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(var(--w-archive-a-rgb), 0.03) 0 1px, transparent 1px 46px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0 46%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0 46%, #000 100%);
+}
+
+[data-scene="archive"] .archive-hall    { z-index: 0; }
+[data-scene="archive"] .fx-canvas       { z-index: 1; }
+[data-scene="archive"] .archive-static  { z-index: 2; }
+
+/* rm keeps the canvas (fx.archive.rm() paints the frozen fan into it); the SVG
+   pose stands in only when there is no JS to paint anything */
+.archive-static { display: none; }
+html:not(.js) [data-scene="archive"] .fx-canvas    { display: none; }
+html:not(.js) [data-scene="archive"] .archive-static { display: block; }
+
+
+/* ============================================================
+   SECTOR 08 · THE DRILLYARD — the zero-g arena; the canvas runs the drills
+   ============================================================ */
+[data-scene="drillyard"] { --wa: var(--w-drill-a); --wa-rgb: var(--w-drill-a-rgb); --wglow-rgb: var(--w-drill-glow-rgb); --wground: var(--w-drill-ground); }
+.dy-void {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 42%, rgba(var(--w-drill-a-rgb), 0.07), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 88%, rgba(var(--w-drill-glow-rgb), 0.05), transparent 60%),
+    linear-gradient(180deg, #0a1322 0%, var(--w-drill-ground) 70%);
+}
+/* rm keeps the CANVAS: fx.drillyard.rm() paints the held pose (arcadia idiom).
+   Only the no-JS brochure swaps to the frozen SVG — do NOT add an html.rm hide. */
+.dy-static { display: none; }
+html:not(.js) [data-scene="drillyard"] .fx-canvas { display: none; }
+html:not(.js) [data-scene="drillyard"] .dy-static { display: block; }
+
+
+/* ============================================================
+   SECTOR 08 · STORMWALL — the weather is a wall; the light runs ahead
+   ============================================================ */
+[data-scene="stormwall"] { --wa: var(--w-storm-a); --wa-rgb: var(--w-storm-a-rgb); --wglow-rgb: var(--w-storm-glow-rgb); --wground: var(--w-storm-ground); }
+.sw-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 90% 55% at 78% 30%, rgba(var(--w-storm-glow-rgb), 0.06), transparent 60%),
+    linear-gradient(180deg, #141126 0%, #1c1b33 44%, #262a40 79.9%, #17142a 80%, #0d0b18 100%);
+}
+/* the sheet-light: an opacity-only violet wash the toy triggers (2 crests, strobe-safe) */
+.sw-sky::after {
+  content: ""; position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse 80% 70% at 72% 26%, rgba(var(--w-storm-glow-rgb), 0.30), transparent 65%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.js:not(.rm) [data-scene="stormwall"].is-bracing .sw-sky::after { animation: sw-sheet 1.1s steps(1, end) 1; }
+}
+@keyframes sw-sheet {
+  0% { opacity: 0; }
+  8% { opacity: 0.55; }
+  18% { opacity: 0.12; }
+  32% { opacity: 0.65; }
+  46% { opacity: 0.18; }
+  60%, 100% { opacity: 0; }
+}
+/* rm click answer: ONE soft non-strobing fade (user-initiated; the aurora
+   is-querying rm variant is the precedent). Ambient motion stays off. */
+html.rm [data-scene="stormwall"].is-bracing .sw-sky::after { animation: sw-sheet-rm 0.9s ease-out 1; }
+@keyframes sw-sheet-rm { from { opacity: 0.3; } to { opacity: 0; } }
+.sw-static { display: none; }
+html.rm [data-scene="stormwall"] .fx-canvas,
+html:not(.js) [data-scene="stormwall"] .fx-canvas { display: none; }
+html.rm [data-scene="stormwall"] .sw-static,
+html:not(.js) [data-scene="stormwall"] .sw-static { display: block; }
+
+
+/* ============================================================
+   SECTOR 11 · THE BEACONS — the signal-fire range at the blue hour;
+   the canvas carries the fires, the CSS carries the dusk
+   ============================================================ */
+[data-scene="beacons"] { --wa: var(--w-beacon-a); --wa-rgb: var(--w-beacon-a-rgb); --wglow-rgb: var(--w-beacon-glow-rgb); --wground: var(--w-beacon-ground); }
+
+[data-scene="beacons"] .beacon-sky    { z-index: 0; }
+[data-scene="beacons"] .fx-canvas     { z-index: 1; }
+[data-scene="beacons"] .beacon-static { z-index: 2; }
+
+.beacon-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 120% 46% at 50% 100%, rgba(var(--w-beacon-glow-rgb), 0.10), transparent 60%),
+    radial-gradient(ellipse 80% 34% at 26% 8%, rgba(var(--w-beacon-b-rgb), 0.06), transparent 60%),
+    linear-gradient(180deg, #060a1f 0%, var(--w-beacon-ground) 46%, #14224a 82%, #26305a 100%);
+}
+
+/* reduced-motion / no-JS: the range frozen mid-burn, all seven lit (Smaug kill 2) */
+.beacon-static { display: none; }
+html.rm [data-scene="beacons"] .fx-canvas,
+html:not(.js) [data-scene="beacons"] .fx-canvas { display: none; }
+html.rm [data-scene="beacons"] .beacon-static,
+html:not(.js) [data-scene="beacons"] .beacon-static { display: block; }
+
+/* rm answer for the beacons toy: one user-initiated flare of the static pyres */
+html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-rm 1s ease-out 1; }
+@keyframes bcn-flare-rm { 0% { opacity: 1; } 35% { opacity: 0.5; } 70% { opacity: 1; } 100% { opacity: 1; } }
+
+
+/* ============================================================
    03b-deco.css: The Deep Deco reskin. Brass, cream, sea-glass.
    Everything here is STATIC (zero new animations, zero rAF).
    ============================================================ */
@@ -1066,6 +1210,221 @@ html.rm .scene-hub::before,
 html.rm #hud-loc-name, html.rm .hud-title,
 html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
 
+
+/* ============================================================
+   THE GRAND TOUR — brass autopilot control + engraved progress plate.
+   Matches the .return-orbit / .audio-toggle chamfer idiom; the beacon
+   is the only motion and it is double-gated for reduced motion.
+   ============================================================ */
+
+/* the control is JS-only chrome (mirrors #artifact-hit): no engine, no button */
+#tour-toggle { display: none; }
+html.js #tour-toggle {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-dim);
+  padding: 0.45rem 0.9rem;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.45);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22);
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px),
+                     calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+  transition: color 0.25s, border-color 0.25s;
+}
+#tour-toggle:hover, #tour-toggle:focus-visible { color: var(--cream); border-color: var(--brass); }
+#tour-toggle:focus-visible { outline-offset: -4px; }   /* chamfer swallows an outside ring */
+
+/* the beacon: a brass eye, dim at rest, lit while the autopilot runs */
+.tour-eye {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 34%,
+    rgba(var(--cream-rgb), 0.95), rgba(var(--brass-rgb), 0.5) 55%,
+    rgba(20, 13, 4, 0.9) 78%, transparent 82%);
+  box-shadow: 0 0 0 1px rgba(var(--brass-rgb), 0.4);
+  opacity: 0.5;                                         /* designed rest pose */
+}
+#tour-toggle[aria-pressed="true"] { color: var(--brass); border-color: var(--brass); }
+#tour-toggle[aria-pressed="true"] .tour-eye { opacity: 1; }   /* rm-safe static "on" pose */
+@media (prefers-reduced-motion: no-preference) {
+  html.js:not(.rm) #tour-toggle[aria-pressed="true"] .tour-eye {
+    animation: tour-scan 1.8s var(--ease-out) infinite;
+    will-change: transform, opacity;                    /* compositor-only */
+  }
+}
+@keyframes tour-scan {
+  0%, 100% { opacity: 0.5; transform: scale(0.82); }
+  50%      { opacity: 1;   transform: scale(1.12); }
+}
+
+/* the progress plate: engraved brass readout, announced politely */
+.tour-plate {
+  color: var(--brass);
+  letter-spacing: var(--track-plate);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tour-plate[hidden] { display: none; }
+
+/* let the control + plate sit beside the credits on desktop, wrap on mobile */
+.hud-bottom { flex-wrap: wrap; row-gap: 0.4rem; }
+
+/* ============================================================
+   The Surveyor's Log — a brass tally plate in the bottom HUD.
+   JS-only (the brochure has no journey to record; mirrors #artifact-hit).
+   Static by law: the only motion is the seal glow, which reuses
+   .konami-seal's already-rm-gated rule. Dots snap under rm.
+   ============================================================ */
+
+/* brochure / boot-throw fallback: no engine, no log */
+.survey-log { display: none; }
+html.js .survey-log {
+  display: flex; align-items: center;
+  position: absolute;                 /* pinned left; the credits stay centred by flex */
+  left: 1.4rem; top: 0; bottom: 0;
+  pointer-events: auto;
+}
+
+.survey-plate {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.28rem 0.6rem;
+  background: var(--plaque);
+  border: 1px solid rgba(var(--brass-rgb), 0.45);
+  box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px),
+                     calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+
+.survey-dots { display: inline-flex; align-items: center; gap: 5px; }
+.survey-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid rgba(var(--brass-rgb), 0.6);    /* unsurveyed: an empty ring */
+  background: transparent;
+}
+.survey-dot.is-surveyed {                             /* surveyed: a filled gold dot */
+  background:
+    radial-gradient(circle at 36% 34%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 46%),
+    radial-gradient(circle at 60% 66%, #ffcf6a 0%, #b8791f 92%);
+  border-color: rgba(var(--brass-rgb), 0.9);
+  box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
+}
+/* the fill eases only where motion is welcome (konami-ring precedent); rm snaps */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .survey-dot {
+    transition: border-color 0.5s var(--ease-out), box-shadow 0.5s var(--ease-out);
+  }
+}
+
+.survey-count {
+  display: none;                       /* desktop reads the dot strip */
+  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
+  color: var(--brass); font-variant-numeric: tabular-nums;
+}
+
+/* completion seal: a distinct node reusing .konami-seal's gold + rm-gated glow */
+.log-seal { margin-left: 2px; }
+
+/* phone: stand the dot strip down, collapse to a compact N/total + seal on its
+   own centred row ABOVE the credits so it never crowds the 375px footer */
+@media (max-width: 1100px) {
+  .hud-bottom { flex-wrap: wrap; row-gap: 0.3rem; }
+  html.js .survey-log {
+    position: static; left: auto;
+    order: -1; flex-basis: 100%; justify-content: center;
+  }
+  .survey-dots { display: none; }
+  .survey-count { display: inline-block; }
+  .survey-plate { padding: 0.2rem 0.5rem; gap: 0.35rem; }
+}
+
+/* ============================================================
+   03c-approach.css — THE APPROACH: the first-visit arrival cinematic.
+   You drift toward the Artifact out of the dark; the instruments wake.
+   All timing lives here, keyed off html.approaching (JS adds/removes it).
+   LAWS honoured: compositor-only (transform/opacity), double reduced-motion
+   gate, and the h1 is NEVER opacity:0 / display:none / visibility:hidden —
+   the words ride the plaque's 0.4 floor (readable throughout); only the
+   DECORATION fades 0->1. Removing .approaching resolves every element to its
+   settled base state, so a skip is an instant, flash-free snap.
+   ============================================================ */
+
+/* the base hub entrance (02-hub.css: rise-in on .hub-sub/.hub-hint) must not
+   RE-FIRE when .approaching is stripped at settle — that would re-fade the
+   copy. The permanent .approached marker (set once, never removed) suppresses
+   it. Specificity (0,3,1) beats the base (0,2,1); the approach entrance below
+   is (0,4,1) so it still wins WHILE drifting. Order-independent. */
+html.js.approached .hub-sub,
+html.js.approached .hub-hint { animation: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+
+  /* (2) 0.8-2.6s · the drift: the SKY LAYER eases 1.14 -> 1.0.
+     Element transform only — the engine draws via ctx.setTransform, never a
+     CSS transform on #sky, so there is no collision. The 0.8s delay + `both`
+     holds 1.14 through phase (1), the void-alone beat. */
+  html.js.approaching:not(.rm) #sky {
+    transform-origin: 50% 50%;
+    will-change: transform;
+    animation: approach-sky 1.8s var(--ease-out) 0.8s both;
+  }
+
+  /* (2) the porthole draws tighter, then relaxes. Gradient-stop animation is
+     not compositor-safe, so a dark IRIS pseudo presses in and dissolves via
+     opacity+scale. It sits above the base vignette; corners stay dark, so the
+     inward pull never reveals a bright edge. */
+  html.js.approaching:not(.rm) .porthole::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 92% 92% at 50% 50%,
+      transparent 0 26%, rgba(1, 6, 5, 0.72) 58%, rgba(0, 3, 2, 0.95) 100%);
+    will-change: transform, opacity;
+    animation: approach-iris 2.6s var(--ease-out) both;
+  }
+
+  /* (3) 2.2-3.6s · the plaque lockup rises + brightens. Opacity floors at 0.4
+     (never 0): the h1 is painted from the first frame, so it stays the LCP and
+     stays readable. translateY is transform-only (no CLS). */
+  html.js.approaching:not(.rm) .hub-copy {
+    will-change: transform, opacity;
+    animation: approach-plaque 1.4s var(--ease-out) 2.2s both;
+  }
+  /* the DECORATION wakes harder than the words: brass rules draw outward and
+     the sunburst blooms from 0 (they composite over the plaque's rising 0.4). */
+  html.js.approaching:not(.rm) .hub-h1::before,
+  html.js.approaching:not(.rm) .hub-h1::after {
+    animation: approach-rule 1.0s var(--ease-out) 2.6s both;
+  }
+  html.js.approaching:not(.rm) .hub-copy::after {
+    animation: approach-bloom 1.0s var(--ease-out) 2.7s both;
+  }
+  html.js.approaching:not(.rm) .hub-sub  { animation: approach-copy 0.9s var(--ease-out) 2.8s both; }
+  html.js.approaching:not(.rm) .hub-hint { animation: approach-copy 0.9s var(--ease-out) 3.05s both; }
+
+  /* the Artifact's plate fades in with the lockup. OPACITY ONLY — the engine
+     owns its transform (translateX(-50%) over --ax/--ay); its base breathe
+     resumes harmlessly after settle. Ends at 0.82 to match its base opacity. */
+  html.js.approaching:not(.rm) .artifact-label {
+    animation: approach-plate 1.0s var(--ease-out) 2.6s both;
+  }
+
+  /* (4) 3.6-4.5s · the orbit anchors engrave in, staggered by --i (set inline
+     per anchor). OPACITY ONLY — the engine writes --pax/--pay/--psize/--pdim
+     into each anchor's transform every frame; animating transform here would
+     collapse the planets to center. Labels keep their depth-dim (--pdim). */
+  html.js.approaching:not(.rm) .planet-anchor {
+    animation: approach-anchor 0.65s var(--ease-out) both;
+    animation-delay: calc(3.45s + var(--i, 0) * 0.07s);
+  }
+}
+
+/* keyframes (inert until referenced; kept outside the gate for tidiness) */
+@keyframes approach-sky    { from { transform: scale(1.14); } to { transform: scale(1); } }
+@keyframes approach-iris   { from { opacity: 1; transform: scale(0.92); } to { opacity: 0; transform: scale(1.14); } }
+@keyframes approach-plaque { from { opacity: 0.4; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes approach-rule   { from { opacity: 0; transform: scaleX(0.3); } to { opacity: 1; transform: none; } }
+@keyframes approach-bloom  { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes approach-copy   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes approach-plate  { from { opacity: 0; } to { opacity: 0.82; } }
+@keyframes approach-anchor { from { opacity: 0.001; } to { opacity: 1; } }
+
 </style>
 <!-- Hand-built by Desert Data Labs. No frameworks, no build magic.
      You are standing in the source. https://desertdatalabs.com -->
@@ -1101,8 +1460,8 @@ html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
     <!-- ============ THE HUB ============ -->
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
-        <h1 class="hub-h1">Seven worlds. One clock.<br>Everything you see is code.</h1>
-        <p class="hub-sub">Seven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
+        <h1 class="hub-h1">Eleven worlds. One clock.<br>One artifact, holding the center.</h1>
+        <p class="hub-sub">Eleven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
 
@@ -1112,7 +1471,7 @@ html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
       <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
-      <nav class="orbits" id="worlds-index" aria-label="The seven worlds">
+      <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
@@ -1147,6 +1506,26 @@ html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
           <span class="pa-label"><b>Uncharted</b><em>yours is still unnamed</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="archive" href="#world-archive" style="--i:7">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Archive</b><em>it has already read tomorrow</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="drillyard" href="#world-drillyard" style="--i:8">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Drillyard</b><em>down is a direction you choose</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="stormwall" href="#world-stormwall" style="--i:9">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Stormwall</b><em>the light runs ahead of the weather</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="beacons" href="#world-beacons" style="--i:10">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Beacons</b><em>one fire lights the next</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
       </nav>
     </section>
@@ -1370,12 +1749,250 @@ html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
       </div>
     </section>
 
+    <!-- ============ SECTOR 08 · THE ARCHIVE ============ -->
+    <section id="world-archive" class="scene world" data-scene="archive" data-fx="archive" aria-labelledby="h-archive">
+      <div class="world-fx" aria-hidden="true">
+        <div class="archive-hall"></div>
+        <canvas class="fx-canvas" data-canvas="archive"></canvas>
+        <!-- the same hall, frozen: one grown fan with the chosen path lit (rm keeps the canvas; this is the no-JS pose) -->
+        <svg class="archive-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <g stroke="rgba(142,162,232,0.30)" stroke-width="1.4" fill="none" stroke-linecap="round">
+            <path d="M600,600 L445,470"/><path d="M600,600 L762,478"/>
+            <path d="M445,470 L360,372"/><path d="M445,470 L452,360"/>
+            <path d="M600,452 L536,346"/><path d="M762,478 L720,372"/>
+            <path d="M762,478 L838,382"/><path d="M452,360 L430,262"/>
+            <path d="M720,372 L742,268"/><path d="M648,332 L600,228"/>
+          </g>
+          <g fill="rgba(142,162,232,0.42)">
+            <circle cx="445" cy="470" r="3"/><circle cx="762" cy="478" r="3"/>
+            <circle cx="360" cy="372" r="2.4"/><circle cx="452" cy="360" r="2.4"/>
+            <circle cx="536" cy="346" r="2.4"/><circle cx="720" cy="372" r="2.4"/>
+            <circle cx="838" cy="382" r="2.4"/><circle cx="430" cy="262" r="2"/>
+            <circle cx="742" cy="268" r="2"/><circle cx="600" cy="228" r="2"/>
+          </g>
+          <path d="M600,600 L600,452 L648,332 L712,222 L760,132" fill="none"
+                stroke="rgba(255,217,143,0.16)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M600,600 L600,452 L648,332 L712,222 L760,132" fill="none"
+                stroke="rgba(255,232,172,0.95)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#ffe7aa">
+            <circle cx="600" cy="600" r="4"/><circle cx="600" cy="452" r="3.2"/>
+            <circle cx="648" cy="332" r="3.2"/><circle cx="712" cy="222" r="3.2"/>
+          </g>
+          <circle cx="760" cy="132" r="14" fill="rgba(255,217,143,0.28)"/>
+          <circle cx="760" cy="132" r="4.5" fill="#fff2cf"/>
+          <g fill="rgba(236,194,122,0.13)">
+            <rect x="147" y="120" width="6" height="1.4"/><circle cx="220" cy="300" r="1.1"/>
+            <rect x="179" y="516" width="1.4" height="6"/><rect x="1017" y="160" width="6" height="1.4"/>
+            <circle cx="1080" cy="360" r="1.1"/><rect x="979" y="518" width="1.4" height="6"/>
+            <rect x="337" y="180" width="6" height="1.4"/><circle cx="1120" cy="262" r="1.1"/>
+            <rect x="89" y="400" width="1.4" height="6"/><circle cx="300" cy="560" r="1.1"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 08 &middot; Predictive archive</p>
+        <h2 id="h-archive">The Archive</h2>
+        <p class="w-copy">Ten thousand years of records, and the mathematics to read them forward. Every branch is a future the numbers weigh; the brightest is the one worth planning for.</p>
+        <p class="w-note w-note--live microlabel">The fans branch and weight, then every few seconds collapse to the single lit path.</p>
+        <p class="w-note"><button class="w-toy" id="consult-archive" type="button">Consult the archive</button>
+          <span class="microlabel">re-roll the futures</span></p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 09 · THE DRILLYARD ============ -->
+    <section id="world-drillyard" class="scene world" data-scene="drillyard" data-fx="drillyard" aria-labelledby="h-drillyard">
+      <div class="world-fx" aria-hidden="true">
+        <div class="dy-void"></div>
+        <canvas class="fx-canvas" data-canvas="drillyard"></canvas>
+        <!-- the same drill, held: shown only when JS is absent (rm is painted by the canvas) -->
+        <svg class="dy-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid slice">
+          <g fill="none" stroke="rgba(127,178,229,0.2)" stroke-width="1.5">
+            <path d="M540,140 L880,140 L880,420 L540,420 Z"/>
+            <path d="M430,190 L540,140 M830,190 L880,140 M830,510 L880,420 M430,510 L540,420"/>
+          </g>
+          <path d="M430,510 L830,510 L880,420 L540,420 Z" fill="rgba(255,196,94,0.05)" stroke="rgba(255,196,94,0.16)" stroke-width="1"/>
+          <path d="M430,190 L830,190 L830,510 L430,510 Z" fill="none" stroke="rgba(127,178,229,0.45)" stroke-width="1.5"/>
+          <path d="M858,244 L886,282 L858,320 L830,282 Z" fill="none" stroke="rgba(255,196,94,0.7)" stroke-width="2"/>
+          <g fill="rgba(102,255,158,0.9)">
+            <circle cx="700" cy="468" r="5"/><circle cx="664" cy="478" r="5"/><circle cx="736" cy="478" r="5"/>
+            <circle cx="628" cy="488" r="5"/><circle cx="772" cy="488" r="5"/><circle cx="592" cy="498" r="5"/><circle cx="808" cy="498" r="5"/>
+          </g>
+          <g fill="rgba(127,178,229,0.9)">
+            <circle cx="530" cy="240" r="5"/><circle cx="505" cy="275" r="5"/><circle cx="555" cy="275" r="5"/>
+            <circle cx="480" cy="310" r="5"/><circle cx="580" cy="310" r="5"/><circle cx="455" cy="345" r="5"/><circle cx="605" cy="345" r="5"/>
+          </g>
+          <g fill="rgba(255,196,94,0.9)">
+            <circle cx="806" cy="300" r="5"/><circle cx="776" cy="308" r="5"/><circle cx="792" cy="330" r="5"/>
+            <circle cx="746" cy="316" r="5"/><circle cx="778" cy="360" r="5"/><circle cx="716" cy="324" r="5"/><circle cx="764" cy="390" r="5"/>
+          </g>
+          <g>
+            <circle cx="640" cy="330" r="4" fill="rgba(150,165,190,0.55)"/>
+            <circle cx="640" cy="330" r="8" fill="none" stroke="rgba(150,165,190,0.4)" stroke-width="1.2"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 09 &middot; Training arena</p>
+        <h2 id="h-drillyard">The Drillyard</h2>
+        <p class="w-copy">Zero gravity. Three squads. The floor is wherever they agree it is.</p>
+        <p class="w-note w-note--live microlabel">Wait for the slow turn: the arena picks a new down, and the drills simply continue.</p>
+        <p class="w-note"><button class="w-toy" id="call-drill" type="button">Call a drill</button>
+          <span class="microlabel">cycle the next formation</span></p>
+        <p class="w-proof microlabel">Desert Data Labs drills real teams the same way: training tools, practice runs, and live operational dashboards that keep every crew oriented when the ground moves.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 10 · STORMWALL ============ -->
+    <section id="world-stormwall" class="scene world" data-scene="stormwall" data-fx="storm" aria-labelledby="h-stormwall">
+      <div class="world-fx" aria-hidden="true">
+        <div class="sw-sky"></div>
+        <canvas class="fx-canvas" data-canvas="storm"></canvas>
+        <!-- the same weather, held: shown when motion is off or JS is absent.
+             Pose: the wall one-third across, sparks mid-stream, the buds half closed. -->
+        <svg class="sw-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <linearGradient id="sw-skyg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#141126"/>
+              <stop offset="0.55" stop-color="#1c1b33"/>
+              <stop offset="1" stop-color="#262a40"/>
+            </linearGradient>
+            <radialGradient id="sw-flashg" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stop-color="#e2ecff" stop-opacity="0.5"/>
+              <stop offset="0.45" stop-color="#b9a9ff" stop-opacity="0.2"/>
+              <stop offset="1" stop-color="#b9a9ff" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="1200" height="640" fill="url(#sw-skyg)"/>
+          <!-- the wall, one-third across: pale fringe leads, dark core follows -->
+          <path d="M1200,0 L742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512 L1200,512 Z" fill="#2e344e"/>
+          <path d="M1200,0 L806,0 L784,72 L818,140 L790,208 L824,276 L796,344 L828,412 L802,470 L818,512 L1200,512 Z" fill="#1e2238"/>
+          <path d="M1200,0 L840,0 L862,60 L836,124 L866,188 L842,252 L872,316 L848,380 L876,444 L854,512 L1200,512 Z" fill="#111322"/>
+          <ellipse cx="960" cy="170" rx="150" ry="120" fill="url(#sw-flashg)"/>
+          <ellipse cx="1090" cy="340" rx="110" ry="88" fill="url(#sw-flashg)" opacity="0.7"/>
+          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(185,169,255,0.3)" stroke-width="2"/>
+          <!-- the plain -->
+          <rect y="512" width="1200" height="128" fill="#17142a"/>
+          <path d="M0,640 L0,584 C220,568 480,596 720,580 C920,568 1080,590 1200,578 L1200,640 Z" fill="#0d0b18"/>
+          <!-- sparks mid-stream, heads leading left; two curl around unseen stones -->
+          <g stroke="#cfe6ff" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.85">
+            <path d="M612,486 L648,485"/>
+            <path d="M540,498 L570,497"/>
+            <path d="M470,478 q-22,-10 -46,-8"/>
+            <path d="M420,500 L452,499"/>
+            <path d="M330,488 q-18,10 -40,6"/>
+            <path d="M250,496 L276,495"/>
+            <path d="M168,482 L190,481"/>
+            <path d="M100,502 L118,501"/>
+          </g>
+          <g fill="#ecf4ff">
+            <circle cx="612" cy="486" r="2"/><circle cx="540" cy="498" r="2"/>
+            <circle cx="424" cy="470" r="2"/><circle cx="420" cy="500" r="2"/>
+            <circle cx="290" cy="494" r="2"/><circle cx="168" cy="482" r="2"/>
+          </g>
+          <!-- the shelled flora, half closed -->
+          <g fill="#0b0916">
+            <path d="M158,566 a22,17 0 0 1 44,0 Z"/><path d="M151,566 a14,12 0 0 1 28,0 Z"/><path d="M181,566 a14,12 0 0 1 28,0 Z"/>
+            <path d="M424,600 a31,25 0 0 1 62,0 Z"/><path d="M413,600 a20,17 0 0 1 40,0 Z"/><path d="M457,600 a20,17 0 0 1 40,0 Z"/>
+            <path d="M694,580 a26,20 0 0 1 52,0 Z"/><path d="M685,580 a17,14 0 0 1 34,0 Z"/><path d="M721,580 a17,14 0 0 1 34,0 Z"/>
+            <path d="M974,622 a36,28 0 0 1 72,0 Z"/><path d="M962,622 a23,19 0 0 1 46,0 Z"/><path d="M1012,622 a23,19 0 0 1 46,0 Z"/>
+          </g>
+          <g fill="#cfe6ff">
+            <circle cx="180" cy="543" r="1.8" opacity="0.5"/><circle cx="455" cy="569" r="1.8" opacity="0.45"/>
+            <circle cx="720" cy="554" r="1.8" opacity="0.35"/><circle cx="1010" cy="588" r="1.8" opacity="0.2"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 10 &middot; Tempest plain</p>
+        <h2 id="h-stormwall">Stormwall</h2>
+        <p class="w-copy">The weather here is a wall. The light knows before you do.</p>
+        <p class="w-note"><button class="w-toy" id="brace-wall" type="button">Brace for the wall</button>
+          <span class="microlabel">call the front in early</span></p>
+        <p class="w-proof microlabel">Desert Data Labs schedules pipelines the way this plain reads weather: jobs that see the front coming, close up safe, and reopen with nothing lost.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 11 · THE BEACONS ============ -->
+    <section id="world-beacons" class="scene world" data-scene="beacons" data-fx="beacons" aria-labelledby="h-beacons">
+      <div class="world-fx" aria-hidden="true">
+        <div class="beacon-sky"></div>
+        <canvas class="fx-canvas" data-canvas="beacons"></canvas>
+        <!-- the same range, frozen mid-burn: shown when motion is off or JS is absent -->
+        <svg class="beacon-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <radialGradient id="bcn-glow" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stop-color="rgba(255,196,120,0.95)"/>
+              <stop offset="0.4" stop-color="rgba(255,140,60,0.42)"/>
+              <stop offset="1" stop-color="rgba(255,120,50,0)"/>
+            </radialGradient>
+          </defs>
+          <g fill="rgba(223,233,255,0.7)">
+            <circle cx="120" cy="80" r="1.4"/><circle cx="300" cy="130" r="1.1"/><circle cx="470" cy="70" r="1.5"/>
+            <circle cx="640" cy="120" r="1.1"/><circle cx="820" cy="78" r="1.4"/><circle cx="980" cy="128" r="1.2"/>
+            <circle cx="1120" cy="86" r="1.3"/><circle cx="210" cy="188" r="1"/><circle cx="720" cy="196" r="1"/>
+          </g>
+          <polygon points="0,300 120,258 200,290 300,250 390,286 500,246 600,284 710,252 820,288 930,258 1040,290 1150,262 1200,286 1200,640 0,640" fill="rgba(42,58,100,1)"/>
+          <polygon points="0,340 110,300 210,332 320,292 430,330 540,296 650,334 770,300 880,336 990,304 1100,338 1200,312 1200,640 0,640" fill="rgba(31,44,82,1)"/>
+          <polygon points="0,392 130,352 240,388 360,344 470,384 590,350 700,388 820,352 940,390 1060,356 1170,392 1200,384 1200,640 0,640" fill="rgba(21,32,64,1)"/>
+          <polygon points="0,452 140,414 260,450 380,408 500,448 620,414 740,452 860,418 980,454 1100,420 1200,450 1200,640 0,640" fill="rgba(13,22,46,1)"/>
+          <polygon points="0,520 160,486 300,522 440,484 580,520 720,488 860,522 1000,490 1140,522 1200,506 1200,640 0,640" fill="rgba(8,14,32,1)"/>
+          <g class="beacon-pyres">
+            <g transform="translate(150,300) scale(0.86)"><ellipse cx="0" cy="-6" rx="34" ry="20" fill="url(#bcn-glow)"/><path d="M-6,4 Q-4,-16 0,-28 Q4,-16 6,4 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-14" r="2.4" fill="rgba(255,246,210,0.95)"/><path d="M0,-28 q-8,-24 2,-52" stroke="rgba(150,162,190,0.14)" stroke-width="5" fill="none"/></g>
+            <g transform="translate(330,344) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q9,-26 -2,-58" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
+            <g transform="translate(510,414) scale(1.18)"><ellipse cx="0" cy="-8" rx="46" ry="26" fill="url(#bcn-glow)"/><path d="M-8,6 Q-4,-20 0,-36 Q4,-20 8,6 Z" fill="rgba(255,150,50,0.92)"/><circle cx="0" cy="-18" r="3" fill="rgba(255,246,210,0.95)"/><path d="M0,-36 q-10,-28 2,-62" stroke="rgba(150,162,190,0.13)" stroke-width="7" fill="none"/></g>
+            <g transform="translate(690,300) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q8,-26 -2,-56" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
+            <g transform="translate(860,414) scale(1.18)"><ellipse cx="0" cy="-8" rx="46" ry="26" fill="url(#bcn-glow)"/><path d="M-8,6 Q-4,-20 0,-36 Q4,-20 8,6 Z" fill="rgba(255,150,50,0.92)"/><circle cx="0" cy="-18" r="3" fill="rgba(255,246,210,0.95)"/><path d="M0,-36 q10,-28 -2,-62" stroke="rgba(150,162,190,0.13)" stroke-width="7" fill="none"/></g>
+            <g transform="translate(1010,352) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q-8,-26 2,-56" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
+            <g transform="translate(1150,300) scale(0.86)"><ellipse cx="0" cy="-6" rx="34" ry="20" fill="url(#bcn-glow)"/><path d="M-6,4 Q-4,-16 0,-28 Q4,-16 6,4 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-14" r="2.4" fill="rgba(255,246,210,0.95)"/><path d="M0,-28 q9,-24 -2,-52" stroke="rgba(150,162,190,0.14)" stroke-width="5" fill="none"/></g>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
+        <p class="w-eyebrow microlabel">Sector 11 &middot; Watch-fire range</p>
+        <h2 id="h-beacons">The Beacons</h2>
+        <p class="w-copy">One pyre catches at dusk, and the next answers down the range, faster than any rider could carry the word.</p>
+        <p class="w-note"><button class="w-toy" id="light-beacons" type="button">Light the beacons</button>
+          <span class="microlabel">run the signal down the range</span></p>
+        <p class="w-proof microlabel">Desert Data Labs wires the same chain into your systems: when one lights, the next answers within the minute. Nobody rides all night to find out.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
   </main>
 
   <footer class="hud hud-bottom">
     <span>Hand-built by <a href="https://desertdatalabs.com/" rel="noopener">Desert Data Labs</a>
-      &middot; no frameworks &middot; seven worlds, one artifact &middot;
+      &middot; no frameworks &middot; eleven worlds, one artifact &middot;
       <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
+
+    <!-- THE GRAND TOUR: autopilot readout + control. Both hidden without JS
+         (#tour-toggle is display:none until html.js; the plate stays [hidden]
+         until the walk begins). The plate follows the credits span so konami's
+         `.hud-bottom span` first-match still lands on the credits, not here. -->
+    <span class="tour-plate microlabel" id="tour-progress"
+          aria-live="polite" aria-atomic="true" hidden></span>
+    <button class="tour-toggle" id="tour-toggle" type="button"
+            aria-pressed="false" aria-label="Start the grand tour">
+      <span class="tour-eye" aria-hidden="true"></span>
+      <span class="tour-label">Tour</span>
+    </button>
+
+    <!-- The Surveyor's Log: the visited set, made visible. JS-only (html.js);
+         dots + count filled by 05-core.js from WORLDS. role="img" carries the
+         one summary label; dots keep per-world title tooltips for sighted hover. -->
+    <div id="survey-log" class="survey-log" role="img" aria-label="Surveyor's log">
+      <span class="survey-plate">
+        <span class="survey-dots"></span>
+        <span class="survey-count">0/0</span>
+      </span>
+    </div>
   </footer>
 
   <div class="porthole" aria-hidden="true"></div>
@@ -1457,6 +2074,10 @@ const WORLDS = [
   { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065 },
   { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
   { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
+  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042 },
+  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058 },
+  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
+  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
 
@@ -1641,36 +2262,56 @@ function drawSky(dt, clockMs) {
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
-  /* comet, when one is in flight */
-  if (comet.alive) drawComet(dt);
+  /* comets, when any are in flight */
+  if (cometAlive()) drawComets(dt);
   if (warp.active) { warp.p = Math.min(1, warp.p + dt / 700); }
 }
 
 function drawStatic() { drawSky(16, Ticker.clock); }
 
-/* ---------- ambient: the idle loop + random-cadence comet (fxLock, §2.10) ---------- */
-let fxLock = false;
-const comet = { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 };
+/* ---------- ambient: the idle loop + random-cadence comets (pooled, §2.10)
+   A 3-slot pool: the usual lone wanderer, and one visit in three a
+   SHOWER of three staggered streaks. The pool is its own lock. ---------- */
+const comets = [
+  { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 },
+  { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 },
+  { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 },
+];
+const cometAlive = () => comets[0].alive || comets[1].alive || comets[2].alive;
 function launchComet() {
-  if (fxLock || document.hidden || reduced() || Scenes.current !== 'hub') return;
-  fxLock = true;
-  comet.alive = true; comet.life = 0;
-  comet.x = -40; comet.y = H * (0.1 + Math.random() * 0.3);
-  comet.vx = 0.38 + Math.random() * 0.2; comet.vy = 0.06 + Math.random() * 0.05;
+  if (document.hidden || reduced() || Scenes.current !== 'hub') return;
+  let c = null;
+  for (const k of comets) if (!k.alive) { c = k; break; }
+  if (!c) return;
+  c.alive = true; c.life = 0;
+  c.x = -40; c.y = H * (0.1 + Math.random() * 0.3);
+  c.vx = 0.38 + Math.random() * 0.2; c.vy = 0.06 + Math.random() * 0.05;
 }
-function drawComet(dt) {
-  comet.life += dt; comet.x += comet.vx * dt; comet.y += comet.vy * dt;
-  const fade = Math.min(1, comet.life / 300) * Math.max(0, 1 - (comet.x / (W + 80)));
-  ctx.strokeStyle = `rgba(207,216,255,${0.7 * fade})`;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.moveTo(comet.x, comet.y);
-  ctx.lineTo(comet.x - 90 * comet.vx, comet.y - 90 * comet.vy); ctx.stroke();
-  if (comet.x > W + 80) { comet.alive = false; fxLock = false; }
+function drawComets(dt) {
+  for (const c of comets) {
+    if (!c.alive) continue;
+    c.life += dt; c.x += c.vx * dt; c.y += c.vy * dt;
+    const fade = Math.min(1, c.life / 300) * Math.max(0, 1 - (c.x / (W + 80)));
+    ctx.strokeStyle = `rgba(207,216,255,${0.7 * fade})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x - 90 * c.vx, c.y - 90 * c.vy); ctx.stroke();
+    if (c.x > W + 80) c.alive = false;
+  }
 }
-let cometTimer = null;
+let cometTimer = null, showerT1 = null, showerT2 = null;
 function scheduleComet() {
   clearTimeout(cometTimer);
-  cometTimer = setTimeout(() => { launchComet(); scheduleComet(); }, 24000 + Math.random() * 26000);
+  cometTimer = setTimeout(() => {
+    launchComet();
+    /* one visit in three, the comet arrives as a shower of three */
+    if (Math.random() < 0.34) {
+      clearTimeout(showerT1); clearTimeout(showerT2);
+      showerT1 = setTimeout(launchComet, 700 + Math.random() * 500);
+      showerT2 = setTimeout(launchComet, 1600 + Math.random() * 700);
+    }
+    scheduleComet();
+  }, 24000 + Math.random() * 26000);
 }
 
 /* ---------- the sonar: the Artifact calls out on its own slow clock.
@@ -1784,6 +2425,73 @@ function markSurveyed(slug) {
   if (a) a.querySelector('.pa-tick').hidden = false;
 }
 surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-tick').hidden = false; });
+
+/* ---------- The Surveyor's Log: make the surveyed set visible + rewarding.
+   Builds on markSurveyed / 'orrery-surveyed' (above). Data-driven off WORLDS,
+   so it is correct at 7 worlds or 10. Event-driven: zero rAF, zero canvas.
+   ANCHOR: directly after the `surveyed.forEach(...)` tick-restore line. ---------- */
+(() => {
+  const plate = document.getElementById('survey-log');
+  if (!plate) return;                                 /* no plate → nothing to log */
+  const dotsWrap = plate.querySelector('.survey-dots');
+  const countEl  = plate.querySelector('.survey-count');
+  const total = WORLDS.length;
+  const COMPLETE_KEY = 'orrery-survey-complete';
+  const HONOR = 'Master surveyor. The orrery remembers.';
+
+  /* one ringed dot per world, in registry order, built once */
+  const dots = WORLDS.map((w) => {
+    const d = document.createElement('span');
+    d.className = 'survey-dot';
+    d.dataset.world = w.slug;
+    d.title = w.label;                                /* sighted hover tooltip */
+    dotsWrap.appendChild(d);
+    return d;
+  });
+
+  const countSurveyed = () => WORLDS.reduce((n, w) => n + (surveyed.has(w.slug) ? 1 : 0), 0);
+
+  let sealed = false;
+  function showSeal() {                               /* reuse the konami seal's look; distinct node */
+    if (sealed || plate.querySelector('.log-seal')) { sealed = true; return; }
+    const seal = document.createElement('span');
+    seal.className = 'konami-seal log-seal';          /* inherits the gold visual + rm-gated glow */
+    seal.title = HONOR;
+    (plate.querySelector('.survey-plate') || plate).appendChild(seal);
+    sealed = true;
+  }
+
+  function paint() {
+    const n = countSurveyed();
+    for (const d of dots) d.classList.toggle('is-surveyed', surveyed.has(d.dataset.world));
+    if (countEl) countEl.textContent = n + '/' + total;
+    const done = n >= total;
+    plate.setAttribute('aria-label',
+      done ? ('All ' + total + ' worlds surveyed. Master surveyor.')
+           : (n + ' of ' + total + ' worlds surveyed'));
+    if (done && store.get(COMPLETE_KEY) === '1') showSeal();   /* already earned this tab */
+  }
+
+  function maybeCompletionRite() {
+    if (countSurveyed() < total) return;
+    if (store.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once per session */
+    store.set(COMPLETE_KEY, '1');
+    showSeal();
+    try { Orrery.events.dispatchEvent(new CustomEvent('query')); } catch (_) {}  /* aurora chime answers */
+    const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
+    if (hint) {
+      const prior = hint.dataset.home || hint.textContent;       /* restore the TRUE resting line */
+      hint.textContent = HONOR;
+      setTimeout(() => { if (hint.textContent === HONOR) hint.textContent = prior; }, 10000);
+    }
+  }
+
+  /* live: setScene runs markSurveyed, THEN dispatches 'scene' — by the time we
+     hear it the set already holds the world just entered. Re-read + repaint. */
+  Orrery.events.addEventListener('scene', () => { paint(); maybeCompletionRite(); });
+
+  paint();                                            /* initial pose from the restored set */
+})();
 
 function setScene(name, { instant = false } = {}) {
   if (Scenes.current === name) return;
@@ -1909,6 +2617,138 @@ addEventListener('hashchange', () => {
   route(false);
 });
 
+/* ============================================================
+   THE GRAND TOUR — a hands-free kiosk autopilot that surveys every
+   world in WORLDS order. It travels ONLY through the public router:
+   travel() (which sets location.hash = '#/world/<slug>') to go out,
+   location.hash = '#/' to come home — so the warp streak, the score
+   events, and markSurveyed all fire naturally. It never calls setScene.
+   The tour clock rides the shared Ticker, so a hidden tab pauses it
+   (document.hidden) and a revealed tab resumes it. Any user input
+   (pointerdown / keydown / wheel / touchstart) ends it at once:
+   timers cleared, label restored, the current scene left as-is.
+   ============================================================ */
+const TourController = (() => {
+  const btn = document.getElementById('tour-toggle');
+  if (!btn) return null;                               /* no control (no-JS) → no tour */
+  const labelEl = btn.querySelector('.tour-label');
+  const plate = document.getElementById('tour-progress');
+  const hint = document.querySelector('.hub-hint');
+  /* the one true resting line, stashed at parse: every swap-and-restore
+     feature (tour closing note, surveyor honor) restores THIS, never a
+     captured value (two features on one node were trading lies) */
+  if (hint && !hint.dataset.home) hint.dataset.home = hint.textContent;
+
+  const DWELL = 9000, BREATHE = 2500, CLOSING_MS = 8000;
+  const CLOSING_NOTE = 'The survey is complete. The instruments are yours.';
+  const N = WORLDS.length;
+
+  /* the itinerary: world · breathe · world · breathe · … · world · closing */
+  const legs = [];
+  for (let i = 0; i < N; i++) { legs.push({ t: 'world', i }); if (i < N - 1) legs.push({ t: 'orbit' }); }
+  legs.push({ t: 'closing' });
+
+  const CANCEL = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+  const OPTS = { capture: true, passive: true };
+  let running = false, legIx = 0, legMs = 0, closeT = null, armT = null, hintSaved = null, suppressUntil = 0;
+  let expectedHash = null;                              /* browser Back/Forward must end the tour;
+                                                           null = between legs, accept any land */
+  const onHash = () => { if (running && expectedHash !== null && (location.hash || '#/') !== expectedHash) stop(); };
+
+  const onInput = () => { if (running) stop(); };       /* ANY input ends the tour immediately */
+  function addCancel() { for (const e of CANCEL) addEventListener(e, onInput, OPTS); }
+  function rmCancel()  { for (const e of CANCEL) removeEventListener(e, onInput, OPTS); }
+
+  function setUI(run) {
+    btn.setAttribute('aria-pressed', String(run));
+    btn.setAttribute('aria-label', run ? 'End the grand tour' : 'Start the grand tour');
+    if (labelEl) labelEl.textContent = run ? 'End tour' : 'Tour';
+  }
+  function plateSay(txt) { if (plate) { plate.hidden = false; plate.textContent = txt; } }  /* aria-live */
+  function plateHide()   { if (plate) { plate.hidden = true; plate.textContent = ''; } }
+
+  function showClosing() {
+    if (hint && hintSaved === null) hintSaved = hint.textContent;   /* capture live, never hardcode */
+    if (hint) hint.textContent = CLOSING_NOTE;
+    clearTimeout(closeT);
+    closeT = setTimeout(restore, CLOSING_MS);
+  }
+  function restore() {
+    clearTimeout(closeT); closeT = null;
+    if (hint && hintSaved !== null) { hint.textContent = hint.dataset.home || hintSaved; hintSaved = null; }
+    plateHide();
+  }
+
+  function enterLeg(ix) {
+    legIx = ix; legMs = 0;
+    const leg = legs[ix];
+    if (!leg || leg.t === 'closing') { finish(); return; }
+    if (leg.t === 'world') {
+      expectedHash = '#/world/' + WORLDS[leg.i].slug;
+      plateSay('Stop ' + (leg.i + 1) + ' of ' + N);
+      travel(WORLDS[leg.i].slug);
+    }
+    else { expectedHash = '#/'; location.hash = '#/'; } /* orbit breather: home via the router */
+  }
+
+  function tick(dt) {
+    if (!running) return false;                          /* stopped → self-remove from the Ticker */
+    if (document.hidden) return true;                    /* hidden tab pauses the tour clock */
+    const leg = legs[legIx];
+    if (!leg || leg.t === 'closing') return false;
+    legMs += dt;
+    if (legMs >= (leg.t === 'world' ? DWELL : BREATHE)) enterLeg(legIx + 1);
+    return running;                                      /* finish() flips this false mid-tick */
+  }
+
+  function teardown() {                                  /* shared reset for stop + finish */
+    running = false;
+    Ticker.remove(tick);
+    clearTimeout(armT); armT = null;
+    rmCancel();
+    removeEventListener('hashchange', onHash);
+    setUI(false);
+    suppressUntil = performance.now() + 350;             /* a click trailing a cancel must not restart */
+  }
+  function stop() {                                      /* user cancel: scene stays, no closing note */
+    if (!running) return;
+    teardown();
+    plateHide();
+  }
+  function finish() {                                    /* natural completion: land home + closing note */
+    if (!running) return;
+    teardown();
+    location.hash = '#/';
+    plateSay('Survey complete');                         /* the accessible completion cue */
+    showClosing();
+  }
+  function advance() { if (running) enterLeg(legIx + 1); }
+
+  function start() {
+    if (running) return;
+    restore();                                           /* a lingering closing note yields to the new run */
+    running = true; legIx = 0; legMs = 0; expectedHash = null;
+    setUI(true);
+    /* a start inside the ~0.5s warp window would be swallowed by
+       Scenes.transitioning and silently skip stop 1: defer past the land
+       (expectedHash stays null so the pending land does not read as Back) */
+    if (Scenes.transitioning) { setTimeout(() => { if (running) enterLeg(0); }, 560); }
+    else enterLeg(0);                                    /* from the hub: warp to world 1 */
+    Ticker.add(tick);                                    /* the tour clock joins the shared rAF */
+    addEventListener('hashchange', onHash);              /* Back/Forward ends the tour */
+    clearTimeout(armT);
+    armT = setTimeout(() => { if (running) addCancel(); }, 0);  /* let the starting gesture finish first */
+  }
+
+  btn.addEventListener('click', () => {
+    if (running) { stop(); return; }                     /* explicit toggle-off (pointer + keyboard) */
+    if (performance.now() < suppressUntil) return;       /* swallow the click riding a just-fired cancel */
+    start();
+  });
+
+  return { start, stop, advance, get running() { return running; } };
+})();
+
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
    ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
@@ -1930,6 +2770,7 @@ function bootOrrery() {
   setRM();
   route(true);
   if (!reduced()) Orrery.startAmbient();
+  runApproach();                                     /* first-visit arrival cinematic */
   /* re-measure the arc once type has settled (font metrics can shift the copy block) */
   setTimeout(() => { measureOrbit(); drawStatic(); paintMedallions(); }, 350);
   /* no sonar arm here: setScene('hub') schedules it on every hub arrival,
@@ -1949,6 +2790,49 @@ function paintMedallions() {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
   });
+}
+
+/* ---------- THE APPROACH: the once-per-session arrival cinematic ----------
+   First hub visit only. You drift in from the dark and the instruments wake.
+   All motion lives in CSS (03c), keyed off html.approaching; this only flips
+   the class, sounds one sonar mid-drift, and guarantees the settle. Skips
+   entirely for reduced motion, for a return visit (sessionStorage), and for
+   any deep link into a world. ANY input aborts straight to the settled pose. */
+function runApproach() {
+  if (reduced()) return;                        /* rm: the page simply arrives settled */
+  if (Scenes.current !== 'hub') return;         /* a deep link owns the frame; no intro */
+  if (store.get('orrery-approach')) return;     /* seen this session: reloads skip */
+  store.set('orrery-approach', '1');            /* mark NOW: even an abort counts as seen */
+
+  html.classList.add('approached');             /* permanent: suppresses the base hub rise-in */
+  html.classList.add('approaching');            /* transient: drives the cinematic */
+
+  let done = false, endT = 0, pingT = 0;
+  const finish = () => {
+    if (done) return; done = true;
+    clearTimeout(endT); clearTimeout(pingT);
+    html.classList.remove('approaching');       /* every animation resolves to its settled base */
+    removeEventListener('pointerdown', skip, true);
+    removeEventListener('keydown', skip, true);
+    removeEventListener('wheel', skip, true);
+  };
+  const skip = () => finish();                   /* any input drops instantly to settled */
+  /* capture-phase + non-blocking: we never preventDefault, so the audio
+     ignition's own pointerup/keydown/click listeners still fire underneath */
+  addEventListener('pointerdown', skip, { capture: true, passive: true });
+  addEventListener('keydown', skip, { capture: true });
+  addEventListener('wheel', skip, { capture: true, passive: true });
+
+  /* ~2.2s in, the instrument calls once: the visual ring + its wet blip. The
+     score answers only if it is truly running (the sonar handler guards ready). */
+  pingT = setTimeout(() => {
+    if (done || document.hidden || Scenes.current !== 'hub') return;
+    if (!skyTask) Orrery.startAmbient();         /* the ring needs the loop */
+    if (window.SphereForge && !reduced()) SphereForge.ping();
+    Orrery.events.dispatchEvent(new CustomEvent('sonar'));
+  }, 2200);
+
+  endT = setTimeout(finish, 4600);               /* ~4.5s: the settle, class removed */
 }
 
 
@@ -3021,7 +3905,7 @@ const WorldFX = (() => {
 
   function start(sceneName) {
     stopAll();
-    const map = { 'dust-sea': 'dune', 'velocity': 'velocity', 'grid': 'grid', 'abyssal': 'abyssal', 'arcadia': 'arcadia', 'aurora': 'aurora', 'uncharted': 'draft' };
+    const map = { 'dust-sea': 'dune', 'velocity': 'velocity', 'grid': 'grid', 'abyssal': 'abyssal', 'arcadia': 'arcadia', 'aurora': 'aurora', 'uncharted': 'draft', 'beacons': 'beacons', 'stormwall': 'storm', 'drillyard': 'drillyard', 'archive': 'archive' };
     const name = map[sceneName];
     if (!name || !fx[name]) return;
     if (window.Orrery.reduced()) { fx[name].rm && fx[name].rm(); return; }
@@ -3839,6 +4723,941 @@ const WorldFX = (() => {
     },
   };
 
+  /* ============================================================
+     THE ARCHIVE: probability fans + archival mark-rain
+     caps: <=128 pooled nodes (rebuilt in place) · <=9 rain columns ·
+     one prebaked glow sprite · gradients built once, never per frame
+     ============================================================ */
+  let ARCH_GLOW = null;
+  function archiveGlow() {
+    if (ARCH_GLOW) return ARCH_GLOW;
+    const s = 48, c = document.createElement('canvas'); c.width = s; c.height = s;
+    const x = c.getContext('2d');
+    const gr = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    gr.addColorStop(0, 'rgba(255,231,170,0.9)');
+    gr.addColorStop(0.4, 'rgba(255,210,130,0.32)');
+    gr.addColorStop(1, 'rgba(255,210,130,0)');
+    x.fillStyle = gr; x.fillRect(0, 0, s, s);
+    ARCH_GLOW = c; return c;
+  }
+  function archiveMakeState(w, h) {
+    const CAP = 128;
+    const st = {
+      CAP, count: 0,
+      ax: new Float32Array(CAP), ay: new Float32Array(CAP),
+      cx: new Float32Array(CAP), cy: new Float32Array(CAP),
+      parent: new Int16Array(CAP), depth: new Uint8Array(CAP),
+      ang: new Float32Array(CAP), wt: new Float32Array(CAP),
+      br: new Uint8Array(CAP), gd: new Float32Array(CAP),
+      rootX: 0, rootY: 0,
+      cycleT0: -1, GROW: 3500, HOLD: 8000, DUR: 9000, shimmer: -1,
+      rain: [],
+    };
+    const cols = Math.min(9, Math.max(3, Math.floor(w / 160)));
+    for (let i = 0; i < cols; i++) st.rain.push({
+      x: (i + 0.5) * (w / cols) + (Math.random() - 0.5) * 40,
+      y: Math.random() * h,
+      vy: 0.008 + Math.random() * 0.014,
+      seed: (Math.random() * 97) | 0,
+    });
+    return st;
+  }
+  function archiveBuildFan(s, st) {          /* rebuilds the pool IN PLACE — zero alloc */
+    const W = s.w, H = s.h, rnd = Math.random;
+    const MAXD = 4 + (rnd() < 0.5 ? 0 : 1);
+    st.rootX = W * (0.28 + rnd() * 0.44); st.rootY = H * 0.92;
+    st.ax[0] = st.rootX; st.ay[0] = st.rootY;
+    st.parent[0] = -1; st.depth[0] = 0; st.ang[0] = Math.PI / 2;
+    st.wt[0] = 1; st.br[0] = 1; st.gd[0] = 0;
+    let count = 1, levelStart = 0, levelEnd = 1;
+    const baseLen = Math.min(H * 0.155, 118);
+    for (let d = 1; d <= MAXD && count < st.CAP; d++) {
+      const len = baseLen * Math.pow(0.72, d - 1);
+      const spread = d === 1 ? 1.15 : 0.66;
+      const gdBase = d / (MAXD + 1);
+      for (let pi = levelStart; pi < levelEnd && count < st.CAP; pi++) {
+        let kids = d === 1 ? 3 + (rnd() * 3 | 0) : d === MAXD ? 1 + (rnd() * 2 | 0) : 1 + (rnd() * 3 | 0);
+        const first = count; let sum = 0;
+        for (let k = 0; k < kids && count < st.CAP; k++) {
+          const off = spread * ((k + 0.5) / kids * 2 - 1) + (rnd() - 0.5) * 0.22;
+          const a = st.ang[pi] + off, raw = 0.25 + rnd() * 0.8;
+          st.ang[count] = a;
+          st.ax[count] = st.ax[pi] + Math.cos(a) * len;
+          st.ay[count] = st.ay[pi] - Math.sin(a) * len;
+          st.parent[count] = pi; st.depth[count] = d; st.wt[count] = raw; st.br[count] = 0;
+          st.gd[count] = Math.min(0.9, gdBase + rnd() * 0.12);
+          sum += raw; count++;
+        }
+        if (count > first && sum > 0) { const pw = st.wt[pi]; for (let c = first; c < count; c++) st.wt[c] = pw * (st.wt[c] / sum); }
+      }
+      levelStart = levelEnd; levelEnd = count;
+    }
+    st.count = count;
+    let cur = 0;                             /* the chosen future: greedy max-weight walk */
+    for (;;) {
+      let best = -1, bw = -1;
+      for (let i = cur + 1; i < count; i++) if (st.parent[i] === cur && st.wt[i] > bw) { bw = st.wt[i]; best = i; }
+      if (best < 0) break;
+      st.br[best] = 1; cur = best;
+    }
+  }
+  function archiveGrow(st, i, gp) {
+    let lg = (gp - st.gd[i]) / 0.30;
+    if (lg < 0) return 0; if (lg > 1) lg = 1;
+    return lg * lg * (3 - 2 * lg);
+  }
+  function archiveRain(g, s, st, dt) {
+    const H = s.h, ROWH = 26, R = st.rain;
+    for (let i = 0; i < R.length; i++) {
+      const c = R[i];
+      c.y += c.vy * dt;
+      if (c.y > H + ROWH * 4) c.y = -ROWH * (2 + (c.seed % 5));
+      for (let k = 0; k < 7; k++) {
+        const my = c.y - k * ROWH;
+        if (my < -6 || my > H + 6) continue;
+        const a = (1 - k / 7) * 0.14, kind = (k + c.seed) % 3;
+        g.fillStyle = 'rgba(236,194,122,' + a.toFixed(3) + ')';
+        if (kind === 0) g.fillRect(c.x - 3, my, 6, 1.4);
+        else if (kind === 1) { g.beginPath(); g.arc(c.x, my, 1.1, 0, 7); g.fill(); }
+        else g.fillRect(c.x - 0.7, my - 3, 1.4, 6);
+      }
+    }
+  }
+  function archiveDrawFan(g, st, gp, cp, bp) {
+    const n = st.count, cx = st.cx, cy = st.cy;
+    cx[0] = st.ax[0]; cy[0] = st.ay[0];      /* prepass: grow each branch from its parent's live tip */
+    for (let i = 1; i < n; i++) {
+      const p = st.parent[i], lg = archiveGrow(st, i, gp);
+      cx[i] = cx[p] + (st.ax[i] - cx[p]) * lg;
+      cy[i] = cy[p] + (st.ay[i] - cy[p]) * lg;
+    }
+    for (let i = 1; i < n; i++) {            /* pass 1: every branch, weight -> brightness/width */
+      const lg = archiveGrow(st, i, gp); if (lg <= 0.002) continue;
+      const p = st.parent[i]; let a, lw;
+      if (st.br[i]) { a = 0.72 + 0.28 * bp; lw = 1.7 + st.wt[i] * 2.4; g.strokeStyle = 'rgba(255,224,158,' + a.toFixed(3) + ')'; }
+      else {
+        a = (0.10 + st.wt[i] * 0.5) * (1 - cp); if (a <= 0.004) continue;
+        lw = 0.5 + st.wt[i] * 2.1; const wm = st.wt[i];
+        g.strokeStyle = 'rgba(' + ((142 + 94 * wm) | 0) + ',' + ((162 + 32 * wm) | 0) + ',' + ((232 - 110 * wm) | 0) + ',' + a.toFixed(3) + ')';
+      }
+      g.lineWidth = lw;
+      g.beginPath(); g.moveTo(cx[p], cy[p]); g.lineTo(cx[i], cy[i]); g.stroke();
+    }
+    g.shadowColor = 'rgba(255,214,140,0.9)'; g.shadowBlur = 8;   /* pass 2: the chosen path burns */
+    g.strokeStyle = 'rgba(255,236,190,' + (0.55 + 0.35 * bp).toFixed(3) + ')'; g.lineWidth = 1.4;
+    for (let i = 1; i < n; i++) {
+      if (!st.br[i]) continue; const lg = archiveGrow(st, i, gp); if (lg <= 0.02) continue;
+      const p = st.parent[i];
+      g.beginPath(); g.moveTo(cx[p], cy[p]); g.lineTo(cx[i], cy[i]); g.stroke();
+    }
+    g.shadowBlur = 0;
+    const gl = archiveGlow();                /* pass 3: glow at the lit nodes */
+    for (let i = 0; i < n; i++) {
+      if (!st.br[i]) continue; const lg = i === 0 ? 1 : archiveGrow(st, i, gp); if (lg <= 0.05) continue;
+      const sz = (i === 0 ? 30 : 12 + st.depth[i] * 2.5) * (0.7 + 0.35 * bp);
+      g.globalAlpha = (0.45 + 0.45 * bp) * lg;
+      g.drawImage(gl, cx[i] - sz / 2, cy[i] - sz / 2, sz, sz);
+    }
+    g.globalAlpha = 1;
+    for (let i = 0; i < n; i++) {             /* pass 4: node markers */
+      const lg = i === 0 ? 1 : archiveGrow(st, i, gp); if (lg <= 0.08) continue;
+      const br = st.br[i]; let a = br ? 0.9 : (0.25 + st.wt[i] * 0.5) * (1 - cp); if (a <= 0.02) continue;
+      g.fillStyle = br ? 'rgba(255,240,205,' + a.toFixed(3) + ')' : 'rgba(236,194,122,' + a.toFixed(3) + ')';
+      g.beginPath(); g.arc(cx[i], cy[i], br ? 2.2 : 1 + st.wt[i] * 1.4, 0, 7); g.fill();
+    }
+  }
+  function archiveShimmer(g, st, clock) {     /* the dice-shimmer of a re-roll */
+    const n = st.count; g.fillStyle = 'rgba(255,240,200,0.9)';
+    for (let s2 = 0; s2 < 16; s2++) {
+      const i = (Math.random() * n) | 0, r = 1 + Math.random() * 2;
+      g.fillRect(st.ax[i] + (Math.random() - 0.5) * 10 - r, st.ay[i] + (Math.random() - 0.5) * 10 - r, r * 2, r * 2);
+    }
+  }
+  fx.archive = {
+    init(s) {
+      const st = archiveMakeState(s.w, s.h);
+      archiveBuildFan(s, st);
+      return st;
+    },
+    frame(s, st, dt, clock) {
+      const g = s.g;
+      g.clearRect(0, 0, s.w, s.h);
+      if (st.cycleT0 < 0) st.cycleT0 = clock;
+      archiveRain(g, s, st, dt);
+      if (st.shimmer >= 0 && clock - st.shimmer >= 520) { archiveBuildFan(s, st); st.cycleT0 = clock; st.shimmer = -1; }
+      let el = clock - st.cycleT0, gp, cp;
+      if (el >= st.DUR) { archiveBuildFan(s, st); st.cycleT0 = clock; el = 0; }   /* collapse -> new root */
+      if (el < st.GROW) { gp = el / st.GROW; cp = 0; }
+      else if (el < st.HOLD) { gp = 1; cp = 0; }
+      else { gp = 1; cp = (el - st.HOLD) / (st.DUR - st.HOLD); }
+      const bp = 0.5 + 0.5 * Math.sin(clock * 0.004);
+      archiveDrawFan(g, st, gp, cp, bp);
+      if (st.shimmer >= 0) archiveShimmer(g, st, clock);
+    },
+    rm() {                                     /* designed static pose: one grown fan, chosen path lit */
+      const c = document.querySelector('[data-canvas="archive"]');
+      if (!c || !c.parentElement) return;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const s = { w: r.width, h: r.height }, st = archiveMakeState(r.width, r.height);
+      archiveBuildFan(s, st);
+      g.clearRect(0, 0, r.width, r.height);
+      archiveRain(g, s, st, 0);
+      archiveDrawFan(g, st, 1, 0, 1);
+    },
+  };
+  /* the toy: "Consult the archive" re-rolls the fan with a dice-shimmer and a new bright path */
+  const consultBtn = document.getElementById('consult-archive');
+  if (consultBtn) {
+    consultBtn.addEventListener('click', () => {
+      window.Orrery.events.dispatchEvent(new CustomEvent('consult'));
+      if (window.Orrery.reduced()) { fx.archive.rm && fx.archive.rm(); return; }   /* rm: repaint a fresh frozen fan */
+      if (activeName === 'archive' && activeState) activeState.shimmer = window.Orrery.ticker.clock;
+    });
+  }
+
+  /* ============================================================
+     THE DRILLYARD: zero-g formation drills inside the practice cube
+     caps: 21 lights (3 squads x 7) · 1 lance · 8 corners · 5 gate pts
+     zero per-frame alloc · zero gradients · every ~20s the arena turns
+     and a different face becomes down (down is a direction you choose)
+     ============================================================ */
+  const DY_F = 4.2;
+  const DY_CORN = new Float32Array([-1,-1,-1, 1,-1,-1, 1,1,-1, -1,1,-1, -1,-1,1, 1,-1,1, 1,1,1, -1,1,1]);
+  const DY_EDGE = [0,1, 1,2, 2,3, 3,0, 4,5, 5,6, 6,7, 7,4, 0,4, 1,5, 2,6, 3,7];
+  const DY_FACE = [[0,1,2,3], [4,5,6,7], [0,1,5,4], [3,2,6,7], [0,3,7,4], [1,2,6,5]];
+  const DY_FNORM = [[0,0,-1], [0,0,1], [0,-1,0], [0,1,0], [-1,0,0], [1,0,0]];
+  const DY_GATE = new Float32Array([0.26,0,1, 0,0.26,1, -0.26,0,1, 0,-0.26,1, 0,0,1]);
+  const DY_HUE = ['127,178,229', '102,255,158', '255,196,94'];
+  let dyLive = null, dyRmForm = 0;
+
+  function dyBuild(w, h) {
+    const L = new Array(21);
+    for (let i = 0; i < 21; i++) L[i] = {
+      sq: (i / 7) | 0, j: i % 7,
+      x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0,
+      sx: 0, sy: 0, sc: 1,
+      frozen: false, thawAt: 0, rescuer: -1, rescuing: -1, flash: 0,
+      fvx: 0, fvy: 0, fvz: 0,
+    };
+    const shell = new Float32Array(63);                /* golden-angle hull, baked once */
+    for (let i = 0; i < 21; i++) {
+      const t = (i + 0.5) / 21, y = 1 - 2 * t, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.399963;
+      shell[i * 3] = Math.cos(a) * r * 0.62; shell[i * 3 + 1] = y * 0.62; shell[i * 3 + 2] = Math.sin(a) * r * 0.62;
+    }
+    return {
+      w, h, L, shell,
+      cx: w / 2, cy: h * 0.46, S: Math.min(w, h) * 0.36,
+      px: new Float32Array(8), py: new Float32Array(8), pz: new Float32Array(8),
+      gx: new Float32Array(5), gy: new Float32Array(5),
+      pit: 0.35, yaw: 0.65, tpit: 0.35, tyaw: 0.65,
+      cosy: 1, siny: 0, cosx: 1, sinx: 0,
+      form: 0, nextForm: -1, nextTurn: -1, nextLance: -1,
+      lance: { on: false, t0: 0, a: 0, b: 0 },
+    };
+  }
+
+  function dySetForm(st, f) {
+    st.form = f;
+    const L = st.L;
+    if (f === 0) {                                     /* wedge: each squad owns its own plane; the apex leads */
+      for (let i = 0; i < 21; i++) {
+        const q = L[i], k = (q.j + 1) >> 1, side = (q.j & 1) ? 1 : -1;
+        const lat = q.j === 0 ? 0 : side * 0.15 * k;
+        const back = 0.17 * (q.j === 0 ? 0 : k);
+        if (q.sq === 0)      { q.tx = 0.30 - back; q.ty = -0.42; q.tz = lat; }
+        else if (q.sq === 1) { q.tx = lat; q.ty = 0.30 - back; q.tz = 0.42; }
+        else                 { q.tx = 0.42; q.ty = lat; q.tz = 0.30 - back; }
+      }
+    } else if (f === 1) {                              /* sphere-shell: one shared hull, squads interleaved */
+      for (let i = 0; i < 21; i++) { const q = L[i]; q.tx = st.shell[i*3]; q.ty = st.shell[i*3+1]; q.tz = st.shell[i*3+2]; }
+    } else if (f === 2) {                              /* scatter-and-freeze: new ground every call, then hold */
+      for (let i = 0; i < 21; i++) { const q = L[i];
+        q.tx = (Math.random() * 2 - 1) * 0.72; q.ty = (Math.random() * 2 - 1) * 0.72; q.tz = (Math.random() * 2 - 1) * 0.72; }
+    } else {                                           /* converge: one file through the marked gate */
+      for (let i = 0; i < 21; i++) { const q = L[i], o = q.sq * 7 + q.j;
+        q.tx = (o & 1) ? 0.05 : -0.05; q.ty = ((o % 3) - 1) * 0.05; q.tz = 0.92 - o * 0.075; }
+    }
+  }
+
+  function dyDraw(g, st, clock) {
+    g.clearRect(0, 0, st.w, st.h);
+    st.cosy = Math.cos(st.yaw); st.siny = Math.sin(st.yaw);
+    st.cosx = Math.cos(st.pit); st.sinx = Math.sin(st.pit);
+    const cy2 = st.cosy, sy2 = st.siny, cx2 = st.cosx, sx2 = st.sinx;
+    const S2 = st.S, cx3 = st.cx, cy3 = st.cy;
+
+    for (let i = 0; i < 8; i++) {
+      const x = DY_CORN[i*3], y = DY_CORN[i*3+1], z = DY_CORN[i*3+2];
+      const x1 = x * cy2 + z * sy2, z1 = z * cy2 - x * sy2;
+      const y1 = y * cx2 - z1 * sx2, z2 = y * sx2 + z1 * cx2;
+      const sc = DY_F / (DY_F + z2);
+      st.px[i] = cx3 + x1 * sc * S2; st.py[i] = cy3 + y1 * sc * S2; st.pz[i] = z2;
+    }
+
+    /* the chosen floor: whichever face is most "down" right now wears the amber */
+    let df = 0, best = -2;
+    for (let f = 0; f < 6; f++) {
+      const nx = DY_FNORM[f][0], ny = DY_FNORM[f][1], nz = DY_FNORM[f][2];
+      const z1 = nz * cy2 - nx * sy2;
+      const y1 = ny * cx2 - z1 * sx2;
+      if (y1 > best) { best = y1; df = f; }
+    }
+    const F4 = DY_FACE[df];
+    g.fillStyle = 'rgba(255,196,94,0.05)';
+    g.beginPath(); g.moveTo(st.px[F4[0]], st.py[F4[0]]);
+    for (let i = 1; i < 4; i++) g.lineTo(st.px[F4[i]], st.py[F4[i]]);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,196,94,0.14)'; g.lineWidth = 1; g.stroke();
+
+    /* the practice cube: far edges faint, near edges awake */
+    g.lineWidth = 1;
+    g.strokeStyle = 'rgba(127,178,229,0.18)';
+    g.beginPath();
+    for (let e = 0; e < 24; e += 2) {
+      const a = DY_EDGE[e], b = DY_EDGE[e + 1];
+      if (st.pz[a] + st.pz[b] < 0) continue;
+      g.moveTo(st.px[a], st.py[a]); g.lineTo(st.px[b], st.py[b]);
+    }
+    g.stroke();
+    g.strokeStyle = 'rgba(127,178,229,0.45)';
+    g.beginPath();
+    for (let e = 0; e < 24; e += 2) {
+      const a = DY_EDGE[e], b = DY_EDGE[e + 1];
+      if (st.pz[a] + st.pz[b] >= 0) continue;
+      g.moveTo(st.px[a], st.py[a]); g.lineTo(st.px[b], st.py[b]);
+    }
+    g.stroke();
+    g.fillStyle = 'rgba(127,178,229,0.5)';
+    for (let i = 0; i < 8; i++) { g.beginPath(); g.arc(st.px[i], st.py[i], 1.6, 0, 7); g.fill(); }
+
+    /* the gate: marked on one face; it dims when the face turns away */
+    for (let i = 0; i < 5; i++) {
+      const x = DY_GATE[i*3], y = DY_GATE[i*3+1], z = DY_GATE[i*3+2];
+      const x1 = x * cy2 + z * sy2, z1 = z * cy2 - x * sy2;
+      const y1 = y * cx2 - z1 * sx2, z2 = y * sx2 + z1 * cx2;
+      const sc = DY_F / (DY_F + z2);
+      st.gx[i] = cx3 + x1 * sc * S2; st.gy[i] = cy3 + y1 * sc * S2;
+    }
+    const gA = 0.22 + 0.55 * Math.max(0, -(cy2 * cx2));
+    g.strokeStyle = `rgba(255,196,94,${gA.toFixed(3)})`;
+    g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(st.gx[0], st.gy[0]);
+    g.lineTo(st.gx[1], st.gy[1]); g.lineTo(st.gx[2], st.gy[2]); g.lineTo(st.gx[3], st.gy[3]);
+    g.closePath(); g.stroke();
+    g.fillStyle = `rgba(255,196,94,${(gA * 0.7).toFixed(3)})`;
+    g.beginPath(); g.arc(st.gx[4], st.gy[4], 1.8, 0, 7); g.fill();
+
+    /* squads: project all, then draw per squad so glow batches stay cheap */
+    const L = st.L;
+    for (let i = 0; i < 21; i++) {
+      const q = L[i];
+      const x1 = q.x * cy2 + q.z * sy2, z1 = q.z * cy2 - q.x * sy2;
+      const y1 = q.y * cx2 - z1 * sx2, z2 = q.y * sx2 + z1 * cx2;
+      q.sc = DY_F / (DY_F + z2);
+      q.sx = cx3 + x1 * q.sc * S2; q.sy = cy3 + y1 * q.sc * S2;
+    }
+    g.shadowBlur = 10;
+    for (let sq = 0; sq < 3; sq++) {
+      g.shadowColor = `rgba(${DY_HUE[sq]},0.85)`;
+      g.fillStyle = `rgba(${DY_HUE[sq]},0.95)`;
+      for (let i = sq * 7; i < sq * 7 + 7; i++) {
+        const q = L[i]; if (q.frozen) continue;
+        g.beginPath(); g.arc(q.sx, q.sy, (q.flash > clock ? 3.4 : 2.3) * q.sc, 0, 7); g.fill();
+      }
+    }
+    g.shadowBlur = 0;
+    /* frozen cadets: dim, adrift, ringed in ice until a squadmate taps them in */
+    for (let i = 0; i < 21; i++) {
+      const q = L[i]; if (!q.frozen) continue;
+      g.fillStyle = 'rgba(150,165,190,0.35)';
+      g.beginPath(); g.arc(q.sx, q.sy, 2 * q.sc, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(150,165,190,0.45)'; g.lineWidth = 1;
+      g.beginPath(); g.arc(q.sx, q.sy, 4.2 * q.sc, 0, 7); g.stroke();
+    }
+
+    /* the practice lance: a brief straight beam between squads */
+    const ln = st.lance;
+    if (ln.on) {
+      const p = Math.min(1, (clock - ln.t0) / 260), aQ = L[ln.a], bQ = L[ln.b];
+      const a = Math.sin(Math.PI * p);
+      g.strokeStyle = `rgba(${DY_HUE[aQ.sq]},${(0.85 * a).toFixed(3)})`;
+      g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(aQ.sx, aQ.sy); g.lineTo(bQ.sx, bQ.sy); g.stroke();
+      g.fillStyle = `rgba(230,244,255,${(0.9 * a).toFixed(3)})`;
+      g.beginPath(); g.arc(bQ.sx, bQ.sy, 1.5 + 2.5 * p, 0, 7); g.fill();
+    }
+  }
+
+  fx.drillyard = {
+    init(s) {
+      const st = dyBuild(s.w, s.h);
+      dySetForm(st, 0);
+      for (let i = 0; i < 21; i++) {                   /* cadets enter from anywhere; the drill collects them */
+        const q = st.L[i];
+        q.x = (Math.random() * 2 - 1) * 0.9; q.y = (Math.random() * 2 - 1) * 0.9; q.z = (Math.random() * 2 - 1) * 0.9;
+      }
+      dyLive = st;
+      st.cleanup = () => { if (dyLive === st) dyLive = null; };
+      return st;
+    },
+    frame(s, st, dt, clock) {
+      const L = st.L, ln = st.lance;
+      if (st.nextForm < 0)  st.nextForm  = clock + 7000;   /* the shared clock never starts at 0 */
+      if (st.nextTurn < 0)  st.nextTurn  = clock + 12000;
+      if (st.nextLance < 0) st.nextLance = clock + 5000;
+
+      /* the arena turns: a new face becomes down, the squads simply agree */
+      if (clock >= st.nextTurn) {
+        st.nextTurn = clock + 19000 + Math.random() * 5000;
+        if (Math.random() < 0.5) st.tpit += (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2;
+        else st.tyaw += (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2;
+      }
+      st.yaw += dt * 0.000012; st.tyaw += dt * 0.000012;   /* the idle creep rides both, so easing stays true */
+      const rk = 1 - Math.exp(-dt / 1400);
+      st.pit += (st.tpit - st.pit) * rk;
+      st.yaw += (st.tyaw - st.yaw) * rk;
+
+      if (clock >= st.nextForm) { dySetForm(st, (st.form + 1) & 3); st.nextForm = clock + 8500 + Math.random() * 2500; }
+
+      /* fire a lance: shooter squad, victim in another squad, at most two iced */
+      if (!ln.on && clock >= st.nextLance) {
+        st.nextLance = clock + 4200 + Math.random() * 3600;
+        let nf = 0; for (let i = 0; i < 21; i++) if (L[i].frozen) nf++;
+        if (nf < 2) {
+          const sa = (Math.random() * 3) | 0, sb = (sa + 1 + ((Math.random() * 2) | 0)) % 3;
+          let a = -1, seen = 0;
+          for (let i = sa * 7; i < sa * 7 + 7; i++) { const q = L[i]; if (!q.frozen && q.rescuing < 0) { seen++; if (Math.random() < 1 / seen) a = i; } }
+          let b = -1; seen = 0;
+          for (let i = sb * 7; i < sb * 7 + 7; i++) { const q = L[i]; if (!q.frozen && q.rescuing < 0) { seen++; if (Math.random() < 1 / seen) b = i; } }
+          if (a >= 0 && b >= 0) { ln.on = true; ln.t0 = clock; ln.a = a; ln.b = b; }
+        }
+      }
+      if (ln.on && clock - ln.t0 >= 260) {
+        ln.on = false;
+        const v = L[ln.b];
+        if (!v.frozen) {                               /* the hit lands: dim, adrift, out of the drill */
+          v.frozen = true; v.thawAt = clock + 12000; v.rescuer = -1;
+          v.fvx = (Math.random() - 0.5) * 0.00008; v.fvy = (Math.random() - 0.5) * 0.00008; v.fvz = (Math.random() - 0.5) * 0.00008;
+          for (let k = 1; k < 7; k++) {                /* a squadmate peels off to tap them back in */
+            const ri = v.sq * 7 + ((v.j + k) % 7), c = L[ri];
+            if (!c.frozen && c.rescuing < 0) { c.rescuing = ln.b; v.rescuer = ri; break; }
+          }
+        }
+      }
+
+      const mk = 1 - Math.exp(-dt / 340);
+      for (let i = 0; i < 21; i++) {
+        const q = L[i];
+        if (q.frozen) {
+          q.x += q.fvx * dt; q.y += q.fvy * dt; q.z += q.fvz * dt;
+          if (q.x > 0.95 || q.x < -0.95) q.fvx = -q.fvx;
+          if (q.y > 0.95 || q.y < -0.95) q.fvy = -q.fvy;
+          if (q.z > 0.95 || q.z < -0.95) q.fvz = -q.fvz;
+          if (clock >= q.thawAt) {                     /* failsafe thaw so a bad day never strands a cadet */
+            q.frozen = false;
+            if (q.rescuer >= 0) { L[q.rescuer].rescuing = -1; q.rescuer = -1; }
+          }
+          continue;
+        }
+        let tx = q.tx, ty = q.ty, tz = q.tz;
+        if (q.rescuing >= 0) {
+          const v = L[q.rescuing];
+          if (!v.frozen) q.rescuing = -1;
+          else {
+            tx = v.x; ty = v.y; tz = v.z;
+            const dx = v.x - q.x, dy = v.y - q.y, dz = v.z - q.z;
+            if (dx * dx + dy * dy + dz * dz < 0.012) { /* the tap: back in the drill */
+              v.frozen = false; v.rescuer = -1; v.flash = clock + 500;
+              q.flash = clock + 300; q.rescuing = -1;
+            }
+          }
+        }
+        q.x += (tx - q.x) * mk; q.y += (ty - q.y) * mk; q.z += (tz - q.z) * mk;
+      }
+
+      dyDraw(s.g, st, clock);
+    },
+    rm() {                                             /* the held pose: mid-turn, wedges locked, one cadet adrift */
+      const c = document.querySelector('[data-canvas="drillyard"]');
+      if (!c || !c.parentElement) return;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const st = dyBuild(r.width, r.height);
+      dySetForm(st, dyRmForm);
+      for (let i = 0; i < 21; i++) { const q = st.L[i]; q.x = q.tx; q.y = q.ty; q.z = q.tz; }
+      st.pit = 0.62; st.yaw = 0.78;
+      const fz = st.L[16];
+      fz.frozen = true; fz.x += 0.34; fz.y -= 0.22; fz.z += 0.18;
+      dyDraw(g, st, 0);
+    },
+  };
+  const callDrill = document.getElementById('call-drill');
+  if (callDrill) {
+    callDrill.addEventListener('click', () => {
+      if (dyLive) {                                    /* live arena: the next drill starts now */
+        dySetForm(dyLive, (dyLive.form + 1) & 3);
+        dyLive.nextForm = window.Orrery.ticker.clock + 8500;
+      } else if (window.Orrery.reduced()) {            /* rm: swap the held pose, one repaint, no motion */
+        dyRmForm = (dyRmForm + 1) & 3;
+        fx.drillyard.rm();
+      }
+      window.Orrery.events.dispatchEvent(new CustomEvent('drill'));
+    });
+  }
+
+  /* ============================================================
+     STORMWALL: the living weather — wall transit, light INSIDE the
+     wall, spark streams ahead of it, shelled flora that trusts the calm
+     caps: wall 3 polylines x 26 rows · sparks 90 · flashes 4 · buds 4
+     ============================================================ */
+  let stormCtl = null;                                 /* the toy's line to the live state */
+  const SW_ROWS = 26;
+  const SW_LAYERS = [                                  /* the pale fringe leads; the dark core follows */
+    { off: -74, col: 'rgba(46,52,78,0.88)', a1: 46, k1: 5.1, w1: 0.00050, p1: 0.7, a2: 22, k2: 11.0, w2: 0.00034, p2: 3.1 },
+    { off: -34, col: 'rgba(30,34,56,0.94)', a1: 38, k1: 6.3, w1: 0.00043, p1: 2.9, a2: 18, k2: 13.0, w2: 0.00047, p2: 0.4 },
+    { off:   0, col: 'rgba(17,19,34,0.97)', a1: 30, k1: 7.4, w1: 0.00056, p1: 5.0, a2: 14, k2: 16.0, w2: 0.00039, p2: 1.8 },
+  ];
+  const SW_FLK = [0.9, 0.25, 0.7, 0.3, 0.12, 0.05];    /* stutter envelope: two crests, strobe-safe */
+  function swGlow() {                                  /* interior-light sprite: baked ONCE per init */
+    const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(128, 128, 8, 128, 128, 128);
+    g.addColorStop(0, 'rgba(226,236,255,0.85)');
+    g.addColorStop(0.3, 'rgba(185,169,255,0.42)');
+    g.addColorStop(0.7, 'rgba(150,140,235,0.12)');
+    g.addColorStop(1, 'rgba(150,140,235,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    return c;
+  }
+  function swSpawn(st, x, hY, mode) {
+    for (const q of st.sparks) {
+      if (q.on) continue;
+      q.on = true; q.mode = mode; q.life = 0; q.seed = Math.random() * 7;
+      if (mode === 1) {                                /* storm: race left, low over the plain */
+        q.x = x + Math.random() * 40;
+        q.baseY = hY - 8 - Math.random() * 104;
+        q.y = q.baseY;
+        q.vx = -(0.26 + Math.random() * 0.22); q.vy = 0;
+        q.max = 1;
+      } else {                                         /* calm: the plain holds its breath */
+        q.x = x; q.y = hY - 2;
+        q.vx = 0; q.vy = -(0.016 + Math.random() * 0.030);
+        q.max = 5200 + Math.random() * 2600;
+      }
+      return;
+    }
+  }
+  function swBud(g, b, glow) {
+    const r = b.r, o = b.o, h = r * (0.52 + 0.44 * o); /* the dome rises as it opens */
+    g.fillStyle = 'rgba(10,8,20,0.97)';
+    g.beginPath();                                     /* side shells part outward with o */
+    g.ellipse(b.x - r * (0.34 + 0.30 * o), b.y, r * 0.62, h * 0.82, -0.22 - 0.5 * o, Math.PI, 0);
+    g.lineTo(b.x, b.y); g.closePath(); g.fill();
+    g.beginPath();
+    g.ellipse(b.x + r * (0.34 + 0.30 * o), b.y, r * 0.62, h * 0.82, 0.22 + 0.5 * o, Math.PI, 0);
+    g.lineTo(b.x, b.y); g.closePath(); g.fill();
+    g.beginPath();
+    g.ellipse(b.x, b.y, r * 0.78, h, 0, Math.PI, 0);
+    g.closePath(); g.fill();
+    const tip = Math.min(0.85, 0.12 + 0.55 * o + glow * 0.3);   /* the kept light */
+    g.fillStyle = 'rgba(207,230,255,' + tip.toFixed(3) + ')';
+    g.beginPath(); g.arc(b.x, b.y - h - 2 - 3 * o, 1.6 + o, 0, 7); g.fill();
+  }
+  fx.storm = {
+    init(s) {
+      const W = s.w, H = s.h, hY = H * 0.80;           /* must match .sw-sky's 80% ground stop */
+      const WW = W * 1.3;
+      const sparks = new Array(90);
+      for (let i = 0; i < sparks.length; i++) sparks[i] = { on: false, mode: 0, x: 0, y: 0, vx: 0, vy: 0, baseY: 0, life: 0, max: 1, seed: 0 };
+      const flashes = new Array(4);
+      for (let i = 0; i < flashes.length; i++) flashes[i] = { on: false, rel: 0, y: 0, r: 0, t0: 0, dur: 1 };
+      const st = {
+        hY, WW,
+        edge: new Float32Array(SW_ROWS + 1),           /* scratch rows, reused every frame */
+        sparks, flashes,
+        rocks: [                                       /* the unseen stones the sparks curl around */
+          { x: W * 0.26, y: hY - 26, pol: 1 },
+          { x: W * 0.50, y: hY - 46, pol: -1 },
+          { x: W * 0.72, y: hY - 18, pol: 1 },
+        ],
+        buds: [
+          { x: W * 0.15, y: hY + (H - hY) * 0.30, r: Math.max(20, W * 0.022), o: 1, seed: 0.0 },
+          { x: W * 0.40, y: hY + (H - hY) * 0.62, r: Math.max(30, W * 0.034), o: 1, seed: 1.9 },
+          { x: W * 0.62, y: hY + (H - hY) * 0.42, r: Math.max(24, W * 0.027), o: 1, seed: 4.2 },
+          { x: W * 0.87, y: hY + (H - hY) * 0.76, r: Math.max(34, W * 0.040), o: 1, seed: 2.8 },
+        ],
+        glow: swGlow(),
+        storm: false, t0: 0, dur: 15000,
+        travel: W + WW + 320,                          /* front start -> trailing exit */
+        next: -1, nextFlash: 0, flashGlow: 0, sparkAcc: 0, calmAcc: 0,
+      };
+      stormCtl = {
+        summon() {
+          if (st.storm) { st.nextFlash = 0; return; }  /* mid-transit: it answers with light */
+          st.next = 0;                                 /* calm: the wall comes now */
+        },
+      };
+      st.cleanup = () => { stormCtl = null; };
+      return st;
+    },
+    frame(s, st, dt, clock) {
+      const g = s.g, W = s.w, H = s.h, hY = st.hY;
+      g.clearRect(0, 0, W, H);
+      if (st.next < 0) st.next = clock + 6000;         /* the first front is already close */
+
+      if (!st.storm && clock >= st.next) { st.storm = true; st.t0 = clock; }
+      let frontX = W + 160, trailX = frontX + st.WW;   /* parked off-right during calm */
+      if (st.storm) {
+        const p = (clock - st.t0) / st.dur;
+        if (p >= 1) { st.storm = false; st.next = clock + 17000 + Math.random() * 6000; }   /* ~35s bell to bell */
+        else { frontX = (W + 160) - p * st.travel; trailX = frontX + st.WW; }
+      }
+      const wallOn = frontX < W + 120 && trailX > -120;
+
+      /* the wall: three churning silhouettes; flat fills, zero gradients */
+      if (wallOn) {
+        for (let L = 0; L < 3; L++) {
+          const ly = SW_LAYERS[L], E = st.edge;
+          for (let r2 = 0; r2 <= SW_ROWS; r2++) {
+            const yn = r2 / SW_ROWS;
+            E[r2] = frontX + ly.off
+              + ly.a1 * Math.sin(yn * ly.k1 + clock * ly.w1 + ly.p1)
+              + ly.a2 * Math.sin(yn * ly.k2 - clock * ly.w2 + ly.p2);
+          }
+          const tx = Math.min(trailX + ly.off * 0.5, W + 140);
+          g.fillStyle = ly.col;
+          g.beginPath();
+          g.moveTo(E[0], -6);
+          for (let r2 = 1; r2 <= SW_ROWS; r2++) g.lineTo(E[r2], -6 + (hY + 6) * (r2 / SW_ROWS));
+          g.lineTo(tx, hY); g.lineTo(tx, -6);
+          g.closePath(); g.fill();
+          if (L === 0) {                               /* pale light rides the leading face */
+            g.strokeStyle = 'rgba(185,169,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
+            g.lineWidth = 2;
+            g.beginPath();
+            g.moveTo(E[0], -6);
+            for (let r2 = 1; r2 <= SW_ROWS; r2++) g.lineTo(E[r2], -6 + (hY + 6) * (r2 / SW_ROWS));
+            g.stroke();
+          }
+        }
+      }
+
+      /* lightning INSIDE the wall: glow pulses only, never a drawn bolt */
+      if (st.storm && wallOn && clock >= st.nextFlash) {
+        for (const f of st.flashes) {
+          if (f.on) continue;
+          f.on = true; f.t0 = clock; f.dur = 300 + Math.random() * 140;
+          f.rel = 90 + Math.random() * Math.min(st.WW - 180, W * 0.8);
+          f.y = hY * (0.12 + Math.random() * 0.5);
+          f.r = 90 + Math.random() * 110;
+          break;
+        }
+        st.nextFlash = clock + 900 + Math.random() * 1600;   /* >=0.9s apart: strobe-safe */
+      }
+      let glowNow = 0;
+      g.globalCompositeOperation = 'lighter';
+      for (const f of st.flashes) {
+        if (!f.on) continue;
+        const k = (clock - f.t0) / f.dur;
+        if (k >= 1) { f.on = false; continue; }
+        const a = SW_FLK[(k * 6) | 0];
+        if (a > glowNow) glowNow = a;
+        const x = frontX + f.rel;                      /* the light rides with the wall */
+        if (x > -f.r && x < W + f.r) {
+          g.globalAlpha = a * 0.85;
+          g.drawImage(st.glow, x - f.r, f.y - f.r, f.r * 2, f.r * 2);
+          g.globalAlpha = a * 0.2;                     /* the plain remembers the light */
+          g.drawImage(st.glow, x - f.r * 1.6, hY - f.r * 0.22, f.r * 3.2, f.r * 0.7);
+        }
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      st.flashGlow = glowNow;
+
+      /* sparks: the light runs ahead of the weather */
+      if (st.storm && frontX > -80) {
+        st.sparkAcc += dt;
+        while (st.sparkAcc > 26) { st.sparkAcc -= 26; swSpawn(st, Math.min(frontX - 10, W + 26), hY, 1); }
+      } else if (!st.storm) {
+        st.sparkAcc = 0;
+        st.calmAcc += dt;
+        if (st.calmAcc > 620) { st.calmAcc = 0; swSpawn(st, Math.random() * W, hY, 0); }
+      } else st.sparkAcc = 0;
+      g.strokeStyle = 'rgba(191,220,255,0.75)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      for (const q of st.sparks) {
+        if (!q.on || q.mode !== 1) continue;
+        for (const rk of st.rocks) {                   /* curl around the unseen stones */
+          const dx = q.x - rk.x, dy = q.y - rk.y;
+          if (dx > -14 && dx < 90 && dy > -48 && dy < 48)
+            q.vy += rk.pol * (1 - Math.abs(dy) / 48) * 0.0011 * dt;
+        }
+        q.vy += (q.baseY - q.y) * 0.000016 * dt;       /* spring back to its lane */
+        q.vy *= 1 - 0.0015 * dt;
+        q.x += q.vx * dt; q.y += q.vy * dt;
+        if (q.x < -40) { q.on = false; continue; }
+        g.moveTo(q.x, q.y);
+        g.lineTo(q.x - q.vx * 46, q.y - q.vy * 46);
+      }
+      g.stroke();
+      g.fillStyle = 'rgba(236,244,255,0.9)';
+      for (const q of st.sparks) { if (q.on && q.mode === 1) g.fillRect(q.x - 1, q.y - 1, 2, 2); }
+      g.fillStyle = 'rgba(207,230,255,1)';
+      for (const q of st.sparks) {                     /* between storms: sparse risers */
+        if (!q.on || q.mode !== 0) continue;
+        q.life += dt;
+        const k = q.life / q.max;
+        if (k >= 1) { q.on = false; continue; }
+        q.y += q.vy * dt;
+        q.x += Math.sin(clock * 0.0011 + q.seed) * 0.02 * dt;
+        g.globalAlpha = 0.55 * Math.sin(Math.PI * k);
+        g.beginPath(); g.arc(q.x, q.y, 1.4, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
+
+      /* the shelled flora: it closes before the wall, reopens after */
+      for (const b of st.buds) {
+        const closing = st.storm && frontX < b.x + 240 + b.seed * 40 && trailX > b.x - 200;
+        const tau = closing ? 700 : 2600;              /* tuck fast; trust slowly */
+        b.o += ((closing ? 0.06 : 1) - b.o) * (1 - Math.exp(-dt / tau));
+        swBud(g, b, glowNow);
+      }
+    },
+    rm() { /* intentional no-op: the frozen pose is the .sw-static SVG (aurora precedent) */ },
+  };
+  const braceWall = document.getElementById('brace-wall');
+  if (braceWall) {
+    const stormScene = document.getElementById('world-stormwall');
+    braceWall.addEventListener('click', () => {
+      stormScene.classList.remove('is-bracing');
+      void stormScene.offsetWidth;                     /* restartable */
+      stormScene.classList.add('is-bracing');
+      if (stormCtl) stormCtl.summon();
+      window.Orrery.events.dispatchEvent(new CustomEvent('storm'));
+      setTimeout(() => stormScene.classList.remove('is-bracing'), 1400);
+    });
+  }
+
+  /* ============================================================
+     THE BEACONS: alpine dusk range + a 7-pyre signal chain
+     caps: 5 precomputed ridges · embers 96 · smoke 26 · stars <=44 ·
+           1 prebaked glow sprite (no per-frame gradients)
+     ============================================================ */
+  const BCN_N = 7, BCN_STAGGER = 900, BCN_RISE = 260, BCN_HOLD = 3200,
+        BCN_SETTLE = 2600, BCN_GAP = 22000, BCN_EMBER = 0.14;
+  let beaconTrigger = null;   /* the active FX sets this; the toy button calls it */
+
+  function bcnRun(st, clock) { st.sig.on = true; st.sig.t0 = clock; for (let i = 0; i < BCN_N; i++) st.burst[i] = 0; }
+  function bcnEmber(st, x, y, n, sc) {
+    for (let c = 0; c < n; c++) {
+      let e = null; for (const q of st.embers) if (!q.on) { e = q; break; }
+      if (!e) break;
+      e.on = true; e.x = x + (Math.random() - 0.5) * 9 * sc; e.y = y - 2 * sc;
+      e.vx = (Math.random() - 0.5) * 0.022; e.vy = -(0.03 + Math.random() * 0.06) * sc;
+      e.life = 0; e.max = 650 + Math.random() * 750; e.r = (0.7 + Math.random() * 1.3) * sc;
+    }
+  }
+  function bcnSmoke(st, x, y, sc) {
+    let m = null; for (const q of st.smoke) if (!q.on) { m = q; break; }
+    if (!m) return;
+    m.on = true; m.x = x + (Math.random() - 0.5) * 6 * sc; m.y = y - 4 * sc;
+    m.vy = -(0.012 + Math.random() * 0.014); m.life = 0; m.max = 3200 + Math.random() * 2600;
+    m.seed = Math.random() * 7; m.sway = 6 + Math.random() * 10; m.sc = sc;
+  }
+  function bcnPyre(g, x, y, sc, it, clock, i) {
+    const bw = 11 * sc, bh = 7 * sc;                    /* the dark wood stack (always drawn) */
+    g.fillStyle = 'rgba(16,11,8,0.95)';
+    g.beginPath();
+    g.moveTo(x - bw, y + bh); g.lineTo(x + bw, y + bh);
+    g.lineTo(x + bw * 0.5, y - bh * 0.2); g.lineTo(x - bw * 0.5, y - bh * 0.2);
+    g.closePath(); g.fill();
+    if (it < 0.16) {                                    /* ember-state: only a faint hot core */
+      g.fillStyle = `rgba(255,120,50,${0.35 + it})`;
+      g.beginPath(); g.arc(x, y + bh * 0.3, 2.2 * sc, 0, 7); g.fill();
+      return;
+    }
+    const fh = (9 + 30 * it) * sc;
+    const fl = Math.sin(clock * 0.02 + i * 1.7), fl2 = Math.sin(clock * 0.031 + i * 2.3);
+    g.fillStyle = `rgba(255,${(120 + 60 * it) | 0},40,${0.45 + 0.4 * it})`;   /* outer flame */
+    g.beginPath();
+    g.moveTo(x - 6 * sc, y + 2 * sc);
+    g.quadraticCurveTo(x - 4 * sc + fl * 3 * sc, y - fh * 0.55, x, y - fh);
+    g.quadraticCurveTo(x + 4 * sc + fl2 * 3 * sc, y - fh * 0.55, x + 6 * sc, y + 2 * sc);
+    g.closePath(); g.fill();
+    const ih = fh * 0.62;
+    g.fillStyle = `rgba(255,${(210 + 30 * it) | 0},130,${0.5 + 0.4 * it})`;   /* inner flame */
+    g.beginPath();
+    g.moveTo(x - 3 * sc, y + 1 * sc);
+    g.quadraticCurveTo(x - 2 * sc + fl * 2 * sc, y - ih * 0.6, x, y - ih);
+    g.quadraticCurveTo(x + 2 * sc + fl2 * 2 * sc, y - ih * 0.6, x + 3 * sc, y + 1 * sc);
+    g.closePath(); g.fill();
+    g.fillStyle = `rgba(255,246,210,${0.4 + 0.5 * it})`;                       /* white-hot core */
+    g.beginPath(); g.arc(x, y - ih * 0.3, 1.8 * sc * (0.6 + 0.6 * it), 0, 7); g.fill();
+  }
+  fx.beacons = {
+    init(s) {
+      const W = s.w, H = s.h, rnd = (a, b) => a + Math.random() * (b - a);
+      const STEP = 18, x0 = -90, Nr = Math.ceil((W + 180) / STEP) + 1;
+      function ridge(baseY, amp, fill, driftA, driftS) {
+        const xs = new Float32Array(Nr), ys = new Float32Array(Nr);
+        const w1 = rnd(150, 240), w2 = rnd(60, 100), w3 = rnd(26, 42), wE = rnd(320, 520);
+        const p1 = rnd(0, 7), p2 = rnd(0, 7), p3 = rnd(0, 7), pE = rnd(0, 7);
+        for (let i = 0; i < Nr; i++) {
+          const x = x0 + i * STEP; xs[i] = x;
+          let n = Math.sin(x / w1 + p1) * 0.6 + Math.sin(x / w2 + p2) * 0.3 + Math.sin(x / w3 + p3) * 0.22;
+          n = n / 1.12;
+          const ridged = 1 - Math.abs(n);                    /* sharp alpine cusps, not dune curves */
+          const env = 0.5 + 0.5 * Math.sin(x / wE + pE);     /* vary peak height across the range */
+          ys[i] = baseY - amp * ridged * (0.45 + 0.7 * env);
+        }
+        return { xs, ys, fill, driftA, driftS, phase: rnd(0, 7) };
+      }
+      const ridges = [
+        ridge(H * 0.40, 54,  'rgba(42,58,100,1)', 8,  0.000026),   /* farthest, lightest dusk blue */
+        ridge(H * 0.50, 72,  'rgba(31,44,82,1)',  13, 0.000036),
+        ridge(H * 0.61, 92,  'rgba(21,32,64,1)',  19, 0.000048),
+        ridge(H * 0.73, 112, 'rgba(13,22,46,1)',  26, 0.000060),
+        ridge(H * 0.85, 130, 'rgba(8,14,32,1)',   34, 0.000072),   /* nearest apron (no pyres) */
+      ];
+      const defs = [[0.09, 1], [0.22, 3], [0.35, 2], [0.50, 3], [0.64, 2], [0.78, 3], [0.91, 1]];
+      const pyres = defs.map(([xf, r]) => {                        /* left->right = the chain order */
+        const gi = Math.max(0, Math.min(Nr - 1, Math.round((xf * W - x0) / STEP)));
+        return { ridge: r, baseX: ridges[r].xs[gi], y: ridges[r].ys[gi], scale: 0.7 + r * 0.16 };
+      });
+      const gs = 64, oc = document.createElement('canvas'); oc.width = oc.height = gs;   /* prebaked bloom */
+      const og = oc.getContext('2d');
+      const gr = og.createRadialGradient(gs / 2, gs / 2, 0, gs / 2, gs / 2, gs / 2);
+      gr.addColorStop(0, 'rgba(255,196,120,0.95)');
+      gr.addColorStop(0.4, 'rgba(255,140,60,0.42)');
+      gr.addColorStop(1, 'rgba(255,120,50,0)');
+      og.fillStyle = gr; og.beginPath(); og.arc(gs / 2, gs / 2, gs / 2, 0, 7); og.fill();
+      const embers = new Array(96);
+      for (let i = 0; i < embers.length; i++) embers[i] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, r: 1 };
+      const smoke = new Array(26);
+      for (let i = 0; i < smoke.length; i++) smoke[i] = { on: false, x: 0, y: 0, vy: 0, life: 0, max: 1, seed: 0, sway: 0, sc: 1 };
+      const stars = [], sn = Math.round(Math.min(44, W / 26));
+      for (let i = 0; i < sn; i++) stars.push({ x: rnd(0, W), y: rnd(H * 0.04, H * 0.42), r: rnd(0.6, 1.6), tw: rnd(0, 7) });
+      const st = {
+        ridges, pyres, glow: oc, embers, smoke, stars,
+        inten: new Float32Array(BCN_N), rdrift: new Float32Array(ridges.length),
+        sig: { on: false, t0: 0 }, burst: new Uint8Array(BCN_N),
+        next: null, trigger: false, lastEnd: -99999, calm: 1,
+        emberAcc: 0, smokeAcc: 0, gust: 0, gustNext: 0,
+      };
+      st.cleanup = () => { beaconTrigger = null; };               /* Smaug kill 7: drop the toy hook */
+      beaconTrigger = () => { st.trigger = true; };
+      return st;
+    },
+    frame(s, st, dt, clock) {
+      const g = s.g, W = s.w, H = s.h;
+      g.clearRect(0, 0, W, H);
+      if (st.next === null) st.next = clock + 4200;
+
+      /* the signal run: auto on a ~22s cadence, or the toy fires it now (no stacking) */
+      if (st.trigger) { st.trigger = false; if (!st.sig.on && clock - st.lastEnd > 800) bcnRun(st, clock); }
+      if (!st.sig.on && clock >= st.next) bcnRun(st, clock);
+      if (st.sig.on) {
+        const runEnd = st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;
+        if (clock >= runEnd) { st.sig.on = false; st.lastEnd = clock; st.next = st.sig.t0 + BCN_GAP + Math.random() * 4000; }
+      }
+
+      for (let k = 0; k < st.ridges.length; k++) { const r = st.ridges[k]; st.rdrift[k] = r.driftA * Math.sin(clock * r.driftS + r.phase); }
+
+      const settleStart = st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + BCN_HOLD;
+      for (let i = 0; i < BCN_N; i++) {
+        let it = BCN_EMBER;
+        if (st.sig.on) {
+          const ig = clock - (st.sig.t0 + i * BCN_STAGGER);     /* the wave reaches pyre i */
+          if (ig >= 0) {
+            it = ig < BCN_RISE ? BCN_EMBER + (1 - BCN_EMBER) * (ig / BCN_RISE)
+                               : 0.82 + 0.07 * Math.sin((clock + i * 370) * 0.018);
+            if (!st.burst[i]) { st.burst[i] = 1; const p = st.pyres[i]; bcnEmber(st, p.baseX + st.rdrift[p.ridge], p.y, 14, p.scale); }
+            if (clock > settleStart) { const kk = Math.min(1, (clock - settleStart) / BCN_SETTLE); it += (BCN_EMBER - it) * kk; }
+          }
+        }
+        st.inten[i] = it;
+      }
+
+      st.calm += ((st.sig.on ? 0.42 : 1) - st.calm) * 0.02;      /* stars sharpen between signals */
+      st.gustNext -= dt; if (st.gustNext <= 0) { st.gust = 0.4 + Math.random() * 0.9; st.gustNext = 2600 + Math.random() * 4200; }
+      st.gust *= Math.pow(0.9995, dt);
+      const wind = 0.25 + 0.18 * Math.sin(clock * 0.0003) + st.gust * 0.5;
+
+      for (const sp of st.stars) {                               /* stars behind the range */
+        const tw = 0.55 + 0.45 * Math.sin(clock * 0.0016 + sp.tw);
+        g.fillStyle = `rgba(223,233,255,${(0.25 + 0.6 * tw) * st.calm})`;
+        g.beginPath(); g.arc(sp.x, sp.y, sp.r, 0, 7); g.fill();
+      }
+
+      for (let k = 0; k < st.ridges.length; k++) {               /* ridges far->near, pyres planted on each */
+        const r = st.ridges[k], d = st.rdrift[k], xs = r.xs, ys = r.ys, n = xs.length;
+        g.fillStyle = r.fill;
+        g.beginPath(); g.moveTo(xs[0] + d, H + 2);
+        for (let i2 = 0; i2 < n; i2++) g.lineTo(xs[i2] + d, ys[i2]);
+        g.lineTo(xs[n - 1] + d, H + 2); g.closePath(); g.fill();
+        for (let i = 0; i < BCN_N; i++) { const p = st.pyres[i]; if (p.ridge === k) bcnPyre(g, p.baseX + d, p.y, p.scale, st.inten[i], clock, i); }
+      }
+
+      g.globalCompositeOperation = 'lighter';                    /* additive: slope-glow + bloom + embers */
+      for (let i = 0; i < BCN_N; i++) {
+        const it = st.inten[i]; if (it <= 0.03) continue;
+        const p = st.pyres[i], x = p.baseX + st.rdrift[p.ridge], y = p.y, sc = p.scale;
+        const sw = (150 + 120 * it) * sc, sh = (60 + 26 * it) * sc;   /* the light on the slope */
+        g.globalAlpha = 0.08 + 0.30 * it; g.drawImage(st.glow, x - sw / 2, y - sh * 0.35, sw, sh);
+        const bw = (46 + 96 * it) * sc;                              /* the pyre bloom */
+        g.globalAlpha = 0.14 + 0.55 * it; g.drawImage(st.glow, x - bw / 2, y - bw * 0.62, bw, bw);
+      }
+      for (const e of st.embers) {
+        if (!e.on) continue;
+        e.life += dt; const k = e.life / e.max; if (k >= 1) { e.on = false; continue; }
+        e.x += e.vx * dt; e.y += e.vy * dt; e.vy -= 0.00001 * dt;
+        g.globalAlpha = 1 - k;
+        g.fillStyle = `rgba(255,${(170 + 70 * (1 - k)) | 0},90,1)`;
+        g.beginPath(); g.arc(e.x, e.y, e.r * (0.5 + 0.6 * (1 - k)), 0, 7); g.fill();
+      }
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+
+      st.emberAcc += dt;                                          /* sparks off the lit pyres */
+      if (st.emberAcc > 110) { st.emberAcc = 0;
+        for (let i = 0; i < BCN_N; i++) if (st.inten[i] > 0.5 && Math.random() < 0.5) { const p = st.pyres[i]; bcnEmber(st, p.baseX + st.rdrift[p.ridge], p.y, 1, p.scale); }
+      }
+
+      st.smokeAcc += dt;                                          /* smoke off ember-state pyres */
+      if (st.smokeAcc > 300) { st.smokeAcc = 0;
+        let pick = -1, seen = 0;
+        for (let i = 0; i < BCN_N; i++) if (st.inten[i] < 0.3) { seen++; if (Math.random() < 1 / seen) pick = i; }
+        if (pick >= 0) { const p = st.pyres[pick]; bcnSmoke(st, p.baseX + st.rdrift[p.ridge], p.y, p.scale); }
+      }
+      for (const m of st.smoke) {
+        if (!m.on) continue;
+        m.life += dt; const k = m.life / m.max; if (k >= 1) { m.on = false; continue; }
+        m.y += m.vy * dt;
+        const sway = Math.sin(clock * 0.0011 + m.seed) * m.sway + wind * 6 * k;
+        g.globalAlpha = (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) / 0.8) * 0.10;
+        g.fillStyle = 'rgba(150,162,190,1)';
+        g.beginPath(); g.arc(m.x + sway, m.y, (2 + 7 * k) * m.sc, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
+    },
+    rm() { /* intentional no-op: the frozen mid-burn pose is the .beacon-static SVG (see 03-worlds.css) */ },
+  };
+  /* the toy: light the chain now. Cooldown lives in bcnRun's guard (no stacked runs). */
+  const beaconToy = document.getElementById('light-beacons');
+  if (beaconToy) beaconToy.addEventListener('click', () => {
+    if (window.Orrery.reduced()) {
+      /* rm answer: a one-shot flare of the static SVG pyres (user-initiated) */
+      const sec = document.getElementById('world-beacons');
+      if (sec) { sec.classList.remove('is-signaled'); void sec.offsetWidth; sec.classList.add('is-signaled'); }
+    } else if (beaconTrigger) beaconTrigger();
+    window.Orrery.events.dispatchEvent(new CustomEvent('beacon'));
+  });
+
   return { start, stopAll };
 })();
 window.WorldFX = WorldFX;
@@ -3933,6 +5752,43 @@ const Score = (() => {
       lead: { wave: 'sine', dly: 0.25, wet: 0.3 },
       motif: [N(2,0,3,.07), R, R, N(3,0,2,.06), R, N(2,0,3,.06), R, R, N(1,0,2,.05), R, N(2,0,4,.06), R, R, R, R, R],
       perc: '................',
+    },
+    /* the predictive hall: lydian wonder (raised 4th shimmer), slow deliberate
+       triangle over a thin drone + maj7 pad, echoes like equations cascading */
+    archive: {
+      root: 155.6, scale: [0, 2, 4, 6, 7, 9, 11], step: 520, bright: 2200, gap: 8,
+      dr: 0.03, pd: 0.046, ch: 0.02, padIv: [0, 7, 11],
+      lead: { wave: 'triangle', dly: 0.42, wet: 0.32 },
+      motif: [N(0,0,3,.07), R, R, N(2,0,2,.06), R, N(4,0,2,.06), R, R, N(3,0,2,.06), R, N(5,0,3,.06), R, R, N(4,0,2,.05), R, R],
+      perc: '....s.......s...',
+    },
+    /* the drillyard: a calm zero-g cadence, dorian over a quartal pad;
+       commands land clean, the hall holds the space between them */
+    drillyard: {
+      root: 146.8, scale: [0, 2, 3, 5, 7, 9, 10], step: 260, bright: 1500, gap: 6,
+      dr: 0.028, pd: 0.022, ch: 0, padIv: [0, 5, 10],
+      lead: { wave: 'triangle', dly: 0.3, wet: 0.22 },
+      motif: [N(0,0,1,.09), R, N(3,0,1,.07), R, N(4,0,2,.08), R, R, N(0,1,1,.08), R, N(4,0,1,.06), R, N(3,0,2,.07), R, N(0,0,3,.08), R, R],
+      perc: 'K...s.s.....K.s.',
+    },
+    /* the living weather: low natural-minor drone that throbs like a far
+       front (wide detune), a 4th-stack pad that never resolves, taiko as
+       distant impacts; the hull-groan voice reads as far thunder here */
+    stormwall: {
+      root: 110.0, scale: [0, 2, 3, 5, 7, 8, 10], step: 520, bright: 700, gap: 9,
+      dr: 0.055, drDet: 11, pd: 0.028, ch: 0, padIv: [0, 5, 10], groan: true,
+      lead: { wave: 'triangle', dly: 0.3, wet: 0.35 },
+      motif: [N(0,0,2,.08), R, R, N(2,0,1,.06), N(3,0,2,.07), R, N(5,0,1,.06), R, N(0,1,3,.08), R, R, N(6,0,1,.05), N(5,0,2,.06), R, N(1,0,3,.05), R],
+      perc: 'K.........K...s.',
+    },
+    /* distant horn-like calls over a cold drone: a rising call, then its
+       falling answer, echoed down the delay like the fire chain. sparse. */
+    beacons: {
+      root: 110.0, scale: [0, 2, 4, 7, 9], step: 640, bright: 700, gap: 14,
+      dr: 0.05, drDet: 7, pd: 0.03, ch: 0, padIv: [0, 7, 12],
+      lead: { wave: 'sawtooth', dly: 0.28, wet: 0.4 },
+      motif: [N(0,0,3,.09), R, R, N(2,0,2,.08), N(4,0,3,.10), R, R, R, N(4,0,2,.07), R, N(2,0,3,.07), R, N(0,0,4,.08), R, R, R],
+      perc: 'K.......s.......',
     },
   };
 
