@@ -76,7 +76,7 @@ function sizeSky() {
   sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   buildStars();
-  measureArc();
+  measureOrbit();
   drawStatic();                                        /* rm / idle repaint */
 }
 let resizeT = null;
@@ -128,26 +128,39 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the arc composes itself BELOW the copy, whatever the viewport gives us */
-let arcCY = 0, arcRY = 80;
-function measureArc() {
+/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+   flattened ellipse, passing behind and in front (z-sorted in drawSky) */
+const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
+function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
-  const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.4;
-  const room = Math.max(140, H - cb - 70);             /* keep clear of the footer HUD */
-  arcCY = cb + room * 0.58;
-  arcRY = Math.min(room * 0.34, 150);
+  const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
+  if (desktop()) {
+    const room = Math.max(220, H - cb - 84);           /* keep clear of the footer HUD */
+    ART.cx = W / 2;
+    ART.cy = cb + room * 0.54;
+    ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
+    ART.rx = Math.min(W * 0.42, ART.r * 2.75);
+    ART.ry = Math.max(ART.r * 0.52, Math.min(room * 0.30, ART.r * 0.72));
+  } else {
+    /* phone: the Artifact is a presence low in the deep, under the chart column */
+    ART.cx = W / 2;
+    ART.cy = H * 0.72;
+    ART.r  = Math.min(W * 0.34, 150);
+    ART.rx = 0; ART.ry = 0;
+  }
+  placeArtifactDom();
 }
 function planetPos(i, clockMs) {
-  const w = WORLDS[i];
-  const cx = W / 2;
-  const spreadX = Math.min(W * 0.42, 600);
-  const baseA = -Math.PI / 2 + (i - 3) * 0.4;          /* fan the seven across the arc */
   const t = reduced() ? 0 : clockMs / 1000;
-  const wob = reduced() ? 0 : Math.sin(t * w.speed * 2 + i * 1.7) * 0.045;
-  const ang = baseA + wob + Math.sin(seasonTilt) * 0.03;
+  /* each world keeps its own period; reduced-motion holds a seeded pose */
+  const ang = (i / WORLDS.length) * Math.PI * 2 + seasonTilt + t * (Math.PI * 2) / (95 + i * 16);
+  const bob = reduced() ? 0 : Math.sin(t * 0.5 + i * 1.7) * 3;
+  const depth = Math.sin(ang);                         /* -1 far behind · +1 near in front */
   return {
-    x: cx + Math.cos(ang) * spreadX,
-    y: arcCY + Math.sin(ang) * arcRY + Math.sin(t * 0.5 + i) * (reduced() ? 0 : 4),
+    x: ART.cx + Math.cos(ang) * ART.rx,
+    y: ART.cy + depth * ART.ry + bob,
+    depth,
+    sc: 0.78 + 0.26 * (depth + 1) / 2,                 /* perspective scale */
   };
 }
 
@@ -180,34 +193,58 @@ function drawSky(dt, clockMs) {
 
   /* hub decoration only while the hub is on stage */
   if (Scenes.current === 'hub' && desktop()) {
-    /* orbit ring */
-    ctx.strokeStyle = 'rgba(233,238,249,0.07)';
+    /* the orbit ring the worlds ride — faint brass, an instrument's engraving */
+    ctx.strokeStyle = 'rgba(201,163,92,0.10)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.ellipse(W / 2, H * 0.66, Math.min(W * 0.38, 560), Math.min(H * 0.26, 240) * 0.62, 0, 0, 7);
+    ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, 0, 7);
     ctx.stroke();
 
-    WORLDS.forEach((w, i) => {
-      const p = planetPos(i, clockMs);
+    /* z-sort: far worlds first, then the Artifact, then near worlds */
+    const ps = WORLDS.map((w, i) => ({ w, p: planetPos(i, clockMs) }));
+    const drawWorld = ({ w, p }) => {
       const a = anchors.get(w.slug);
+      const dim = 0.45 + 0.55 * (p.depth + 1) / 2;
       if (a) {
         a.style.setProperty('--pax', p.x.toFixed(1) + 'px');
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
-        a.style.setProperty('--psize', w.size + 'px');
+        a.style.setProperty('--psize', Math.round(w.size * p.sc) + 'px');
+        /* a far-side world crossing the Artifact's face is OCCLUDED: its name
+           must nearly vanish too, not float legible across the gold */
+        const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r + 50;
+        a.style.setProperty('--pdim', (occluded ? 0.12 : dim).toFixed(2));
+        /* the DOM mirrors the canvas z-sort: a world occluded BEHIND the
+           Artifact must not own the clicks on the sphere's face (its anchor
+           drops below artifact-hit's z15; near worlds ride above it) */
+        a.style.zIndex = p.depth > 0 ? 22 : 14;
       }
-      /* the worlds themselves: rotating textured spheres (PlanetForge) */
       const hov = hovered === w.slug;
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
+      ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
+      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * p.sc * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
+      ctx.globalAlpha = 1;
 
       if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},0.55)`;
+        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${0.55 * (0.5 + 0.5 * dim)})`;
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72 * p.sc, 0, 7); ctx.stroke();
         ctx.setLineDash([]);
       }
-    });
+    };
+    for (const e of ps) if (e.p.depth <= 0) drawWorld(e);
+    if (window.SphereForge) {
+      SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
+    }
+    for (const e of ps) if (e.p.depth > 0) drawWorld(e);
+  } else if (Scenes.current === 'hub' && window.SphereForge) {
+    /* phone: the Artifact holds the deep beneath the chart column, dim and vast */
+    ctx.globalAlpha = 0.5;
+    SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+    ctx.globalAlpha = 1;
+    SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
   /* comet, when one is in flight */
@@ -241,6 +278,51 @@ function scheduleComet() {
   clearTimeout(cometTimer);
   cometTimer = setTimeout(() => { launchComet(); scheduleComet(); }, 24000 + Math.random() * 26000);
 }
+
+/* ---------- the sonar: the Artifact calls out on its own slow clock.
+   The visual ring only moves when motion is allowed; the EVENT always fires
+   (the score answers it when the context is running) ---------- */
+let sonarTimer = null;
+function pingSonar() {
+  if (document.hidden || Scenes.current !== 'hub') return;
+  if (window.SphereForge && !reduced()) {
+    SphereForge.ping();
+    if (!skyTask) Orrery.startAmbient();               /* rings need the loop */
+  }
+  Orrery.events.dispatchEvent(new CustomEvent('sonar'));
+}
+function scheduleSonar() {
+  clearTimeout(sonarTimer);
+  sonarTimer = setTimeout(() => { pingSonar(); scheduleSonar(); }, 6400 + Math.random() * 1800);
+}
+function stopSonar() { clearTimeout(sonarTimer); sonarTimer = null; }
+
+/* ---------- the Artifact's DOM presence: focusable, labeled, answerable ---------- */
+const artHit = document.getElementById('artifact-hit');
+const artLabel = document.getElementById('artifact-label');
+function placeArtifactDom() {
+  if (artHit) {
+    artHit.style.setProperty('--ax', ART.cx + 'px');
+    artHit.style.setProperty('--ay', ART.cy + 'px');
+    artHit.style.setProperty('--ar', Math.round(ART.r * 2) + 'px');
+  }
+  if (artLabel) {
+    artLabel.style.setProperty('--ax', ART.cx + 'px');
+    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
+  }
+}
+let artLast = 0;
+function touchArtifact() {
+  const now = performance.now();
+  if (now - artLast < 700) return;                     /* it does not answer to hammering */
+  artLast = now;
+  if (window.SphereForge && !reduced()) {
+    SphereForge.ripple();
+    if (!skyTask) Orrery.startAmbient();
+  }
+  Orrery.events.dispatchEvent(new CustomEvent('artifact'));
+}
+if (artHit) artHit.addEventListener('click', touchArtifact);
 
 /* the idle sky task: runs only when something moves */
 let skyTask = null;
@@ -319,6 +401,7 @@ function setScene(name, { instant = false } = {}) {
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
     Orrery.startAmbient();
+    scheduleSonar();                                   /* home again: the call resumes */
     WorldFX.stopAll();
     /* the keyboard traveler lands back on the planet they left (Smaug kill 10) */
     if (prevName && prevName !== 'hub') {
@@ -331,6 +414,7 @@ function setScene(name, { instant = false } = {}) {
     html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
     html.style.setProperty('--acc-rgb', w.a.join(','));
     Orrery.stopAmbient();                              /* one scene owns the frame budget */
+    stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
     /* refresh this card's medallion so the little world advanced since last visit */
@@ -437,12 +521,15 @@ tickClock();
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
   PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
+  if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
   sizeSky();
   setRM();
   route(true);
   if (!reduced()) Orrery.startAmbient();
   /* re-measure the arc once type has settled (font metrics can shift the copy block) */
-  setTimeout(() => { measureArc(); drawStatic(); paintMedallions(); }, 350);
+  setTimeout(() => { measureOrbit(); drawStatic(); paintMedallions(); }, 350);
+  /* no sonar arm here: setScene('hub') schedules it on every hub arrival,
+     and a deep-link boot into a world must not run a perpetual no-op timer */
 }
 
 /* the brass card medallions: one small spinning-world portrait per card,

@@ -222,3 +222,116 @@ html.rm[data-konami="1"] .planet-anchor .pa-ring {
 }
 html:not(.rm) .konami-seal { animation: konami-seal-glow 3.2s var(--ease-out) infinite; will-change: opacity; }
 @keyframes konami-seal-glow { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+
+
+/* ============================================================
+   The Dread Pass (v4) — the unknown, the unsurveyed, a little afraid.
+   Deepens the porthole, suspends dust in the dark, and lets the failing
+   instruments flicker. Subtle is the law: unease, never horror. All
+   motion is compositor-only (opacity/transform) and gated on :not(.rm).
+   ============================================================ */
+
+/* the porthole corners go nearly black: the deep presses in around the glass */
+.porthole {
+  background:
+    radial-gradient(ellipse 82% 86% at 50% 48%, transparent 0 63.5%,
+      rgba(var(--brass-rgb), 0.11) 64% 64.6%, transparent 65.4%),
+    radial-gradient(ellipse 125% 135% at 50% 50%, transparent 44%,
+      rgba(2, 9, 8, 0.55) 78%, rgba(0, 3, 2, 0.92) 100%);
+}
+
+/* the particulate: dust suspended in dark water, HUB only. One oversized
+   layer drifts on a single slow transform; the hub scene's own opacity
+   gate hides it off-stage, so no extra scene wiring is needed. */
+.scene-hub::before {
+  content: ""; position: fixed; inset: -30%; z-index: -1; pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 18% 33%, rgba(var(--cream-rgb), 0.7), transparent 60%),
+    radial-gradient(1px 1px at 72% 21%, rgba(var(--brass-rgb), 0.55), transparent 60%),
+    radial-gradient(2px 2px at 41% 78%, rgba(var(--cream-rgb), 0.5), transparent 60%),
+    radial-gradient(1px 1px at 88% 64%, rgba(var(--cream-rgb), 0.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 8% 88%, rgba(var(--brass-rgb), 0.4), transparent 60%);
+  background-size: 340px 340px, 280px 280px, 420px 420px, 300px 300px, 380px 380px;
+  opacity: 0.14;
+}
+/* the media query is the ONLY gate that works without JS (the .rm class is
+   JS-applied; pre-boot / no-JS / boot-crash OS-reduce users must also get
+   stillness — Smaug kill, same law as pa-bob in 02-hub.css) */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .scene-hub::before {
+    animation: dust-drift 96s linear infinite;
+    will-change: transform;
+  }
+  /* the failing instrument: the HUD location plate and title dip twice, briefly,
+     on a long cycle — a lamp that is not quite sure of itself. Opacity only. */
+  html:not(.rm) #hud-loc-name { animation: instrument-flicker 17s steps(1, end) infinite; }
+  html:not(.rm) .hud-title    { animation: instrument-flicker 23s steps(1, end) infinite 4s; }
+  /* the pressure readout: the hint breathes, slow and shallow */
+  html:not(.rm) .hub-hint { animation: hint-breathe 8s ease-in-out infinite; }
+}
+@keyframes dust-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-140px, -90px, 0); }
+}
+@keyframes instrument-flicker {
+  0%, 96.4%   { opacity: 1; }
+  96.7%       { opacity: 0.5; }
+  97.1%       { opacity: 1; }
+  97.6%       { opacity: 0.55; }
+  98.1%, 100% { opacity: 1; }
+}
+@keyframes hint-breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+
+
+/* ============================================================
+   The Artifact's DOM presence (v4). The canvas paints the sphere;
+   these are its keyboard/AT surface and its engraved plate. JS writes
+   --ax / --ay (center) and --ar (diameter) each layout.
+   ============================================================ */
+/* JS-only chrome: without the engine there is no sphere, so the invisible
+   disc must not ride the no-JS brochure stealing mid-viewport clicks
+   (Smaug kill: the fixed 240px click-shield). display gates on html.js,
+   which also self-cleans after the boot-throw fallback strips .js */
+#artifact-hit, .artifact-label { display: none; }
+html.js #artifact-hit { display: block; }
+html.js .artifact-label { display: block; }
+#artifact-hit {
+  position: fixed; z-index: 15;                 /* below near-orbit anchors; above far ones */
+  left: var(--ax, 50vw); top: var(--ay, 60vh);
+  width: var(--ar, 240px); height: var(--ar, 240px);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: transparent; border: 0; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc */
+#artifact-hit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--brass-rgb), 0.9),
+              0 0 22px 4px rgba(255, 205, 90, 0.5) inset;
+}
+.artifact-label {
+  position: fixed; z-index: 16; pointer-events: none;
+  left: var(--ax, 50vw); top: var(--ay, 72vh);
+  transform: translateX(-50%);
+  font-size: 0.58rem; letter-spacing: var(--track-plate);
+  color: var(--brass); font-weight: 600; text-transform: uppercase;
+  white-space: nowrap; opacity: 0.82;
+  text-shadow: 0 0 10px rgba(2, 9, 8, 0.9);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .artifact-label { animation: hint-breathe 8s ease-in-out infinite 1.4s; }
+}
+
+/* the phone keeps the Artifact as ambient art only: the invisible hit target
+   would otherwise sit over the world column and steal its taps + scroll. The
+   canvas still paints the dim sphere and the sonar ring behind everything. */
+@media (max-width: 700px) {
+  #artifact-hit, .artifact-label { display: none !important; }
+}
+
+/* reduced-motion: the dust, flicker, breathe all hold still (the dark and the
+   deepened porthole remain — static dread is allowed dread) */
+html.rm .scene-hub::before,
+html.rm #hud-loc-name, html.rm .hud-title,
+html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }

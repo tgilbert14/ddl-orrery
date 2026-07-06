@@ -33,9 +33,15 @@
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
         <h1 class="hub-h1">Seven worlds. One clock.<br>Everything you see is code.</h1>
-        <p class="hub-sub">Hand-built universes, each with its own weather, physics, and music. Pick one and go.</p>
-        <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
+        <p class="hub-sub">Seven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
+        <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
+
+      <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
+           sphere; this button is its keyboard/AT presence and the ripple trigger.
+           JS positions both over the sphere center via --ax / --ay. -->
+      <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
+      <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The seven worlds">
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
@@ -311,6 +317,7 @@
 <noscript>
   <style>
     /* the brochure IS the page: with no JS the scenes simply stack, styled by CSS defaults */
-    .hub-hint, .audio-toggle, #hud-clock, .w-note { display: none !important; }
+    .hub-hint, .audio-toggle, #hud-clock, .w-note,
+    #artifact-hit, .artifact-label { display: none !important; }
   </style>
 </noscript>

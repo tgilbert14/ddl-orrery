@@ -124,8 +124,12 @@ html.js .hub-hint { animation-delay: 0.55s; }
   html.js .planet-anchor .pa-label {
     position: absolute; top: calc(100% + 0.2rem); left: 50%; transform: translateX(-50%);
     text-align: center; white-space: nowrap;
-    opacity: 0.92; transition: opacity 0.3s, transform 0.4s var(--ease-out);
+    /* --pdim: the engine writes orbital depth each frame — a far-side world's
+       name fades with it instead of floating full-strength across the gold */
+    opacity: var(--pdim, 0.92); transition: opacity 0.3s, transform 0.4s var(--ease-out);
   }
+  html.js .planet-anchor:hover .pa-label,
+  html.js .planet-anchor:focus-visible .pa-label { opacity: 1; }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
   html.js .planet-anchor .pa-label em { font-size: 0.72rem; opacity: 0; transform: translateY(-4px); transition: opacity 0.3s, transform 0.3s; }
   html.js .planet-anchor:hover .pa-dot,

@@ -1,11 +1,16 @@
 /* ============================================================
-   07-audio.js - Score v2: the cinematic engine. Zero files.
-   One synth graph, a generated concert hall, seven arrangements.
-   THE LAW (2.6): never autoplay; start only on an activation-bearing
-   event; the UI claims "on" only after ctx.state === 'running'.
+   07-audio.js - Score v3: the dread engine. Zero files.
+   One synth graph, a generated concert hall, seven arrangements
+   + the derelict hub (drone throb, heartbeat, hull groans, sonar).
+   THE LAW (2.6): no pre-gesture sound. A boot-time resume() may
+   succeed only where the browser itself already granted media
+   engagement; otherwise the first activation-bearing gesture
+   ignites. The UI claims "on" only after ctx.state === 'running';
+   while armed-but-suspended it says "ready". The label never lies.
    Persistent graph: 8 nodes (bus, dry, wet, convolver, compressor,
    delay, delay-lowpass, delay-feedback). World rigs are scene-scoped
-   transients (<=21 nodes, self-stopping); notes are per-note transients.
+   transients (<=21 nodes; the hub rig is 8); notes are per-note
+   transients, self-stopping, disconnected onended.
    ============================================================ */
 'use strict';
 
@@ -17,13 +22,15 @@ const Score = (() => {
   const N = (d, o, dur, v) => ({ d, o, dur, v });
   const R = null;
   const ARR = {
-    /* observatory at night: glassy, mid reverb */
+    /* the derelict hold: drone throb + sub heartbeat + sparse glassy
+       minor-second adjacencies + self-scheduled hull groans. No choir.
+       gap 26 on a 600ms step: silence dominates (a ~25s cycle, mostly rest) */
     hub: {
-      root: 220.0, scale: [0, 3, 5, 7, 10], step: 500, bright: 900, gap: 8,
-      dr: 0.028, pd: 0.03, ch: 0.014, padIv: [0, 7, 12],
-      lead: { wave: 'triangle', dly: 0.3, wet: 0.15 },
-      motif: [N(0,1,2,.09), R, N(2,1,1,.07), R, N(1,1,2,.08), R, R, N(3,1,1,.07), R, R, N(4,0,2,.06), R, N(2,1,1,.07), R, R, R],
-      perc: '................',
+      root: 220.0, scale: [0, 1, 3, 7, 8], step: 600, bright: 300, gap: 26,
+      dr: 0.05, drDet: 9, pd: 0, ch: 0, padIv: [0, 7, 12], groan: true,
+      lead: { wave: 'sine', dly: 0.18, wet: 0.55 },
+      motif: [N(0,2,4,.05), R, R, R, R, N(1,2,5,.045), R, R, R, R, R, N(4,1,4,.04), R, N(3,1,5,.045), R, R],
+      perc: 'H...H...H...H...',
     },
     /* vast desert epic: low slow Phrygian-dominant over heavy drone, sparse taiko */
     'dust-sea': {
@@ -87,6 +94,7 @@ const Score = (() => {
   let ctx = null, bus = null, dry = null, wet = null, verb = null, comp = null;
   let dly = null, dlyLP = null, dlyFB = null, noiseBuf = null;
   let schedTimer = null, nextNote = 0, stepIdx = 0, holdUntil = 0, nextCallAt = 0, lastFanfare = -9;
+  let nextGroanAt = 0, lastAnswer = -9, armed = false;
   let on = false, cfg = ARR.hub, rig = null;
 
   const btn = document.getElementById('audio-toggle');
@@ -139,6 +147,14 @@ const Score = (() => {
     dlyFB = ctx.createGain(); dlyFB.gain.value = 0.35;
     dly.connect(dlyLP); dlyLP.connect(dlyFB).connect(dly);
     dlyLP.connect(bus);                                /* repeats land in the hall too */
+
+    /* an external interruption (another app takes audio focus) suspends the
+       context with NO visibilitychange — re-verify the label so it never
+       claims "on" over silence (the label never lies) */
+    ctx.addEventListener('statechange', () => {
+      if (document.hidden) return;                     /* the hide/show path owns that case */
+      setUI(on && ctx.state === 'running' ? true : (on || armed) ? 'ready' : false);
+    });
   }
 
   /* ---------- world rig: drone + pad + choir, scene-scoped ---------- */
@@ -151,8 +167,9 @@ const Score = (() => {
       const dRoot = v.root > 150 ? v.root / 2 : v.root;
       const lpf = ctx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 300 + v.bright * 0.1; lpf.Q.value = 0.8;
       const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v.dr, t + 1.4);
-      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = dRoot; a.detune.value = -6;
-      const b = ctx.createOscillator(); b.type = 'sawtooth'; b.frequency.value = dRoot; b.detune.value = 6;
+      const det = v.drDet || 6;                      /* cents; wider pair = faster beat-throb */
+      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = dRoot; a.detune.value = -det;
+      const b = ctx.createOscillator(); b.type = 'sawtooth'; b.frequency.value = dRoot; b.detune.value = det;
       const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = dRoot / 2;
       a.connect(lpf); b.connect(lpf); sub.connect(lpf); lpf.connect(g).connect(r.g);
       const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06 + Math.random() * 0.03;
@@ -269,6 +286,65 @@ const Score = (() => {
     o.start(when); o.stop(when + 4.5);
     o.onended = () => g.disconnect();
   }
+  function heart(when) {                             /* sub heartbeat: rounder + quieter than taiko */
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(60, when);
+    o.frequency.exponentialRampToValueAtTime(46, when + 0.22);   /* ~52Hz center */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.11, when + 0.035);          /* soft knuckle, no click, no noise snap */
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.5);
+    o.connect(g); g.connect(bus);
+    o.start(when); o.stop(when + 0.55);
+    o.onended = () => g.disconnect();
+  }
+  function groan(when) {                             /* pressure hull: bent bandpass noise + a faint metal cry */
+    const out = ctx.createGain(); out.gain.value = 1; out.connect(bus);
+    const w = ctx.createGain(); w.gain.value = 0.6; out.connect(w).connect(verb);
+    const n = noiseSrc(); n.loop = true;             /* the 1.2s buffer loops; the Q8 band smears the seam */
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 8;
+    bp.frequency.setValueAtTime(200, when);
+    bp.frequency.exponentialRampToValueAtTime(95, when + 2.8);   /* the slow downward bend, 90-220 band */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.12, when + 0.9);
+    g.gain.setTargetAtTime(0.0001, when + 2.4, 0.45);
+    n.connect(bp); bp.connect(g); g.connect(out);
+    const o = ctx.createOscillator(); o.type = 'sine';           /* resonant overtone rides inside */
+    o.frequency.setValueAtTime(233.1, when + 0.3);
+    o.frequency.exponentialRampToValueAtTime(196.0, when + 2.6); /* gliss down a minor third */
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0, when + 0.3);
+    og.gain.linearRampToValueAtTime(0.02, when + 1.1);
+    og.gain.setTargetAtTime(0.0001, when + 2.3, 0.4);
+    o.connect(og); og.connect(out);
+    n.start(when); n.stop(when + 3.4); o.start(when + 0.3); o.stop(when + 3.4);
+    n.onended = () => out.disconnect();
+  }
+  function ping(when, vel) {                         /* one sonar blip; the hall makes it read submarine */
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 1180;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(vel, when + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.09);    /* 90ms, fast decay */
+    o.connect(g); g.connect(bus);
+    const w = ctx.createGain(); w.gain.value = 0.85; g.connect(w).connect(verb);
+    o.start(when); o.stop(when + 0.14);
+    o.onended = () => g.disconnect();
+  }
+  function artifactAnswer(when) {                    /* the reply is slightly wrong: 196 sagging to 185 */
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(196, when);
+    o.frequency.linearRampToValueAtTime(185, when + 1.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.07, when + 0.25);
+    g.gain.setTargetAtTime(0.0001, when + 1.2, 0.5);
+    o.connect(g); g.connect(bus);
+    const w = ctx.createGain(); w.gain.value = 0.8; g.connect(w).connect(verb);
+    o.start(when); o.stop(when + 3.4);
+    o.onended = () => g.disconnect();
+  }
   function riser(when) {                               /* pre-warp reverse-swell into the arrival */
     const n = noiseSrc();
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2;
@@ -319,6 +395,7 @@ const Score = (() => {
     nextNote = ctx.currentTime + 0.1;
     stepIdx = 0;
     nextCallAt = ctx.currentTime + 15;
+    nextGroanAt = ctx.currentTime + 12 + Math.random() * 10;
     schedTimer = setInterval(() => {
       if (!on || ctx.state !== 'running') return;
       const now = ctx.currentTime;
@@ -331,9 +408,12 @@ const Score = (() => {
           const pos = stepIdx % span;
           if (pos < v.motif.length) { const st = v.motif[pos]; if (st) playLead(v, st, nextNote); }
           const pc = v.perc[stepIdx % 16];
-          if (pc === 'K') taiko(nextNote, 0.4); else if (pc === 's') shaker(nextNote);
+          if (pc === 'K') taiko(nextNote, 0.4);
+          else if (pc === 's') shaker(nextNote);
+          else if (pc === 'H') heart(nextNote);           /* the hub's 2.4s pulse (600ms x 4) */
         }
         if (v.call && nextNote >= nextCallAt) { deepCall(nextNote); nextCallAt = nextNote + 17 + Math.random() * 7; }
+        if (v.groan && nextNote >= nextGroanAt) { groan(nextNote); nextGroanAt = nextNote + 25 + Math.random() * 15; }
         stepIdx += 1;
         nextNote += v.step / 1000;
       }
@@ -349,6 +429,7 @@ const Score = (() => {
     if (!ready()) return;                              /* rig is built on the next turnOn */
     holdUntil = ctx.currentTime + 1.6;                 /* pads land first; the motif enters after the breath */
     nextCallAt = ctx.currentTime + 12;
+    nextGroanAt = ctx.currentTime + 14 + Math.random() * 10;   /* the hull settles before it speaks */
     if (rig) rig.fade(ctx.currentTime);
     rig = buildRig(cfg);
   }
@@ -383,6 +464,23 @@ const Score = (() => {
     fanfare(ctx.currentTime + 0.05);
   });
 
+  /* the sonar: the integrator owns the cadence (CustomEvent('sonar') ~7s);
+     the score only answers while truly running. Blip + echo, both very wet. */
+  window.Orrery.events.addEventListener('sonar', () => {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.02;
+    ping(t, 0.07);
+    ping(t + 0.24, 0.028);                           /* the echo: 240ms later, 0.4 gain */
+  });
+
+  /* the Artifact answers when touched: low, slow, slightly flat. 1 per 2s. */
+  window.Orrery.events.addEventListener('artifact', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastAnswer < 2) return;
+    lastAnswer = ctx.currentTime;
+    artifactAnswer(ctx.currentTime + 0.03);
+  });
+
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */
   const cta = document.querySelector('.cta-btn');
   if (cta) cta.addEventListener('click', () => {
@@ -397,14 +495,18 @@ const Score = (() => {
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
+  /* localStorage, deliberately: under DEFAULT-ON, an opt-out that lasts one
+     tab is a hostile default — "off" must survive new tabs and return visits
+     (Smaug kill: the opt-out evaporated in sessionStorage) */
   const safeStore = {
-    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
-    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
+    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
   };
   async function turnOn() {
     if (!ctx) buildGraph();
-    try { await ctx.resume(); } catch (_) { /* stays off */ }
-    if (ctx.state !== 'running') { setUI(false); return false; }
+    try { await ctx.resume(); } catch (_) { /* stays silent */ }
+    if (ctx.state !== 'running') { setUI(armed ? 'ready' : false); return false; }
+    armed = false;
     on = true;
     bus.gain.setTargetAtTime(0.75, ctx.currentTime, 0.4);
     if (!rig) { rig = buildRig(cfg); holdUntil = ctx.currentTime + 0.4; }
@@ -414,32 +516,54 @@ const Score = (() => {
     return true;
   }
   function turnOff() {
-    on = false;
+    on = false; armed = false;
     if (ctx) {
       bus.gain.setTargetAtTime(0.0, ctx.currentTime, 0.2);
       if (rig) { rig.fade(ctx.currentTime); rig = null; }   /* no oscillators burn while silent */
     }
     clearInterval(schedTimer);
     setUI(false);
-    safeStore.set('orrery-score', 'off');
+    safeStore.set('orrery-score', 'off');            /* the explicit opt-out: future loads stay silent */
   }
-  function setUI(state) {
-    btn.dataset.on = String(state);
-    btn.setAttribute('aria-pressed', String(state));
-    btn.setAttribute('aria-label', state ? 'Turn the score off' : 'Turn the score on');
-    label.textContent = state ? 'Score: on' : 'Score: off';
+  function setUI(state) {                            /* true | false | 'ready'; the label never lies */
+    const running = state === true;
+    btn.dataset.on = String(running);
+    btn.setAttribute('aria-pressed', String(running));
+    btn.setAttribute('aria-label', running ? 'Turn the score off' : 'Turn the score on');
+    label.textContent = running ? 'Score: on' : state === 'ready' ? 'Score: ready' : 'Score: off';
   }
   btn.addEventListener('click', () => (on ? turnOff() : turnOn()));
 
-  /* returning visitor who had it on: ARM the intent; START on the next gesture
-     that truly carries activation - and KEEP listening until one does (a consumed
-     one-shot on a non-activating gesture killed the score for the whole visit:
-     Smaug kill 9). pointerup/click carry activation on touch; Escape does not. */
-  if (safeStore.get('orrery-score') === 'on') {
+  /* DEFAULT-ON ignition: the Commission wants the score immediately; the
+     platform forbids pre-gesture audio. So unless a prior visit explicitly
+     opted out ('orrery-score' === 'off'): build the graph now (cheap; the
+     context boots suspended), try ONE silent resume (succeeds only where
+     the browser already granted media engagement), and otherwise ignite on
+     the FIRST activation-bearing gesture. Listeners stay attached until a
+     turnOn truly succeeds (a consumed one-shot on a non-activating gesture
+     killed the score for a whole visit: Smaug kill 9). Escape and modifier
+     chords carry no activation. The toggle still rules. */
+  if (safeStore.get('orrery-score') !== 'off') {
+    armed = true;
+    if (!ctx) buildGraph();
+    /* a tab that BOOTS hidden must stay silent (the visibilitychange handler
+       only reacts to changes; it never fires for a background-tab load) —
+       arm instead, and the visibility handler ignites on first reveal */
+    if (document.hidden) { setUI('ready'); armIgnition(); }
+    else {
+      /* label honesty while blocked: Chrome leaves resume() PENDING (not
+         rejected) until the first gesture, so turnOn may not settle for a
+         long while — say "ready" now; turnOn overwrites with the truth */
+      setUI('ready');
+      turnOn().then((ok) => { if (!ok) armIgnition(); })
+        .catch(() => { setUI('ready'); armIgnition(); });  /* a boot throw must not eat the arm */
+    }
+  }
+  function armIgnition() {
     const arm = async (e) => {
       if (e.type === 'keydown' && (e.key === 'Escape' || e.altKey || e.ctrlKey || e.metaKey)) return;
       const ok = await turnOn();
-      if (ok) cleanup();                               /* only disarm once it truly runs */
+      if (ok) cleanup();                             /* only disarm once it truly runs */
     };
     const cleanup = () => {
       removeEventListener('pointerup', arm);
@@ -451,11 +575,13 @@ const Score = (() => {
     addEventListener('keydown', arm);
   }
 
-  /* a hidden tab is a silent tab */
+  /* a hidden tab is a silent tab; a revealed tab may complete the default-on
+     intent (resume() here succeeds only where the browser already grants it) */
   document.addEventListener('visibilitychange', () => {
     if (!ctx) return;
     if (document.hidden) { if (ctx.state === 'running') ctx.suspend(); }
     else if (on) { ctx.resume(); }
+    else if (armed) { turnOn(); }
   });
 
   return { get on() { return on; } };

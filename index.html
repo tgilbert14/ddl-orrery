@@ -33,15 +33,15 @@
 html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
 :root {
-  /* -- the deep (base water; was "the night") -- */
-  --void: #04100e;          --void-rgb: 4, 16, 14;      /* sea-glass black */
-  --night: #082019;                                     /* dark teal (skip-link, chips) */
-  --horizon: #103129;       /* lamplit depth floor (hub gradient base) */
-  --ink: #eee9da;           --ink-rgb: 238, 233, 218;   /* warm paper-white, 15.9:1 on void */
-  --ink-dim: #b3ae97;       /* captions, 8.7:1 on void */
-  --ink-faint: #857f68;     /* hints, 4.8:1 on void, the floor, respected */
+  /* -- the deep (base water; v4 deepened toward the unsurveyed) -- */
+  --void: #020a08;          --void-rgb: 2, 10, 8;       /* near-black sea-glass; the pressure dark */
+  --night: #061712;                                     /* dark teal (skip-link, chips) */
+  --horizon: #0a251e;       /* dimmer lamplit floor (hub gradient base) */
+  --ink: #eee9da;           --ink-rgb: 238, 233, 218;   /* warm paper-white, ~17:1 on the deeper void */
+  --ink-dim: #b3ae97;       /* captions, ~9.4:1 on void */
+  --ink-faint: #8b8570;     /* hints, ~5.2:1 on the deeper void, the floor, respected */
   --line: rgba(var(--brass-rgb), 0.26);                 /* every hairline is now brass */
-  --glass: rgba(6, 24, 20, 0.55);
+  --glass: rgba(3, 14, 11, 0.62);
 
   /* -- deco instrument chrome (NEW) -- */
   --brass: #c9a35c;         --brass-rgb: 201, 163, 92;  /* 8.2:1 on void, 7.5:1 on plaque */
@@ -357,8 +357,12 @@ html.js .hub-hint { animation-delay: 0.55s; }
   html.js .planet-anchor .pa-label {
     position: absolute; top: calc(100% + 0.2rem); left: 50%; transform: translateX(-50%);
     text-align: center; white-space: nowrap;
-    opacity: 0.92; transition: opacity 0.3s, transform 0.4s var(--ease-out);
+    /* --pdim: the engine writes orbital depth each frame — a far-side world's
+       name fades with it instead of floating full-strength across the gold */
+    opacity: var(--pdim, 0.92); transition: opacity 0.3s, transform 0.4s var(--ease-out);
   }
+  html.js .planet-anchor:hover .pa-label,
+  html.js .planet-anchor:focus-visible .pa-label { opacity: 1; }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
   html.js .planet-anchor .pa-label em { font-size: 0.72rem; opacity: 0; transform: translateY(-4px); transition: opacity 0.3s, transform 0.3s; }
   html.js .planet-anchor:hover .pa-dot,
@@ -949,6 +953,119 @@ html.rm[data-konami="1"] .planet-anchor .pa-ring {
 html:not(.rm) .konami-seal { animation: konami-seal-glow 3.2s var(--ease-out) infinite; will-change: opacity; }
 @keyframes konami-seal-glow { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
 
+
+/* ============================================================
+   The Dread Pass (v4) — the unknown, the unsurveyed, a little afraid.
+   Deepens the porthole, suspends dust in the dark, and lets the failing
+   instruments flicker. Subtle is the law: unease, never horror. All
+   motion is compositor-only (opacity/transform) and gated on :not(.rm).
+   ============================================================ */
+
+/* the porthole corners go nearly black: the deep presses in around the glass */
+.porthole {
+  background:
+    radial-gradient(ellipse 82% 86% at 50% 48%, transparent 0 63.5%,
+      rgba(var(--brass-rgb), 0.11) 64% 64.6%, transparent 65.4%),
+    radial-gradient(ellipse 125% 135% at 50% 50%, transparent 44%,
+      rgba(2, 9, 8, 0.55) 78%, rgba(0, 3, 2, 0.92) 100%);
+}
+
+/* the particulate: dust suspended in dark water, HUB only. One oversized
+   layer drifts on a single slow transform; the hub scene's own opacity
+   gate hides it off-stage, so no extra scene wiring is needed. */
+.scene-hub::before {
+  content: ""; position: fixed; inset: -30%; z-index: -1; pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 18% 33%, rgba(var(--cream-rgb), 0.7), transparent 60%),
+    radial-gradient(1px 1px at 72% 21%, rgba(var(--brass-rgb), 0.55), transparent 60%),
+    radial-gradient(2px 2px at 41% 78%, rgba(var(--cream-rgb), 0.5), transparent 60%),
+    radial-gradient(1px 1px at 88% 64%, rgba(var(--cream-rgb), 0.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 8% 88%, rgba(var(--brass-rgb), 0.4), transparent 60%);
+  background-size: 340px 340px, 280px 280px, 420px 420px, 300px 300px, 380px 380px;
+  opacity: 0.14;
+}
+/* the media query is the ONLY gate that works without JS (the .rm class is
+   JS-applied; pre-boot / no-JS / boot-crash OS-reduce users must also get
+   stillness — Smaug kill, same law as pa-bob in 02-hub.css) */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .scene-hub::before {
+    animation: dust-drift 96s linear infinite;
+    will-change: transform;
+  }
+  /* the failing instrument: the HUD location plate and title dip twice, briefly,
+     on a long cycle — a lamp that is not quite sure of itself. Opacity only. */
+  html:not(.rm) #hud-loc-name { animation: instrument-flicker 17s steps(1, end) infinite; }
+  html:not(.rm) .hud-title    { animation: instrument-flicker 23s steps(1, end) infinite 4s; }
+  /* the pressure readout: the hint breathes, slow and shallow */
+  html:not(.rm) .hub-hint { animation: hint-breathe 8s ease-in-out infinite; }
+}
+@keyframes dust-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-140px, -90px, 0); }
+}
+@keyframes instrument-flicker {
+  0%, 96.4%   { opacity: 1; }
+  96.7%       { opacity: 0.5; }
+  97.1%       { opacity: 1; }
+  97.6%       { opacity: 0.55; }
+  98.1%, 100% { opacity: 1; }
+}
+@keyframes hint-breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+
+
+/* ============================================================
+   The Artifact's DOM presence (v4). The canvas paints the sphere;
+   these are its keyboard/AT surface and its engraved plate. JS writes
+   --ax / --ay (center) and --ar (diameter) each layout.
+   ============================================================ */
+/* JS-only chrome: without the engine there is no sphere, so the invisible
+   disc must not ride the no-JS brochure stealing mid-viewport clicks
+   (Smaug kill: the fixed 240px click-shield). display gates on html.js,
+   which also self-cleans after the boot-throw fallback strips .js */
+#artifact-hit, .artifact-label { display: none; }
+html.js #artifact-hit { display: block; }
+html.js .artifact-label { display: block; }
+#artifact-hit {
+  position: fixed; z-index: 15;                 /* below near-orbit anchors; above far ones */
+  left: var(--ax, 50vw); top: var(--ay, 60vh);
+  width: var(--ar, 240px); height: var(--ar, 240px);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: transparent; border: 0; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc */
+#artifact-hit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--brass-rgb), 0.9),
+              0 0 22px 4px rgba(255, 205, 90, 0.5) inset;
+}
+.artifact-label {
+  position: fixed; z-index: 16; pointer-events: none;
+  left: var(--ax, 50vw); top: var(--ay, 72vh);
+  transform: translateX(-50%);
+  font-size: 0.58rem; letter-spacing: var(--track-plate);
+  color: var(--brass); font-weight: 600; text-transform: uppercase;
+  white-space: nowrap; opacity: 0.82;
+  text-shadow: 0 0 10px rgba(2, 9, 8, 0.9);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .artifact-label { animation: hint-breathe 8s ease-in-out infinite 1.4s; }
+}
+
+/* the phone keeps the Artifact as ambient art only: the invisible hit target
+   would otherwise sit over the world column and steal its taps + scroll. The
+   canvas still paints the dim sphere and the sonar ring behind everything. */
+@media (max-width: 700px) {
+  #artifact-hit, .artifact-label { display: none !important; }
+}
+
+/* reduced-motion: the dust, flicker, breathe all hold still (the dark and the
+   deepened porthole remain — static dread is allowed dread) */
+html.rm .scene-hub::before,
+html.rm #hud-loc-name, html.rm .hud-title,
+html.rm .hub-hint, html.rm .artifact-label { animation: none !important; }
+
 </style>
 <!-- Hand-built by Desert Data Labs. No frameworks, no build magic, no assets.
      You are standing in the source. https://desertdatalabs.com -->
@@ -985,9 +1102,15 @@ html:not(.rm) .konami-seal { animation: konami-seal-glow 3.2s var(--ease-out) in
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
         <h1 class="hub-h1">Seven worlds. One clock.<br>Everything you see is code.</h1>
-        <p class="hub-sub">Hand-built universes, each with its own weather, physics, and music. Pick one and go.</p>
-        <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
+        <p class="hub-sub">Seven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
+        <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
+
+      <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
+           sphere; this button is its keyboard/AT presence and the ripple trigger.
+           JS positions both over the sphere center via --ax / --ay. -->
+      <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
+      <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The seven worlds">
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
@@ -1263,7 +1386,8 @@ html:not(.rm) .konami-seal { animation: konami-seal-glow 3.2s var(--ease-out) in
 <noscript>
   <style>
     /* the brochure IS the page: with no JS the scenes simply stack, styled by CSS defaults */
-    .hub-hint, .audio-toggle, #hud-clock, .w-note { display: none !important; }
+    .hub-hint, .audio-toggle, #hud-clock, .w-note,
+    #artifact-hit, .artifact-label { display: none !important; }
   </style>
 </noscript>
 
@@ -1346,7 +1470,7 @@ function sizeSky() {
   sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   buildStars();
-  measureArc();
+  measureOrbit();
   drawStatic();                                        /* rm / idle repaint */
 }
 let resizeT = null;
@@ -1398,26 +1522,39 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the arc composes itself BELOW the copy, whatever the viewport gives us */
-let arcCY = 0, arcRY = 80;
-function measureArc() {
+/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+   flattened ellipse, passing behind and in front (z-sorted in drawSky) */
+const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
+function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
-  const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.4;
-  const room = Math.max(140, H - cb - 70);             /* keep clear of the footer HUD */
-  arcCY = cb + room * 0.58;
-  arcRY = Math.min(room * 0.34, 150);
+  const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
+  if (desktop()) {
+    const room = Math.max(220, H - cb - 84);           /* keep clear of the footer HUD */
+    ART.cx = W / 2;
+    ART.cy = cb + room * 0.54;
+    ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
+    ART.rx = Math.min(W * 0.42, ART.r * 2.75);
+    ART.ry = Math.max(ART.r * 0.52, Math.min(room * 0.30, ART.r * 0.72));
+  } else {
+    /* phone: the Artifact is a presence low in the deep, under the chart column */
+    ART.cx = W / 2;
+    ART.cy = H * 0.72;
+    ART.r  = Math.min(W * 0.34, 150);
+    ART.rx = 0; ART.ry = 0;
+  }
+  placeArtifactDom();
 }
 function planetPos(i, clockMs) {
-  const w = WORLDS[i];
-  const cx = W / 2;
-  const spreadX = Math.min(W * 0.42, 600);
-  const baseA = -Math.PI / 2 + (i - 3) * 0.4;          /* fan the seven across the arc */
   const t = reduced() ? 0 : clockMs / 1000;
-  const wob = reduced() ? 0 : Math.sin(t * w.speed * 2 + i * 1.7) * 0.045;
-  const ang = baseA + wob + Math.sin(seasonTilt) * 0.03;
+  /* each world keeps its own period; reduced-motion holds a seeded pose */
+  const ang = (i / WORLDS.length) * Math.PI * 2 + seasonTilt + t * (Math.PI * 2) / (95 + i * 16);
+  const bob = reduced() ? 0 : Math.sin(t * 0.5 + i * 1.7) * 3;
+  const depth = Math.sin(ang);                         /* -1 far behind · +1 near in front */
   return {
-    x: cx + Math.cos(ang) * spreadX,
-    y: arcCY + Math.sin(ang) * arcRY + Math.sin(t * 0.5 + i) * (reduced() ? 0 : 4),
+    x: ART.cx + Math.cos(ang) * ART.rx,
+    y: ART.cy + depth * ART.ry + bob,
+    depth,
+    sc: 0.78 + 0.26 * (depth + 1) / 2,                 /* perspective scale */
   };
 }
 
@@ -1450,34 +1587,58 @@ function drawSky(dt, clockMs) {
 
   /* hub decoration only while the hub is on stage */
   if (Scenes.current === 'hub' && desktop()) {
-    /* orbit ring */
-    ctx.strokeStyle = 'rgba(233,238,249,0.07)';
+    /* the orbit ring the worlds ride — faint brass, an instrument's engraving */
+    ctx.strokeStyle = 'rgba(201,163,92,0.10)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.ellipse(W / 2, H * 0.66, Math.min(W * 0.38, 560), Math.min(H * 0.26, 240) * 0.62, 0, 0, 7);
+    ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, 0, 7);
     ctx.stroke();
 
-    WORLDS.forEach((w, i) => {
-      const p = planetPos(i, clockMs);
+    /* z-sort: far worlds first, then the Artifact, then near worlds */
+    const ps = WORLDS.map((w, i) => ({ w, p: planetPos(i, clockMs) }));
+    const drawWorld = ({ w, p }) => {
       const a = anchors.get(w.slug);
+      const dim = 0.45 + 0.55 * (p.depth + 1) / 2;
       if (a) {
         a.style.setProperty('--pax', p.x.toFixed(1) + 'px');
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
-        a.style.setProperty('--psize', w.size + 'px');
+        a.style.setProperty('--psize', Math.round(w.size * p.sc) + 'px');
+        /* a far-side world crossing the Artifact's face is OCCLUDED: its name
+           must nearly vanish too, not float legible across the gold */
+        const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r + 50;
+        a.style.setProperty('--pdim', (occluded ? 0.12 : dim).toFixed(2));
+        /* the DOM mirrors the canvas z-sort: a world occluded BEHIND the
+           Artifact must not own the clicks on the sphere's face (its anchor
+           drops below artifact-hit's z15; near worlds ride above it) */
+        a.style.zIndex = p.depth > 0 ? 22 : 14;
       }
-      /* the worlds themselves: rotating textured spheres (PlanetForge) */
       const hov = hovered === w.slug;
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
+      ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
+      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * p.sc * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
+      ctx.globalAlpha = 1;
 
       if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},0.55)`;
+        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${0.55 * (0.5 + 0.5 * dim)})`;
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72 * p.sc, 0, 7); ctx.stroke();
         ctx.setLineDash([]);
       }
-    });
+    };
+    for (const e of ps) if (e.p.depth <= 0) drawWorld(e);
+    if (window.SphereForge) {
+      SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
+    }
+    for (const e of ps) if (e.p.depth > 0) drawWorld(e);
+  } else if (Scenes.current === 'hub' && window.SphereForge) {
+    /* phone: the Artifact holds the deep beneath the chart column, dim and vast */
+    ctx.globalAlpha = 0.5;
+    SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+    ctx.globalAlpha = 1;
+    SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
   /* comet, when one is in flight */
@@ -1511,6 +1672,51 @@ function scheduleComet() {
   clearTimeout(cometTimer);
   cometTimer = setTimeout(() => { launchComet(); scheduleComet(); }, 24000 + Math.random() * 26000);
 }
+
+/* ---------- the sonar: the Artifact calls out on its own slow clock.
+   The visual ring only moves when motion is allowed; the EVENT always fires
+   (the score answers it when the context is running) ---------- */
+let sonarTimer = null;
+function pingSonar() {
+  if (document.hidden || Scenes.current !== 'hub') return;
+  if (window.SphereForge && !reduced()) {
+    SphereForge.ping();
+    if (!skyTask) Orrery.startAmbient();               /* rings need the loop */
+  }
+  Orrery.events.dispatchEvent(new CustomEvent('sonar'));
+}
+function scheduleSonar() {
+  clearTimeout(sonarTimer);
+  sonarTimer = setTimeout(() => { pingSonar(); scheduleSonar(); }, 6400 + Math.random() * 1800);
+}
+function stopSonar() { clearTimeout(sonarTimer); sonarTimer = null; }
+
+/* ---------- the Artifact's DOM presence: focusable, labeled, answerable ---------- */
+const artHit = document.getElementById('artifact-hit');
+const artLabel = document.getElementById('artifact-label');
+function placeArtifactDom() {
+  if (artHit) {
+    artHit.style.setProperty('--ax', ART.cx + 'px');
+    artHit.style.setProperty('--ay', ART.cy + 'px');
+    artHit.style.setProperty('--ar', Math.round(ART.r * 2) + 'px');
+  }
+  if (artLabel) {
+    artLabel.style.setProperty('--ax', ART.cx + 'px');
+    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
+  }
+}
+let artLast = 0;
+function touchArtifact() {
+  const now = performance.now();
+  if (now - artLast < 700) return;                     /* it does not answer to hammering */
+  artLast = now;
+  if (window.SphereForge && !reduced()) {
+    SphereForge.ripple();
+    if (!skyTask) Orrery.startAmbient();
+  }
+  Orrery.events.dispatchEvent(new CustomEvent('artifact'));
+}
+if (artHit) artHit.addEventListener('click', touchArtifact);
 
 /* the idle sky task: runs only when something moves */
 let skyTask = null;
@@ -1589,6 +1795,7 @@ function setScene(name, { instant = false } = {}) {
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
     Orrery.startAmbient();
+    scheduleSonar();                                   /* home again: the call resumes */
     WorldFX.stopAll();
     /* the keyboard traveler lands back on the planet they left (Smaug kill 10) */
     if (prevName && prevName !== 'hub') {
@@ -1601,6 +1808,7 @@ function setScene(name, { instant = false } = {}) {
     html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
     html.style.setProperty('--acc-rgb', w.a.join(','));
     Orrery.stopAmbient();                              /* one scene owns the frame budget */
+    stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
     /* refresh this card's medallion so the little world advanced since last visit */
@@ -1707,12 +1915,15 @@ tickClock();
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
   PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
+  if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
   sizeSky();
   setRM();
   route(true);
   if (!reduced()) Orrery.startAmbient();
   /* re-measure the arc once type has settled (font metrics can shift the copy block) */
-  setTimeout(() => { measureArc(); drawStatic(); paintMedallions(); }, 350);
+  setTimeout(() => { measureOrbit(); drawStatic(); paintMedallions(); }, 350);
+  /* no sonar arm here: setScene('hub') schedules it on every hub arrival,
+     and a deep-link boot into a world must not run a perpetual no-op timer */
 }
 
 /* the brass card medallions: one small spinning-world portrait per card,
@@ -2226,6 +2437,395 @@ const PlanetForge = (() => {
     },
   };
 })();
+
+
+/* ============================================================
+   05c-sphereforge.js — SphereForge: the Artifact.
+   A huge flawless liquid-gold sphere. It does not rotate: the
+   surface FLOWS. A horizontally seamless gold texture is baked
+   DOUBLED (1024px) so a scrolling slice is always ONE drawImage
+   with no wrap seam; 24 fixed slices each take a per-frame sine
+   x-nudge — the molten-skin illusion. Everything else is prebaked
+   sprites. Zero external assets. No text in canvas. All original.
+   Per-frame cost: 24 slice blits + <=7 sprite blits + <=4 ring
+   strokes; zero allocations, zero gradient creation.
+   ============================================================ */
+'use strict';
+
+const SphereForge = (() => {
+  const TAU = Math.PI * 2;
+  const TEX_W = 512, TEX_H = 256;          /* gen size; baked doubled to 1024 */
+  const NS = 24;                           /* fixed slice count */
+  const RIM_S = 224, RIM_PR = 80;          /* rim sprite canvas / baked radius */
+  const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = R * 2.8 */
+  const RIPPLE_MS = 1800, SONAR_MS = 3500;
+  const SCROLL_SPD = 1 / 72000;            /* base drift: one full loop ~72s */
+  const FLOW_SPD = 1 / 47000;              /* flow layer: faster, opposite */
+  const SIG2 = 0.13 * 0.13;                /* ripple gaussian width (frac of R)^2 */
+  const BRASS = 'rgba(201,163,92,1)';      /* --brass */
+  const CREAM = 'rgba(239,228,200,1)';     /* --cream */
+  const GOLD_BRIGHT = 'rgba(255,240,210,1)';
+  const docEl = document.documentElement;
+
+  /* ---------- deterministic randomness (PlanetForge's generators) ---------- */
+  function seedOf(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function mulberry(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function makeFbm(rnd, baseX, baseY, octaves) {
+    const layers = []; let amp = 1, total = 0, fx = baseX, fy = baseY;
+    for (let o = 0; o < octaves; o++) {
+      const g = new Float32Array(fx * fy);
+      for (let i = 0; i < g.length; i++) g[i] = rnd();
+      layers.push({ g, fx, fy, amp });
+      total += amp; amp *= 0.5; fx *= 2; fy = Math.min(fy * 2, 160);
+    }
+    return (u, v) => {                     /* u wraps (seamless x), v clamps */
+      let s = 0;
+      for (let L = 0; L < layers.length; L++) {
+        const ly = layers[L];
+        let x = (u * ly.fx) % ly.fx; if (x < 0) x += ly.fx;
+        let y = v * (ly.fy - 1); if (y < 0) y = 0; else if (y > ly.fy - 1.0001) y = ly.fy - 1.0001;
+        const x0 = x | 0, y0 = y | 0;
+        const x1 = (x0 + 1) % ly.fx, y1 = Math.min(y0 + 1, ly.fy - 1);
+        let tx = x - x0, ty = y - y0;
+        tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+        const a = ly.g[y0 * ly.fx + x0], b = ly.g[y0 * ly.fx + x1];
+        const c = ly.g[y1 * ly.fx + x0], d = ly.g[y1 * ly.fx + x1];
+        s += ly.amp * (a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty);
+      }
+      return s / total;
+    };
+  }
+  function hex(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function makeLut(stops) {
+    const out = new Uint8Array(768); let si = 0;
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255;
+      while (si < stops.length - 2 && t > stops[si + 1][0]) si++;
+      const a = hex(stops[si][1]), b = hex(stops[si + 1][1]);
+      const span = Math.max(1e-6, stops[si + 1][0] - stops[si][0]);
+      let f = (t - stops[si][0]) / span; if (f < 0) f = 0; else if (f > 1) f = 1;
+      out[i * 3] = a[0] + (b[0] - a[0]) * f;
+      out[i * 3 + 1] = a[1] + (b[1] - a[1]) * f;
+      out[i * 3 + 2] = a[2] + (b[2] - a[2]) * f;
+    }
+    return out;
+  }
+  function cv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function doubled(src) {                  /* bake the seamless wrap INTO the canvas */
+    const d = cv(src.width * 2, src.height), g = d.getContext('2d');
+    g.drawImage(src, 0, 0); g.drawImage(src, src.width, 0);
+    return d;
+  }
+
+  /* ---------- prebaked assets ---------- */
+  let baseTex = null, flowTex = null;
+  let limbSpr = null, glossTL = null, glossBR = null, wanderSpr = null;
+  let pulseSpr = null, rimSpr = null, shadowSpr = null;
+  let su = 0.5, frozenT = 60000;           /* the seeded reduced-motion pose */
+  let inited = false;
+
+  function buildBase(rnd) {
+    const c = cv(TEX_W, TEX_H), t = c.getContext('2d');
+    const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3);
+    const L = makeLut([[0, '#4a2f10'], [0.42, '#c9a35c'], [0.75, '#ffdf9e'], [1, '#fff3d6']]);
+    const img = t.createImageData(TEX_W, TEX_H); const d = img.data; let i = 0;
+    for (let yy = 0; yy < TEX_H; yy++) {
+      const v = yy / TEX_H;
+      for (let xx = 0; xx < TEX_W; xx++) {
+        const u = xx / TEX_W;
+        /* molten banding: horizontal bands bent by wrapped noise + a wrapped u-swell */
+        const band = 0.5 + 0.5 * Math.sin(v * 14.5 + warp(u, v) * 4.6 + Math.sin(u * TAU) * 0.9);
+        let n = fb(u, v) * 0.58 + band * 0.42;
+        n = (n - 0.5) * 1.35 + 0.56;       /* stretch + lift into the gold */
+        if (n < 0) n = 0; else if (n > 1) n = 1;
+        const k3 = ((n * 255) | 0) * 3;
+        d[i++] = L[k3]; d[i++] = L[k3 + 1]; d[i++] = L[k3 + 2]; d[i++] = 255;
+      }
+    }
+    t.putImageData(img, 0, 0);
+    return doubled(c);
+  }
+
+  function buildFlow(rnd) {
+    const w = 512, h = 128, c = cv(w, h), t = c.getContext('2d');
+    const fb = makeFbm(rnd, 9, 2, 3);      /* high x freq, low y: elongated streaks */
+    const img = t.createImageData(w, h); const d = img.data; let i = 0;
+    for (let yy = 0; yy < h; yy++) {
+      const v = yy / h;
+      for (let xx = 0; xx < w; xx++) {
+        const n = fb(xx / w, v);
+        let a = n > 0.58 ? (n - 0.58) * 3.2 : 0; if (a > 0.9) a = 0.9;
+        a *= a;                            /* sparse, sharp-shouldered highlights */
+        d[i++] = 255; d[i++] = 236; d[i++] = 190; d[i++] = (a * 255) | 0;
+      }
+    }
+    t.putImageData(img, 0, 0);
+    return doubled(c);
+  }
+
+  function buildSprites() {
+    const sz = 256;
+    /* limb darkening + baked wrap-light annulus (the edge where light bends) */
+    let c = cv(sz, sz), g = c.getContext('2d'), gr;
+    g.beginPath(); g.arc(128, 128, 128, 0, TAU); g.clip();
+    gr = g.createRadialGradient(96, 88, 30, 96, 88, 250);
+    gr.addColorStop(0, 'rgba(0,0,0,0)');
+    gr.addColorStop(0.5, 'rgba(30,16,4,0.07)');
+    gr.addColorStop(0.75, 'rgba(24,12,3,0.32)');
+    gr.addColorStop(0.92, 'rgba(18,9,2,0.6)');
+    gr.addColorStop(1, 'rgba(14,7,2,0.82)');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    gr = g.createRadialGradient(128, 128, 112, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(10,5,1,0)');
+    gr.addColorStop(1, 'rgba(10,5,1,0.5)');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    gr = g.createRadialGradient(128, 128, 114, 128, 128, 127);
+    gr.addColorStop(0, 'rgba(255,240,210,0)');
+    gr.addColorStop(0.8, 'rgba(255,240,210,0.16)');
+    gr.addColorStop(1, 'rgba(255,244,220,0.34)');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    limbSpr = c;
+
+    /* big soft top-left specular bloom */
+    c = cv(sz, sz); g = c.getContext('2d');
+    g.beginPath(); g.arc(128, 128, 128, 0, TAU); g.clip();
+    gr = g.createRadialGradient(88, 78, 4, 88, 78, 120);
+    gr.addColorStop(0, 'rgba(255,252,240,0.55)');
+    gr.addColorStop(0.25, 'rgba(255,244,214,0.28)');
+    gr.addColorStop(0.6, 'rgba(255,236,190,0.10)');
+    gr.addColorStop(1, 'rgba(255,236,190,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    glossTL = c;
+
+    /* lower-right counter-gloss: gold reflects its surroundings both ways */
+    c = cv(sz, sz); g = c.getContext('2d');
+    g.beginPath(); g.arc(128, 128, 128, 0, TAU); g.clip();
+    gr = g.createRadialGradient(178, 186, 4, 178, 186, 96);
+    gr.addColorStop(0, 'rgba(255,223,158,0.30)');
+    gr.addColorStop(0.5, 'rgba(255,214,150,0.12)');
+    gr.addColorStop(1, 'rgba(255,214,150,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    glossBR = c;
+
+    /* the wandering highlight (drawn at an animated offset, inside the clip) */
+    c = cv(160, 160); g = c.getContext('2d');
+    gr = g.createRadialGradient(80, 80, 2, 80, 80, 78);
+    gr.addColorStop(0, 'rgba(255,250,235,0.6)');
+    gr.addColorStop(0.35, 'rgba(255,240,205,0.22)');
+    gr.addColorStop(1, 'rgba(255,240,205,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 160, 160);
+    wanderSpr = c;
+
+    /* whole-face brightening pulse for the ripple */
+    c = cv(sz, sz); g = c.getContext('2d');
+    gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(255,240,208,0.5)');
+    gr.addColorStop(0.7, 'rgba(255,232,190,0.18)');
+    gr.addColorStop(1, 'rgba(255,232,190,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    pulseSpr = c;
+
+    /* warm gold rim glow: glow OFF the disc + a bright wrap ring (gen-time blur only) */
+    c = cv(RIM_S, RIM_S); g = c.getContext('2d');
+    const cx = RIM_S / 2;
+    gr = g.createRadialGradient(cx, cx, RIM_PR * 0.9, cx, cx, RIM_PR * 1.4);
+    gr.addColorStop(0, 'rgba(201,163,92,0.34)');
+    gr.addColorStop(0.35, 'rgba(201,163,92,0.16)');
+    gr.addColorStop(1, 'rgba(201,163,92,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, RIM_S, RIM_S);
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath(); g.arc(cx, cx, RIM_PR * 0.97, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+    g.strokeStyle = 'rgba(255,223,158,0.85)'; g.lineWidth = 1.6;
+    g.shadowColor = 'rgb(255,223,158)'; g.shadowBlur = 12;
+    g.beginPath(); g.arc(cx, cx, RIM_PR + 1, 0, TAU); g.stroke();
+    g.shadowBlur = 0;
+    rimSpr = c;
+
+    /* seat shadow: soft dark radial, stretched into an ellipse at draw time */
+    c = cv(128, 128); g = c.getContext('2d');
+    gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+    gr.addColorStop(0, 'rgba(2,8,7,0.85)');
+    gr.addColorStop(0.55, 'rgba(2,8,7,0.4)');
+    gr.addColorStop(1, 'rgba(2,8,7,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    shadowSpr = c;
+  }
+
+  /* ---------- runtime state (pooled; no per-frame allocation) ---------- */
+  let ripplePending = false, rippleT0 = -1, pending = 0;
+  const rings = [{ on: false, born: 0 }, { on: false, born: 0 }, { on: false, born: 0 }];
+  const rm = () => docEl.classList.contains('rm');
+
+  /* ---------- API ---------- */
+  return {
+    init() {
+      if (inited) return;
+      inited = true;
+      const rnd = mulberry(seedOf('artifact'));
+      baseTex = buildBase(rnd);
+      flowTex = buildFlow(rnd);
+      buildSprites();
+      su = rnd();
+      frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
+    },
+
+    draw(g, x, y, R, clockMs, opts) {
+      if (!inited || R <= 0) return;
+      const reduced2 = !!(opts && opts.rm);
+      const t = reduced2 ? frozenT : clockMs;
+      const D = R * 2, dw = R * 8, half = dw * 0.5;   /* wrap period = 4R */
+      const pad = R * 0.13;                /* covers max warp excursion */
+
+      if (reduced2) { ripplePending = false; rippleT0 = -1; }
+      else if (ripplePending) { rippleT0 = clockMs; ripplePending = false; }
+      let rp = -1;
+      if (rippleT0 >= 0) {
+        rp = (clockMs - rippleT0) / RIPPLE_MS;
+        if (rp >= 1) { rippleT0 = -1; rp = -1; }
+      }
+      const rippling = rp >= 0;
+      const env = rippling ? Math.sin(rp * Math.PI) : 0;
+      const ringR = rippling ? rp * R * 1.25 : 0;
+
+      const scroll = ((t * SCROLL_SPD) % 1) * half;
+      const fscroll = half - ((t * FLOW_SPD) % 1) * half;   /* opposite drift */
+      const A = R * 0.028;                 /* liquid warp amplitude, subtle */
+
+      g.save();
+      g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
+
+      /* the molten surface: 24 slices, one seam-free blit each */
+      const sh = TEX_H / NS, dh = D / NS;
+      for (let i = 0; i < NS; i++) {
+        let off = A * Math.sin(t * 0.00093 + i * 0.53)
+                + A * 0.6 * Math.sin(t * 0.00061 - i * 0.31 + 2.1);
+        if (rippling) {                    /* local amplitude surge near the ring */
+          const sd = Math.abs(y - R + (i + 0.5) * dh - y) - ringR;
+          off += A * 2.6 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
+               * Math.sin(t * 0.012 + i * 1.3);
+        }
+        g.drawImage(baseTex, 0, i * sh, TEX_W * 2, sh,
+          x - R - pad - scroll + off, y - R + i * dh, dw, dh + 0.5);
+      }
+
+      /* flow layer: brighter streaks, screen blend, opposite scroll */
+      g.globalCompositeOperation = 'screen';
+      g.globalAlpha = reduced2 ? 0.14 : 0.13 + 0.05 * Math.sin(t * 0.0004);
+      g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+
+      /* the ripple: a bright band sweeping outward + a soft face-lift */
+      if (rippling) {
+        g.globalCompositeOperation = 'screen';
+        g.globalAlpha = env * 0.22;
+        g.drawImage(pulseSpr, x - R, y - R, D, D);
+        g.globalAlpha = env * 0.4;
+        g.strokeStyle = GOLD_BRIGHT;
+        g.lineWidth = R * 0.045 > 1.5 ? R * 0.045 : 1.5;
+        g.beginPath(); g.arc(x, y, ringR, 0, TAU); g.stroke();
+        g.globalAlpha = env * 0.18;
+        g.lineWidth = R * 0.02 > 1 ? R * 0.02 : 1;
+        g.beginPath(); g.arc(x, y, ringR * 0.86, 0, TAU); g.stroke();
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
+
+      /* shading + the two environment glosses */
+      g.drawImage(limbSpr, x - R, y - R, D, D);
+      g.drawImage(glossTL, x - R, y - R, D, D);
+      g.globalAlpha = 0.55;
+      g.drawImage(glossBR, x - R, y - R, D, D);
+      g.globalAlpha = 1;
+
+      /* the wandering specular: a slow lissajous orbit (parked when reduced) */
+      const wa = reduced2 ? su * TAU : t * 0.00016;
+      const wx = x + Math.cos(wa) * R * 0.42;
+      const wy = y + Math.sin(wa * 0.83 + 1.4) * R * 0.26;
+      const ws = R * 0.95;
+      g.globalCompositeOperation = 'screen';
+      g.globalAlpha = reduced2 ? 0.4 : 0.34 + 0.1 * Math.sin(t * 0.0005 + 1);
+      g.drawImage(wanderSpr, wx - ws / 2, wy - ws / 2, ws, ws);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      g.restore();
+
+      /* rim glow last, outside the clip */
+      const rs = R * RIM_DRAW;
+      g.globalAlpha = reduced2 ? 0.8 : 0.72 + 0.1 * Math.sin(t * 0.00035);
+      g.drawImage(rimSpr, x - rs / 2, y - rs / 2, rs, rs);
+      g.globalAlpha = 1;
+    },
+
+    drawSonar(g, x, y, R, clockMs) {
+      if (!inited) return;
+      if (rm()) {                          /* one static faint ring suggests the pulse */
+        pending = 0;
+        for (let i = 0; i < 3; i++) rings[i].on = false;
+        g.globalAlpha = 0.13;
+        g.strokeStyle = BRASS; g.lineWidth = 1;
+        g.beginPath(); g.arc(x, y, R * 1.6, 0, TAU); g.stroke();
+        g.globalAlpha = 1;
+        return;
+      }
+      while (pending > 0) {                /* latch queued pings into free pool slots */
+        pending--;
+        let free = -1;
+        for (let i = 0; i < 3; i++) if (!rings[i].on) { free = i; break; }
+        if (free < 0) { pending = 0; break; }
+        rings[free].on = true; rings[free].born = clockMs;
+      }
+      for (let i = 0; i < 3; i++) {
+        const rg = rings[i]; if (!rg.on) continue;
+        const p = (clockMs - rg.born) / SONAR_MS;
+        if (p >= 1) { rg.on = false; continue; }
+        const rr = R * (1.05 + p * 2.15);  /* R*1.05 -> R*3.2 */
+        const fade = (1 - p) * (1 - p);
+        g.globalAlpha = fade * 0.5;
+        g.strokeStyle = BRASS;
+        g.lineWidth = 1.8 - p * 0.8;
+        g.beginPath(); g.arc(x, y, rr, 0, TAU); g.stroke();
+        g.globalAlpha = fade * 0.22;       /* the fainter inner echo */
+        g.strokeStyle = CREAM;
+        g.lineWidth = 1;
+        g.beginPath(); g.arc(x, y, rr * 0.9, 0, TAU); g.stroke();
+      }
+      g.globalAlpha = 1;
+    },
+
+    ripple() {                             /* surface disturbance + a sonar ring */
+      if (rm()) return;
+      ripplePending = true;
+      pending = pending < 3 ? pending + 1 : 3;
+    },
+    ping() {                               /* ring only: the sonar */
+      if (rm()) return;
+      pending = pending < 3 ? pending + 1 : 3;
+    },
+
+    drawShadowPass(g, x, y, R) {           /* seats the Artifact INTO the scene */
+      if (!inited) return;
+      g.globalAlpha = 0.55;
+      g.drawImage(shadowSpr, x - R * 1.7, y - R * 0.55, R * 3.4, R * 1.7);
+      g.globalAlpha = 1;
+    },
+  };
+})();
+/* the engine guards its calls with `window.SphereForge` (mirrors WorldFX):
+   expose it so those guards fire and the Artifact actually paints */
+window.SphereForge = SphereForge;
 
 
 /* ============================================================
@@ -3077,13 +3677,18 @@ window.WorldFX = WorldFX;
 
 
 /* ============================================================
-   07-audio.js - Score v2: the cinematic engine. Zero files.
-   One synth graph, a generated concert hall, seven arrangements.
-   THE LAW (2.6): never autoplay; start only on an activation-bearing
-   event; the UI claims "on" only after ctx.state === 'running'.
+   07-audio.js - Score v3: the dread engine. Zero files.
+   One synth graph, a generated concert hall, seven arrangements
+   + the derelict hub (drone throb, heartbeat, hull groans, sonar).
+   THE LAW (2.6): no pre-gesture sound. A boot-time resume() may
+   succeed only where the browser itself already granted media
+   engagement; otherwise the first activation-bearing gesture
+   ignites. The UI claims "on" only after ctx.state === 'running';
+   while armed-but-suspended it says "ready". The label never lies.
    Persistent graph: 8 nodes (bus, dry, wet, convolver, compressor,
    delay, delay-lowpass, delay-feedback). World rigs are scene-scoped
-   transients (<=21 nodes, self-stopping); notes are per-note transients.
+   transients (<=21 nodes; the hub rig is 8); notes are per-note
+   transients, self-stopping, disconnected onended.
    ============================================================ */
 'use strict';
 
@@ -3095,13 +3700,15 @@ const Score = (() => {
   const N = (d, o, dur, v) => ({ d, o, dur, v });
   const R = null;
   const ARR = {
-    /* observatory at night: glassy, mid reverb */
+    /* the derelict hold: drone throb + sub heartbeat + sparse glassy
+       minor-second adjacencies + self-scheduled hull groans. No choir.
+       gap 26 on a 600ms step: silence dominates (a ~25s cycle, mostly rest) */
     hub: {
-      root: 220.0, scale: [0, 3, 5, 7, 10], step: 500, bright: 900, gap: 8,
-      dr: 0.028, pd: 0.03, ch: 0.014, padIv: [0, 7, 12],
-      lead: { wave: 'triangle', dly: 0.3, wet: 0.15 },
-      motif: [N(0,1,2,.09), R, N(2,1,1,.07), R, N(1,1,2,.08), R, R, N(3,1,1,.07), R, R, N(4,0,2,.06), R, N(2,1,1,.07), R, R, R],
-      perc: '................',
+      root: 220.0, scale: [0, 1, 3, 7, 8], step: 600, bright: 300, gap: 26,
+      dr: 0.05, drDet: 9, pd: 0, ch: 0, padIv: [0, 7, 12], groan: true,
+      lead: { wave: 'sine', dly: 0.18, wet: 0.55 },
+      motif: [N(0,2,4,.05), R, R, R, R, N(1,2,5,.045), R, R, R, R, R, N(4,1,4,.04), R, N(3,1,5,.045), R, R],
+      perc: 'H...H...H...H...',
     },
     /* vast desert epic: low slow Phrygian-dominant over heavy drone, sparse taiko */
     'dust-sea': {
@@ -3165,6 +3772,7 @@ const Score = (() => {
   let ctx = null, bus = null, dry = null, wet = null, verb = null, comp = null;
   let dly = null, dlyLP = null, dlyFB = null, noiseBuf = null;
   let schedTimer = null, nextNote = 0, stepIdx = 0, holdUntil = 0, nextCallAt = 0, lastFanfare = -9;
+  let nextGroanAt = 0, lastAnswer = -9, armed = false;
   let on = false, cfg = ARR.hub, rig = null;
 
   const btn = document.getElementById('audio-toggle');
@@ -3217,6 +3825,14 @@ const Score = (() => {
     dlyFB = ctx.createGain(); dlyFB.gain.value = 0.35;
     dly.connect(dlyLP); dlyLP.connect(dlyFB).connect(dly);
     dlyLP.connect(bus);                                /* repeats land in the hall too */
+
+    /* an external interruption (another app takes audio focus) suspends the
+       context with NO visibilitychange — re-verify the label so it never
+       claims "on" over silence (the label never lies) */
+    ctx.addEventListener('statechange', () => {
+      if (document.hidden) return;                     /* the hide/show path owns that case */
+      setUI(on && ctx.state === 'running' ? true : (on || armed) ? 'ready' : false);
+    });
   }
 
   /* ---------- world rig: drone + pad + choir, scene-scoped ---------- */
@@ -3229,8 +3845,9 @@ const Score = (() => {
       const dRoot = v.root > 150 ? v.root / 2 : v.root;
       const lpf = ctx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 300 + v.bright * 0.1; lpf.Q.value = 0.8;
       const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v.dr, t + 1.4);
-      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = dRoot; a.detune.value = -6;
-      const b = ctx.createOscillator(); b.type = 'sawtooth'; b.frequency.value = dRoot; b.detune.value = 6;
+      const det = v.drDet || 6;                      /* cents; wider pair = faster beat-throb */
+      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = dRoot; a.detune.value = -det;
+      const b = ctx.createOscillator(); b.type = 'sawtooth'; b.frequency.value = dRoot; b.detune.value = det;
       const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = dRoot / 2;
       a.connect(lpf); b.connect(lpf); sub.connect(lpf); lpf.connect(g).connect(r.g);
       const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06 + Math.random() * 0.03;
@@ -3347,6 +3964,65 @@ const Score = (() => {
     o.start(when); o.stop(when + 4.5);
     o.onended = () => g.disconnect();
   }
+  function heart(when) {                             /* sub heartbeat: rounder + quieter than taiko */
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(60, when);
+    o.frequency.exponentialRampToValueAtTime(46, when + 0.22);   /* ~52Hz center */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.11, when + 0.035);          /* soft knuckle, no click, no noise snap */
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.5);
+    o.connect(g); g.connect(bus);
+    o.start(when); o.stop(when + 0.55);
+    o.onended = () => g.disconnect();
+  }
+  function groan(when) {                             /* pressure hull: bent bandpass noise + a faint metal cry */
+    const out = ctx.createGain(); out.gain.value = 1; out.connect(bus);
+    const w = ctx.createGain(); w.gain.value = 0.6; out.connect(w).connect(verb);
+    const n = noiseSrc(); n.loop = true;             /* the 1.2s buffer loops; the Q8 band smears the seam */
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 8;
+    bp.frequency.setValueAtTime(200, when);
+    bp.frequency.exponentialRampToValueAtTime(95, when + 2.8);   /* the slow downward bend, 90-220 band */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.12, when + 0.9);
+    g.gain.setTargetAtTime(0.0001, when + 2.4, 0.45);
+    n.connect(bp); bp.connect(g); g.connect(out);
+    const o = ctx.createOscillator(); o.type = 'sine';           /* resonant overtone rides inside */
+    o.frequency.setValueAtTime(233.1, when + 0.3);
+    o.frequency.exponentialRampToValueAtTime(196.0, when + 2.6); /* gliss down a minor third */
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0, when + 0.3);
+    og.gain.linearRampToValueAtTime(0.02, when + 1.1);
+    og.gain.setTargetAtTime(0.0001, when + 2.3, 0.4);
+    o.connect(og); og.connect(out);
+    n.start(when); n.stop(when + 3.4); o.start(when + 0.3); o.stop(when + 3.4);
+    n.onended = () => out.disconnect();
+  }
+  function ping(when, vel) {                         /* one sonar blip; the hall makes it read submarine */
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 1180;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(vel, when + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.09);    /* 90ms, fast decay */
+    o.connect(g); g.connect(bus);
+    const w = ctx.createGain(); w.gain.value = 0.85; g.connect(w).connect(verb);
+    o.start(when); o.stop(when + 0.14);
+    o.onended = () => g.disconnect();
+  }
+  function artifactAnswer(when) {                    /* the reply is slightly wrong: 196 sagging to 185 */
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(196, when);
+    o.frequency.linearRampToValueAtTime(185, when + 1.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.07, when + 0.25);
+    g.gain.setTargetAtTime(0.0001, when + 1.2, 0.5);
+    o.connect(g); g.connect(bus);
+    const w = ctx.createGain(); w.gain.value = 0.8; g.connect(w).connect(verb);
+    o.start(when); o.stop(when + 3.4);
+    o.onended = () => g.disconnect();
+  }
   function riser(when) {                               /* pre-warp reverse-swell into the arrival */
     const n = noiseSrc();
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2;
@@ -3397,6 +4073,7 @@ const Score = (() => {
     nextNote = ctx.currentTime + 0.1;
     stepIdx = 0;
     nextCallAt = ctx.currentTime + 15;
+    nextGroanAt = ctx.currentTime + 12 + Math.random() * 10;
     schedTimer = setInterval(() => {
       if (!on || ctx.state !== 'running') return;
       const now = ctx.currentTime;
@@ -3409,9 +4086,12 @@ const Score = (() => {
           const pos = stepIdx % span;
           if (pos < v.motif.length) { const st = v.motif[pos]; if (st) playLead(v, st, nextNote); }
           const pc = v.perc[stepIdx % 16];
-          if (pc === 'K') taiko(nextNote, 0.4); else if (pc === 's') shaker(nextNote);
+          if (pc === 'K') taiko(nextNote, 0.4);
+          else if (pc === 's') shaker(nextNote);
+          else if (pc === 'H') heart(nextNote);           /* the hub's 2.4s pulse (600ms x 4) */
         }
         if (v.call && nextNote >= nextCallAt) { deepCall(nextNote); nextCallAt = nextNote + 17 + Math.random() * 7; }
+        if (v.groan && nextNote >= nextGroanAt) { groan(nextNote); nextGroanAt = nextNote + 25 + Math.random() * 15; }
         stepIdx += 1;
         nextNote += v.step / 1000;
       }
@@ -3427,6 +4107,7 @@ const Score = (() => {
     if (!ready()) return;                              /* rig is built on the next turnOn */
     holdUntil = ctx.currentTime + 1.6;                 /* pads land first; the motif enters after the breath */
     nextCallAt = ctx.currentTime + 12;
+    nextGroanAt = ctx.currentTime + 14 + Math.random() * 10;   /* the hull settles before it speaks */
     if (rig) rig.fade(ctx.currentTime);
     rig = buildRig(cfg);
   }
@@ -3461,6 +4142,23 @@ const Score = (() => {
     fanfare(ctx.currentTime + 0.05);
   });
 
+  /* the sonar: the integrator owns the cadence (CustomEvent('sonar') ~7s);
+     the score only answers while truly running. Blip + echo, both very wet. */
+  window.Orrery.events.addEventListener('sonar', () => {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.02;
+    ping(t, 0.07);
+    ping(t + 0.24, 0.028);                           /* the echo: 240ms later, 0.4 gain */
+  });
+
+  /* the Artifact answers when touched: low, slow, slightly flat. 1 per 2s. */
+  window.Orrery.events.addEventListener('artifact', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastAnswer < 2) return;
+    lastAnswer = ctx.currentTime;
+    artifactAnswer(ctx.currentTime + 0.03);
+  });
+
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */
   const cta = document.querySelector('.cta-btn');
   if (cta) cta.addEventListener('click', () => {
@@ -3475,14 +4173,18 @@ const Score = (() => {
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
+  /* localStorage, deliberately: under DEFAULT-ON, an opt-out that lasts one
+     tab is a hostile default — "off" must survive new tabs and return visits
+     (Smaug kill: the opt-out evaporated in sessionStorage) */
   const safeStore = {
-    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
-    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
+    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
   };
   async function turnOn() {
     if (!ctx) buildGraph();
-    try { await ctx.resume(); } catch (_) { /* stays off */ }
-    if (ctx.state !== 'running') { setUI(false); return false; }
+    try { await ctx.resume(); } catch (_) { /* stays silent */ }
+    if (ctx.state !== 'running') { setUI(armed ? 'ready' : false); return false; }
+    armed = false;
     on = true;
     bus.gain.setTargetAtTime(0.75, ctx.currentTime, 0.4);
     if (!rig) { rig = buildRig(cfg); holdUntil = ctx.currentTime + 0.4; }
@@ -3492,32 +4194,54 @@ const Score = (() => {
     return true;
   }
   function turnOff() {
-    on = false;
+    on = false; armed = false;
     if (ctx) {
       bus.gain.setTargetAtTime(0.0, ctx.currentTime, 0.2);
       if (rig) { rig.fade(ctx.currentTime); rig = null; }   /* no oscillators burn while silent */
     }
     clearInterval(schedTimer);
     setUI(false);
-    safeStore.set('orrery-score', 'off');
+    safeStore.set('orrery-score', 'off');            /* the explicit opt-out: future loads stay silent */
   }
-  function setUI(state) {
-    btn.dataset.on = String(state);
-    btn.setAttribute('aria-pressed', String(state));
-    btn.setAttribute('aria-label', state ? 'Turn the score off' : 'Turn the score on');
-    label.textContent = state ? 'Score: on' : 'Score: off';
+  function setUI(state) {                            /* true | false | 'ready'; the label never lies */
+    const running = state === true;
+    btn.dataset.on = String(running);
+    btn.setAttribute('aria-pressed', String(running));
+    btn.setAttribute('aria-label', running ? 'Turn the score off' : 'Turn the score on');
+    label.textContent = running ? 'Score: on' : state === 'ready' ? 'Score: ready' : 'Score: off';
   }
   btn.addEventListener('click', () => (on ? turnOff() : turnOn()));
 
-  /* returning visitor who had it on: ARM the intent; START on the next gesture
-     that truly carries activation - and KEEP listening until one does (a consumed
-     one-shot on a non-activating gesture killed the score for the whole visit:
-     Smaug kill 9). pointerup/click carry activation on touch; Escape does not. */
-  if (safeStore.get('orrery-score') === 'on') {
+  /* DEFAULT-ON ignition: the Commission wants the score immediately; the
+     platform forbids pre-gesture audio. So unless a prior visit explicitly
+     opted out ('orrery-score' === 'off'): build the graph now (cheap; the
+     context boots suspended), try ONE silent resume (succeeds only where
+     the browser already granted media engagement), and otherwise ignite on
+     the FIRST activation-bearing gesture. Listeners stay attached until a
+     turnOn truly succeeds (a consumed one-shot on a non-activating gesture
+     killed the score for a whole visit: Smaug kill 9). Escape and modifier
+     chords carry no activation. The toggle still rules. */
+  if (safeStore.get('orrery-score') !== 'off') {
+    armed = true;
+    if (!ctx) buildGraph();
+    /* a tab that BOOTS hidden must stay silent (the visibilitychange handler
+       only reacts to changes; it never fires for a background-tab load) —
+       arm instead, and the visibility handler ignites on first reveal */
+    if (document.hidden) { setUI('ready'); armIgnition(); }
+    else {
+      /* label honesty while blocked: Chrome leaves resume() PENDING (not
+         rejected) until the first gesture, so turnOn may not settle for a
+         long while — say "ready" now; turnOn overwrites with the truth */
+      setUI('ready');
+      turnOn().then((ok) => { if (!ok) armIgnition(); })
+        .catch(() => { setUI('ready'); armIgnition(); });  /* a boot throw must not eat the arm */
+    }
+  }
+  function armIgnition() {
     const arm = async (e) => {
       if (e.type === 'keydown' && (e.key === 'Escape' || e.altKey || e.ctrlKey || e.metaKey)) return;
       const ok = await turnOn();
-      if (ok) cleanup();                               /* only disarm once it truly runs */
+      if (ok) cleanup();                             /* only disarm once it truly runs */
     };
     const cleanup = () => {
       removeEventListener('pointerup', arm);
@@ -3529,11 +4253,13 @@ const Score = (() => {
     addEventListener('keydown', arm);
   }
 
-  /* a hidden tab is a silent tab */
+  /* a hidden tab is a silent tab; a revealed tab may complete the default-on
+     intent (resume() here succeeds only where the browser already grants it) */
   document.addEventListener('visibilitychange', () => {
     if (!ctx) return;
     if (document.hidden) { if (ctx.state === 'running') ctx.suspend(); }
     else if (on) { ctx.resume(); }
+    else if (armed) { turnOn(); }
   });
 
   return { get on() { return on; } };

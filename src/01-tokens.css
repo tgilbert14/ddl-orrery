@@ -12,15 +12,15 @@
 html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
 :root {
-  /* -- the deep (base water; was "the night") -- */
-  --void: #04100e;          --void-rgb: 4, 16, 14;      /* sea-glass black */
-  --night: #082019;                                     /* dark teal (skip-link, chips) */
-  --horizon: #103129;       /* lamplit depth floor (hub gradient base) */
-  --ink: #eee9da;           --ink-rgb: 238, 233, 218;   /* warm paper-white, 15.9:1 on void */
-  --ink-dim: #b3ae97;       /* captions, 8.7:1 on void */
-  --ink-faint: #857f68;     /* hints, 4.8:1 on void, the floor, respected */
+  /* -- the deep (base water; v4 deepened toward the unsurveyed) -- */
+  --void: #020a08;          --void-rgb: 2, 10, 8;       /* near-black sea-glass; the pressure dark */
+  --night: #061712;                                     /* dark teal (skip-link, chips) */
+  --horizon: #0a251e;       /* dimmer lamplit floor (hub gradient base) */
+  --ink: #eee9da;           --ink-rgb: 238, 233, 218;   /* warm paper-white, ~17:1 on the deeper void */
+  --ink-dim: #b3ae97;       /* captions, ~9.4:1 on void */
+  --ink-faint: #8b8570;     /* hints, ~5.2:1 on the deeper void, the floor, respected */
   --line: rgba(var(--brass-rgb), 0.26);                 /* every hairline is now brass */
-  --glass: rgba(6, 24, 20, 0.55);
+  --glass: rgba(3, 14, 11, 0.62);
 
   /* -- deco instrument chrome (NEW) -- */
   --brass: #c9a35c;         --brass-rgb: 201, 163, 92;  /* 8.2:1 on void, 7.5:1 on plaque */
