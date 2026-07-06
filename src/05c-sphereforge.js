@@ -252,9 +252,15 @@ const SphereForge = (() => {
     deco: 'assets/artifact/skin-deco.webp',
     veins: 'assets/artifact/skin-veins.webp',
     machine: 'assets/artifact/skin-machine.webp',
+    arcadia: 'assets/artifact/skin-arcadia.webp',
+    aurora: 'assets/artifact/skin-aurora.webp',
+    uncharted: 'assets/artifact/skin-uncharted.webp',
     biomech: 'assets/artifact/skin-biomech.webp', /* what is underneath (the reveal) */
   };
-  const SKIN_OF = { hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine', abyssal: 'veins' };
+  const SKIN_OF = {
+    hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine',
+    abyssal: 'veins', arcadia: 'arcadia', aurora: 'aurora', uncharted: 'uncharted',
+  };
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
   const skins = {};                        /* key -> { img, ready } */
