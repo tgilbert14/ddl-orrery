@@ -6,14 +6,16 @@
 'use strict';
 
 const Score = (() => {
-  /* one motif, re-voiced per world: {root Hz, scale intervals, step ms, brightness Hz} */
+  /* one motif, re-voiced per world: {root Hz, scale intervals, step ms, brightness Hz, wave} */
   const VOICES = {
-    hub:            { root: 220.0, scale: [0, 3, 5, 7, 10],     step: 500, bright: 900,  padGain: 0.05 },
-    'sonora':       { root: 146.8, scale: [0, 2, 4, 7, 9],      step: 640, bright: 700,  padGain: 0.055 },
-    'neon-mesa':    { root: 185.0, scale: [0, 3, 5, 7, 10, 12], step: 250, bright: 1600, padGain: 0.05 },
-    'undercurrent': { root: 130.8, scale: [0, 2, 6, 8, 10],     step: 800, bright: 500,  padGain: 0.065 },
-    'lattice':      { root: 164.8, scale: [0, 4, 6, 7, 11],     step: 420, bright: 2100, padGain: 0.045 },
-    'undesignated': { root: 220.0, scale: [0, 3, 5, 8],         step: 900, bright: 1100, padGain: 0.04 },
+    hub:         { root: 220.0, scale: [0, 3, 5, 7, 10],     step: 500, bright: 900,  padGain: 0.05 },
+    'dust-sea':  { root: 98.0,  scale: [0, 3, 5, 7, 10],       step: 700, bright: 460,  padGain: 0.06 },
+    'velocity':  { root: 174.6, scale: [0, 3, 5, 7, 10, 12],   step: 220, bright: 1800, padGain: 0.05 },
+    'grid':      { root: 164.8, scale: [0, 3, 7, 12, 14],      step: 340, bright: 2400, padGain: 0.03 },
+    'abyssal':   { root: 130.8, scale: [0, 2, 4, 6, 8, 10],    step: 850, bright: 460,  padGain: 0.068 },
+    'arcadia':   { root: 261.6, scale: [0, 2, 4, 7, 9, 12],    step: 170, bright: 2600, padGain: 0.03, wave: 'square' },
+    'aurora':    { root: 196.0, scale: [0, 2, 4, 6, 7, 9, 11], step: 480, bright: 2000, padGain: 0.038 },
+    'uncharted': { root: 220.0, scale: [0, 3, 5, 8],           step: 900, bright: 1100, padGain: 0.04 },
   };
 
   let ctx = null, master = null, padA = null, padB = null, padFilter = null, padGainNode = null;
@@ -52,8 +54,11 @@ const Score = (() => {
   }
 
   function pluck(freq, when, gain = 0.14, dur = 0.55) {
-    const o = ctx.createOscillator(); o.type = 'sine';
-    const o2 = ctx.createOscillator(); o2.type = 'triangle'; o2.detune.value = 5;
+    /* the cabinet world plucks in square waves — everyone else keeps the soft voice */
+    const wave = voice.wave || 'sine';
+    const o = ctx.createOscillator(); o.type = wave;
+    const o2 = ctx.createOscillator(); o2.type = wave === 'square' ? 'square' : 'triangle'; o2.detune.value = 5;
+    if (wave === 'square') gain *= 0.55;               /* squares are loud; keep the mix polite */
     const g = ctx.createGain();
     o.frequency.value = freq; o2.frequency.value = freq;
     g.gain.setValueAtTime(0, when);
@@ -120,7 +125,7 @@ const Score = (() => {
   });
   window.Orrery.events.addEventListener('query', () => {
     if (!ready()) return;
-    const v = VOICES.lattice;
+    const v = VOICES.aurora;
     v.scale.slice(0, 4).forEach((deg, i) => pluck(v.root * Math.pow(2, deg / 12) * 2, ctx.currentTime + i * 0.09, 0.08, 0.3));
   });
 
@@ -128,28 +133,33 @@ const Score = (() => {
   const cta = document.querySelector('.cta-btn');
   if (cta) cta.addEventListener('click', () => {
     if (!ready()) return;
-    const r = VOICES.undesignated.root;
+    const r = VOICES.uncharted.root;
     [0, 4, 7, 12].forEach((deg, i) => pluck(r * Math.pow(2, deg / 12), ctx.currentTime + i * 0.06, 0.12, 1.4));
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
+  const safeStore = {
+    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
+  };
   async function turnOn() {
     if (!ctx) buildGraph();
     try { await ctx.resume(); } catch (_) { /* stays off */ }
-    if (ctx.state !== 'running') { setUI(false); return; }
+    if (ctx.state !== 'running') { setUI(false); return false; }
     on = true;
     master.gain.setTargetAtTime(0.9, ctx.currentTime, 0.4);
     tunePad(voice, 0);
     armArp();
     setUI(true);
-    sessionStorage.setItem('orrery-score', 'on');
+    safeStore.set('orrery-score', 'on');
+    return true;
   }
   function turnOff() {
     on = false;
     if (ctx) master.gain.setTargetAtTime(0.0, ctx.currentTime, 0.2);
     clearInterval(arpTimer);
     setUI(false);
-    sessionStorage.setItem('orrery-score', 'off');
+    safeStore.set('orrery-score', 'off');
   }
   function setUI(state) {
     btn.dataset.on = String(state);
@@ -159,16 +169,24 @@ const Score = (() => {
   }
   btn.addEventListener('click', () => (on ? turnOff() : turnOn()));
 
-  /* returning visitor who had it on: ARM the intent; START on the next
-     activation-bearing gesture (never on load, never on scroll) */
-  if (sessionStorage.getItem('orrery-score') === 'on') {
-    const arm = () => { turnOn(); cleanup(); };
+  /* returning visitor who had it on: ARM the intent; START on the next gesture
+     that truly carries activation — and KEEP listening until one does (a consumed
+     one-shot on a non-activating gesture killed the score for the whole visit:
+     Smaug kill 9). pointerup/click carry activation on touch; Escape does not. */
+  if (safeStore.get('orrery-score') === 'on') {
+    const arm = async (e) => {
+      if (e.type === 'keydown' && (e.key === 'Escape' || e.altKey || e.ctrlKey || e.metaKey)) return;
+      const ok = await turnOn();
+      if (ok) cleanup();                               /* only disarm once it truly runs */
+    };
     const cleanup = () => {
-      removeEventListener('pointerdown', arm);
+      removeEventListener('pointerup', arm);
+      removeEventListener('click', arm);
       removeEventListener('keydown', arm);
     };
-    addEventListener('pointerdown', arm, { once: true });
-    addEventListener('keydown', arm, { once: true });
+    addEventListener('pointerup', arm);
+    addEventListener('click', arm);
+    addEventListener('keydown', arm);
   }
 
   /* a hidden tab is a silent tab */
@@ -181,5 +199,8 @@ const Score = (() => {
   return { get on() { return on; } };
 })();
 
-/* ---------- ignition: every fragment is defined; light the orrery ---------- */
-bootOrrery();
+/* ---------- ignition: every fragment is defined; light the orrery.
+   If ANY boot throw slips through, fall back to the designed brochure
+   rather than a blank app shell (Smaug kill 6 / gimli G3) ---------- */
+try { bootOrrery(); }
+catch (e) { document.documentElement.classList.remove('js'); }

@@ -5,27 +5,28 @@
    or calc-math custom property, or it renders 0 / refuses to animate).
    ============================================================ */
 
-@property --px { syntax: "<number>"; inherits: true; initial-value: 0; }
-@property --py { syntax: "<number>"; inherits: true; initial-value: 0; }
-@property --warp { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --acc { syntax: "<color>"; inherits: true; initial-value: #64d5f5; }
-@property --draft { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+/* the whole accent system glides: hover a planet, enter a world, and every
+   accent consumer (rings, links, HUD, warp tint) eases instead of snapping */
+html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
 :root {
   /* -- the night (base space) -- */
   --void: #05070f;
   --night: #0a0f22;
-  --ink: #e9eef9;          /* body text, 16.5:1 on void */
-  --ink-dim: #a9b6d0;      /* captions, 8.9:1 on void */
-  --ink-faint: #6b7994;    /* hints, 4.6:1 on void — floor respected */
-  --line: rgba(233, 238, 249, 0.14);
+  --horizon: #0d1330;      /* the sky's warm floor (hub gradient base) */
+  --ink: #e9eef9;          --ink-rgb: 233, 238, 249;   /* body text, 17.3:1 on void */
+  --ink-dim: #a9b6d0;      /* captions, 9.9:1 on void */
+  --ink-faint: #6b7994;    /* hints, 4.59:1 on void — the floor, respected */
+  --line: rgba(var(--ink-rgb), 0.14);
   --glass: rgba(10, 15, 34, 0.55);
 
   /* -- world families: a (accent) · b (second) · glow · ground -- */
-  --w-sonora-a: #ffb25e;      --w-sonora-a-rgb: 255, 178, 94;
-  --w-sonora-b: #9fc07e;
-  --w-sonora-glow: #ff7a45;   --w-sonora-glow-rgb: 255, 122, 69;
-  --w-sonora-ground: #241430;
+  --w-dust-a: #ffb25e;      --w-dust-a-rgb: 255, 178, 94;
+  --w-dust-b: #9fc07e;
+  --w-dust-glow: #ff7a45;   --w-dust-glow-rgb: 255, 122, 69;
+  --w-dust-ground: #241430;
 
   --w-mesa-a: #ff2e97;        --w-mesa-a-rgb: 255, 46, 151;
   --w-mesa-b: #29e6ff;        --w-mesa-b-rgb: 41, 230, 255;
@@ -37,6 +38,16 @@
   --w-current-glow: #bfffe9;  --w-current-glow-rgb: 191, 255, 233;
   --w-current-ground: #03121f;
 
+  --w-grid-a: #34ff88;        --w-grid-a-rgb: 52, 255, 136;
+  --w-grid-b: #b8ffd9;        --w-grid-b-rgb: 184, 255, 217;
+  --w-grid-glow: #b8ffd9;     --w-grid-glow-rgb: 184, 255, 217;
+  --w-grid-ground: #02120a;
+
+  --w-arcadia-a: #ffd23f;     --w-arcadia-a-rgb: 255, 210, 63;
+  --w-arcadia-b: #7dff5a;     --w-arcadia-b-rgb: 125, 255, 90;
+  --w-arcadia-glow: #ff4757;  --w-arcadia-glow-rgb: 255, 71, 87;
+  --w-arcadia-ground: #0a0a12;
+
   --w-lattice-a: #a8e9ff;     --w-lattice-a-rgb: 168, 233, 255;
   --w-lattice-b: #cfd8ff;     --w-lattice-b-rgb: 207, 216, 255;
   --w-lattice-glow: #ffffff;  --w-lattice-glow-rgb: 255, 255, 255;
@@ -47,7 +58,7 @@
   --w-un-glow: #64d5f5;       --w-un-glow-rgb: 100, 213, 245;
   --w-un-ground: #0f141c;
   --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* the ONE warm CTA accent */
-  --coral-ink: #2a0f0b;       /* text on coral, 8.7:1 */
+  --coral-ink: #2a0f0b;       /* text on coral, 6.55:1 — passes, but no headroom to lighten */
 
   /* -- the live accent (retinted per hover / world; registered <color> above) -- */
   --acc: #64d5f5;
@@ -179,7 +190,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .audio-toggle .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 10px; }
 .audio-toggle .eq i { width: 2.5px; height: 3px; background: currentColor; border-radius: 1px; }
 .audio-toggle[data-on="true"] { color: var(--acc); border-color: rgba(var(--acc-rgb), 0.55); }
-.audio-toggle[data-on="true"] .eq i { animation: eq-bounce 0.9s ease-in-out infinite alternate; }
+html:not(.rm) .audio-toggle[data-on="true"] .eq i { animation: eq-bounce 0.9s ease-in-out infinite alternate; }
 .audio-toggle[data-on="true"] .eq i:nth-child(2) { animation-delay: 0.15s; }
 .audio-toggle[data-on="true"] .eq i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes eq-bounce { from { height: 3px; } to { height: 10px; } }

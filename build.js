@@ -29,10 +29,10 @@ const page = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Orrery — a Desert Data Labs experience</title>
-<meta name="description" content="Five worlds, hand-built from code. A working model of what Desert Data Labs builds: dashboards, field apps, pipelines, and databases, each with its own atmosphere. Travel between them.">
-<meta property="og:title" content="The Orrery — Desert Data Labs">
-<meta property="og:description" content="Five worlds. One clock. Everything you see is code. Travel the DDL orrery: dashboards, field apps, data pipelines, databases.">
+<title>The Orrery · a Desert Data Labs experience</title>
+<meta name="description" content="Seven worlds, hand-built from code: a desert giant under two suns, a neon metropolis, glyph rain, the hadal deep, a cabinet world, dancing auroras, and one world still unnamed. Travel between them.">
+<meta property="og:title" content="The Orrery · Desert Data Labs">
+<meta property="og:description" content="Seven worlds. One clock. Everything you see is code. Warp between hand-built universes, each with its own weather, physics, and music.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tgilbert14.github.io/ddl-orrery/">
 <meta property="og:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">

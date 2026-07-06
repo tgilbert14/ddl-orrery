@@ -12,11 +12,25 @@ html.classList.add('js');
 const rmq = matchMedia('(prefers-reduced-motion: reduce)');
 const setRM = () => {
   html.classList.toggle('rm', rmq.matches);
-  if (rmq.matches) Orrery.stopAmbient(); else Orrery.startAmbient();
+  /* the toggle must reach EVERY motion layer (Smaug kill 1): ambient on the
+     hub, the active world's FX everywhere else — start() re-applies the rm
+     end-state or re-ignites, whichever the preference now asks for */
+  if (Scenes.current && Scenes.current !== 'hub') {
+    window.WorldFX && WorldFX.start(Scenes.current);
+    Orrery.stopAmbient();
+  } else if (rmq.matches) { Orrery.stopAmbient(); }
+  else { Orrery.startAmbient(); }
 };
 /* live re-check: latching this at load was a documented kill (LESSONS 2026-07-05) */
 rmq.addEventListener('change', setRM);
 const reduced = () => rmq.matches;
+
+/* storage is a nice-to-have, never a boot dependency (Smaug kill 6):
+   blocked cookies / sandboxed iframes throw on the GETTER */
+const store = {
+  get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
+};
 
 const finePointer = matchMedia('(pointer: fine)').matches;
 
@@ -39,17 +53,16 @@ const Ticker = (() => {
     get clock() { return clock; },
   };
 })();
-document.addEventListener('visibilitychange', () => {
-  /* the frame loop self-gates on document.hidden; audio handled in 07 */
-});
 
 /* ---------- world registry (data; FX bodies live in 06) ---------- */
 const WORLDS = [
-  { slug: 'sonora',       label: 'Sonora',              size: 56, tell: 'heat',    a: [255, 178, 94],  speed: 0.045 },
-  { slug: 'neon-mesa',    label: 'Neon Mesa',           size: 64, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06 },
-  { slug: 'undercurrent', label: 'Undercurrent',        size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052 },
-  { slug: 'lattice',      label: 'The Lattice',         size: 60, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
-  { slug: 'undesignated', label: 'DDL-5: Undesignated', size: 46, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
+  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045 },
+  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06 },
+  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055 },
+  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052 },
+  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065 },
+  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
+  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
 
@@ -67,7 +80,14 @@ function sizeSky() {
   drawStatic();                                        /* rm / idle repaint */
 }
 let resizeT = null;
-addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(sizeSky, 120); }, { passive: true });
+addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => {
+    sizeSky();
+    /* a rotated phone inside a world gets a fresh FX surface (Smaug kill 8) */
+    if (Scenes.current && Scenes.current !== 'hub' && window.WorldFX) WorldFX.start(Scenes.current);
+  }, 120);
+}, { passive: true });
 
 /* ---------- starfield: 3 depth layers, pooled ---------- */
 let stars = [];
@@ -120,8 +140,8 @@ function measureArc() {
 function planetPos(i, clockMs) {
   const w = WORLDS[i];
   const cx = W / 2;
-  const spreadX = Math.min(W * 0.4, 580);
-  const baseA = -Math.PI / 2 + (i - 2) * 0.52;         /* fan the five across the arc */
+  const spreadX = Math.min(W * 0.42, 600);
+  const baseA = -Math.PI / 2 + (i - 3) * 0.4;          /* fan the seven across the arc */
   const t = reduced() ? 0 : clockMs / 1000;
   const wob = reduced() ? 0 : Math.sin(t * w.speed * 2 + i * 1.7) * 0.045;
   const ang = baseA + wob + Math.sin(seasonTilt) * 0.03;
@@ -184,6 +204,7 @@ function drawSky(dt, clockMs) {
         if (w.tell === 'pulse')   glow += (Math.sin(t * 6) > 0.72 ? 0.16 : 0);
         if (w.tell === 'breathe') glow += 0.12 * (0.5 + 0.5 * Math.sin(t * 0.8));
         if (w.tell === 'glint')   glow += (Math.sin(t * 0.9 + 2) > 0.985 ? 0.5 : 0);
+        if (w.tell === 'rain')    glow += (Math.sin(t * 9 + i * 3) > 0.6 ? 0.13 : 0);
       }
       const rad = w.size * (1.15 + glow * 0.4);
       const grad = ctx.createRadialGradient(p.x, p.y, w.size * 0.3, p.x, p.y, rad);
@@ -198,6 +219,15 @@ function drawSky(dt, clockMs) {
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72, 0, 7); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (w.tell === 'pixel') {                        /* the cabinet world reads 8-bit even in orbit */
+        ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`;
+        ctx.setLineDash([6, 5]);
+        ctx.lineDashOffset = reduced() ? 0 : Math.floor(t * 2) * 4;   /* stepped, not smooth */
+        ctx.lineWidth = 2;
+        const s2 = w.size * 0.68;
+        ctx.strokeRect(p.x - s2, p.y - s2, s2 * 2, s2 * 2);
         ctx.setLineDash([]);
       }
     });
@@ -282,10 +312,11 @@ document.querySelectorAll('.scene').forEach(s => Scenes.els.set(s.dataset.scene,
 const locName = document.getElementById('hud-loc-name');
 const returnBtn = document.getElementById('return-orbit');
 
-const surveyed = new Set(JSON.parse(sessionStorage.getItem('orrery-surveyed') || '[]'));
+let surveyed = new Set();
+try { surveyed = new Set(JSON.parse(store.get('orrery-surveyed') || '[]')); } catch (_) {}
 function markSurveyed(slug) {
   surveyed.add(slug);
-  sessionStorage.setItem('orrery-surveyed', JSON.stringify([...surveyed]));
+  store.set('orrery-surveyed', JSON.stringify([...surveyed]));
   const a = anchors.get(slug);
   if (a) a.querySelector('.pa-tick').hidden = false;
 }
@@ -293,7 +324,8 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
 
 function setScene(name, { instant = false } = {}) {
   if (Scenes.current === name) return;
-  const prev = Scenes.els.get(Scenes.current);
+  const prevName = Scenes.current;
+  const prev = Scenes.els.get(prevName);
   const next = Scenes.els.get(name);
   if (!next) return;
 
@@ -311,6 +343,11 @@ function setScene(name, { instant = false } = {}) {
     html.style.setProperty('--acc-rgb', '100, 213, 245');
     Orrery.startAmbient();
     WorldFX.stopAll();
+    /* the keyboard traveler lands back on the planet they left (Smaug kill 10) */
+    if (prevName && prevName !== 'hub') {
+      const back = anchors.get(prevName);
+      if (back) back.focus({ preventScroll: true });
+    }
   } else {
     const w = bySlug[name];
     locName.textContent = `World · ${w.label}`;
@@ -325,6 +362,15 @@ function setScene(name, { instant = false } = {}) {
   }
   Orrery.events.dispatchEvent(new CustomEvent('scene', { detail: { name, instant } }));
 }
+
+/* the warp: land the scene under the flood's PEAK; let the flood fade out
+   OVER the arriving world; never cancel the animation mid-arc (Smaug kill 4).
+   animationend is the fast path; a deterministic timer is the guarantee it
+   never sticks (animationend can be missed when scenes toggle mid-flight). */
+let travelTimer = null, warpClearTimer = null;
+const warpEl = document.getElementById('warpfx');
+function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
+warpEl.addEventListener('animationend', endWarp);
 
 function travel(slug) {
   if (Scenes.transitioning || Scenes.current === slug) return;
@@ -344,24 +390,32 @@ function travel(slug) {
 
   warp.active = true; warp.p = 0; warp.cx = p.x / W; warp.cy = p.y / H;
   if (!skyTask) Orrery.startAmbient();                 /* streaks need the loop */
+  html.classList.remove('warping'); void html.offsetWidth;   /* restartable */
   html.classList.add('warping');
+  clearTimeout(warpClearTimer);
+  warpClearTimer = setTimeout(endWarp, 1200);          /* guaranteed teardown (> --warp-ms) */
   Orrery.events.dispatchEvent(new CustomEvent('warp', { detail: { slug } }));
 
-  setTimeout(() => {
-    warp.active = false;
-    html.classList.remove('warping');
-    location.hash = '#/world/' + slug;                 /* router lands the scene */
+  travelTimer = setTimeout(() => {
+    location.hash = '#/world/' + slug;                 /* the scene lands under the flood peak */
     Scenes.transitioning = false;
-  }, 620);
+    travelTimer = null;
+  }, 495);
 }
 
-/* clicks on planet anchors warp instead of jumping */
+/* clicks on planet anchors always go through the router's namespace —
+   the hrefs themselves are DOCUMENT anchors so the no-JS brochure
+   navigates natively (Smaug kill 3) */
 anchors.forEach((a, slug) => {
   a.addEventListener('click', (e) => {
-    if (reduced()) return;                             /* let the router crossfade */
     e.preventDefault();
+    if (reduced()) { location.hash = '#/world/' + slug; return; }
     travel(slug);
   });
+});
+/* every return link is a document anchor for no-JS; the app routes it home */
+document.querySelectorAll('a[data-return]').forEach(a => {
+  a.addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/'; });
 });
 
 /* Esc returns to orbit */
@@ -375,19 +429,22 @@ function route(instant = false) {
   const slug = m && bySlug[m[1]] ? m[1] : null;
   setScene(slug || 'hub', { instant });
 }
-addEventListener('hashchange', () => route(false));
+addEventListener('hashchange', () => {
+  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4) */
+  if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
+  route(false);
+});
 
-/* ---------- HUD clock ---------- */
+/* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
+   ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
-let clockAcc = 0;
-Ticker.add((dt) => {
-  clockAcc += dt;
-  if (clockAcc > 1000) {
-    clockAcc = 0;
+function tickClock() {
+  if (!document.hidden) {
     clockEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
-  return true;                                         /* the one persistent task */
-});
+}
+setInterval(tickClock, 1000);
+tickClock();
 
 /* ---------- boot (called from the END of the concatenated bundle, after
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene

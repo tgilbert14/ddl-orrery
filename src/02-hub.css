@@ -20,10 +20,10 @@
     radial-gradient(1px 1px at 85% 55%, rgba(233,238,249,0.55), transparent 60%),
     radial-gradient(1.4px 1.4px at 52% 38%, rgba(207,216,255,0.45), transparent 60%),
     radial-gradient(1px 1px at 20% 92%, rgba(233,238,249,0.4), transparent 60%),
-    radial-gradient(ellipse 120% 80% at 50% 120%, #0d1330 0%, var(--void) 60%);
+    radial-gradient(ellipse 120% 80% at 50% 120%, var(--horizon) 0%, var(--void) 60%);
 }
 html.js #orrery { background:
-  radial-gradient(ellipse 120% 80% at 50% 120%, #0d1330 0%, var(--void) 60%); }
+  radial-gradient(ellipse 120% 80% at 50% 120%, var(--horizon) 0%, var(--void) 60%); }
 
 /* ---------- scenes: brochure by default, stage under .js ---------- */
 .scene { position: relative; min-height: 100svh; padding: 6rem 1.4rem 4.5rem; }
@@ -36,7 +36,12 @@ html.js .scene.is-active {
   opacity: 1; visibility: visible; pointer-events: auto;
   transition: opacity 0.45s var(--ease-out);
 }
-html.js .scene.is-leaving { opacity: 0; transition: opacity 0.3s ease-in; }
+/* a leaving scene FADES — visibility must wait for the opacity arc or the old
+   scene pops off in one frame and the "crossfade" is a cut (Smaug kill 4) */
+html.js .scene.is-leaving {
+  opacity: 0; visibility: visible; pointer-events: none;
+  transition: opacity 0.3s ease-in, visibility 0s 0.3s;
+}
 
 /* ---------- the hub ---------- */
 .scene-hub {
@@ -86,11 +91,13 @@ html.js .hub-hint { animation-delay: 0.55s; }
 .pa-tick[hidden] { display: none; }
 
 /* world hues on the anchors (one source: the token families) */
-.planet-anchor[data-world="sonora"]        { --pa: var(--w-sonora-a);  --pa-rgb: var(--w-sonora-a-rgb); }
-.planet-anchor[data-world="neon-mesa"]     { --pa: var(--w-mesa-a);    --pa-rgb: var(--w-mesa-a-rgb); }
-.planet-anchor[data-world="undercurrent"]  { --pa: var(--w-current-a); --pa-rgb: var(--w-current-a-rgb); }
-.planet-anchor[data-world="lattice"]       { --pa: var(--w-lattice-a); --pa-rgb: var(--w-lattice-a-rgb); }
-.planet-anchor[data-world="undesignated"]  { --pa: var(--w-un-a);      --pa-rgb: var(--w-un-a-rgb); }
+.planet-anchor[data-world="dust-sea"]   { --pa: var(--w-dust-a);    --pa-rgb: var(--w-dust-a-rgb); }
+.planet-anchor[data-world="velocity"]   { --pa: var(--w-mesa-a);    --pa-rgb: var(--w-mesa-a-rgb); }
+.planet-anchor[data-world="grid"]       { --pa: var(--w-grid-a);    --pa-rgb: var(--w-grid-a-rgb); }
+.planet-anchor[data-world="abyssal"]    { --pa: var(--w-current-a); --pa-rgb: var(--w-current-a-rgb); }
+.planet-anchor[data-world="arcadia"]    { --pa: var(--w-arcadia-a); --pa-rgb: var(--w-arcadia-a-rgb); }
+.planet-anchor[data-world="aurora"]     { --pa: var(--w-lattice-a); --pa-rgb: var(--w-lattice-a-rgb); }
+.planet-anchor[data-world="uncharted"]  { --pa: var(--w-un-a);      --pa-rgb: var(--w-un-a-rgb); }
 
 /* ---------- app-mode orbits: anchors become the planets' focus targets ---------- */
 @media (min-width: 701px) {

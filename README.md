@@ -1,6 +1,6 @@
 # The Orrery
 
-**Five worlds. One clock. Everything you see is code.**
+**Seven worlds. One clock. Everything you see is code.**
 
 An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of five
 themed worlds, each one a DDL capability with its own atmosphere, palette, motion identity, and
@@ -10,13 +10,15 @@ procedural.
 
 **Live:** https://tgilbert14.github.io/ddl-orrery/
 
-| World | Capability | Signature |
-|---|---|---|
-| Sonora | Field-data collection (EcoPlot) | heat-shimmer dusk, self-drawing circuit saguaros, embers |
-| Neon Mesa | Dashboards & analytics | a skyline that IS a live bar chart, perspective grid, light-trail |
-| Undercurrent | Pipelines, ETL & QA | bioluminescent packet currents; flagged records visibly divert at the gate |
-| The Lattice | Databases & research data | a schema that self-draws; run a query and watch it race the joins |
-| DDL-5: Undesignated | Your world | a survey that drafts wherever you look, unfinished on purpose |
+| World | Signature |
+|---|---|
+| Dust Sea | two suns down; parallax dunes, wind-blown sand, and every half minute something vast breaches |
+| Velocity | the outrun city: a skyline that IS a live bar chart, two light-cycles racing the grid |
+| The Grid | glyph rain with a white trace that knows where it is going |
+| Abyssal | jellies climbing through marine snow; a leviathan passes and the deep holds its breath |
+| Arcadia | the 8-bit cabinet: marching invaders, a patrol ship, CRT scanlines, square-wave chiptune |
+| Aurora | ribbons rehearsing their colors over a self-drawing crystal constellation |
+| Uncharted | a survey that drafts wherever you look; the only world that never finishes (and the one soft contact note) |
 
 ## Build
 

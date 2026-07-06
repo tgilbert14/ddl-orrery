@@ -24,7 +24,7 @@
   </header>
   <div class="hud hud-loc">
     <span id="hud-loc-name">Orbit · choose a world</span>
-    <a class="return-orbit" id="return-orbit" href="#/" hidden>&#9666; Return to orbit</a>
+    <a class="return-orbit" data-return id="return-orbit" href="#worlds-index" hidden>&#9666; Return to orbit</a>
   </div>
 
   <main id="stage">
@@ -32,132 +32,204 @@
     <!-- ============ THE HUB ============ -->
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
-        <h1 class="hub-h1">Five worlds. One clock.<br>Everything you see is code.</h1>
-        <p class="hub-sub">A working model of what Desert Data Labs can build for you.</p>
+        <h1 class="hub-h1">Seven worlds. One clock.<br>Everything you see is code.</h1>
+        <p class="hub-sub">Hand-built universes, each with its own weather, physics, and music. Pick one and go.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
       </div>
 
-      <nav class="orbits" id="worlds-index" aria-label="The five worlds">
-        <a class="planet-anchor" data-world="sonora" href="#/world/sonora" style="--i:0">
+      <nav class="orbits" id="worlds-index" aria-label="The seven worlds">
+        <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>Sonora</b><em>field data where there is no signal</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Dust Sea</b><em>two suns, and something beneath</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
-        <a class="planet-anchor" data-world="neon-mesa" href="#/world/neon-mesa" style="--i:1">
+        <a class="planet-anchor" data-world="velocity" href="#world-velocity" style="--i:1">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>Neon Mesa</b><em>dashboards with a pulse</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Velocity</b><em>the city never blinks</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
-        <a class="planet-anchor" data-world="undercurrent" href="#/world/undercurrent" style="--i:2">
+        <a class="planet-anchor" data-world="grid" href="#world-grid" style="--i:2">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>Undercurrent</b><em>pipelines that never sleep</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>The Grid</b><em>the rain is code</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
-        <a class="planet-anchor" data-world="lattice" href="#/world/lattice" style="--i:3">
+        <a class="planet-anchor" data-world="abyssal" href="#world-abyssal" style="--i:3">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>The Lattice</b><em>databases that stay honest</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Abyssal</b><em>the lights are alive down here</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
-        <a class="planet-anchor pa-unnamed" data-world="undesignated" href="#/world/undesignated" style="--i:4">
+        <a class="planet-anchor" data-world="arcadia" href="#world-arcadia" style="--i:4">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>DDL&#8209;5: Undesignated</b><em>yours is still unnamed</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Arcadia</b><em>insert coin</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="aurora" href="#world-aurora" style="--i:5">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Aurora</b><em>the sky rehearses its colors</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor pa-unnamed" data-world="uncharted" href="#world-uncharted" style="--i:6">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Uncharted</b><em>yours is still unnamed</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
       </nav>
     </section>
 
-    <!-- ============ WORLD 01 · SONORA ============ -->
-    <section id="world-sonora" class="scene world" data-scene="sonora" data-fx="sonora" aria-labelledby="h-sonora">
+    <!-- ============ SECTOR 01 · DUST SEA ============ -->
+    <section id="world-dust-sea" class="scene world" data-scene="dust-sea" data-fx="dust" aria-labelledby="h-dust">
       <div class="world-fx" aria-hidden="true">
-        <svg class="sonora-scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+        <svg class="dust-scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
           <defs>
-            <filter id="heat" x="-20%" y="-20%" width="140%" height="140%">
-              <feTurbulence type="fractalNoise" baseFrequency="0.012 0.05" numOctaves="2" seed="7" result="n">
-                <animate attributeName="baseFrequency" dur="9s" values="0.012 0.05; 0.016 0.06; 0.012 0.05" repeatCount="indefinite"/>
-              </feTurbulence>
-              <feDisplacementMap in="SourceGraphic" in2="n" scale="14" xChannelSelector="R" yChannelSelector="G"/>
-            </filter>
-            <linearGradient id="sonsky" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="dust-sky" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#241430"/>
-              <stop offset="0.55" stop-color="#5b2440"/>
-              <stop offset="0.8" stop-color="#c4503a"/>
+              <stop offset="0.42" stop-color="#5b2440"/>
+              <stop offset="0.72" stop-color="#c4503a"/>
               <stop offset="1" stop-color="#ffb25e"/>
             </linearGradient>
+            <radialGradient id="dust-sun-a" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stop-color="#ffe9c6"/><stop offset="0.6" stop-color="#ffd9a0"/><stop offset="1" stop-color="#ffb25e"/>
+            </radialGradient>
           </defs>
-          <rect class="son-sky" width="1200" height="640" fill="url(#sonsky)"/>
-          <circle class="son-sun" cx="600" cy="560" r="130" fill="#ffd9a0" opacity="0.9"/>
-          <g class="son-ridge" fill="#1b0f26">
-            <path d="M0,640 L0,560 L140,520 L300,565 L470,505 L640,560 L820,510 L990,558 L1200,520 L1200,640 Z"/>
-          </g>
-          <g class="saguaros" stroke="#2f1b3d" stroke-width="7" stroke-linecap="round" fill="none">
-            <path class="trace" pathLength="1" d="M180,610 L180,455 M180,520 C150,520 145,505 145,478 M180,540 C215,540 220,522 220,492"/>
-            <path class="trace" pathLength="1" d="M960,615 L960,430 M960,505 C925,505 918,485 918,452 M960,545 C998,545 1004,525 1004,488"/>
-            <path class="trace" pathLength="1" d="M545,620 L545,505 M545,560 C522,560 518,548 518,526"/>
-          </g>
-          <g class="saguaro-nodes" fill="#ffb25e">
-            <circle cx="180" cy="455" r="5"/><circle cx="145" cy="478" r="4"/><circle cx="220" cy="492" r="4"/>
-            <circle cx="960" cy="430" r="5"/><circle cx="918" cy="452" r="4"/><circle cx="1004" cy="488" r="4"/>
-            <circle cx="545" cy="505" r="4"/><circle cx="518" cy="526" r="3.5"/>
+          <rect width="1200" height="640" fill="url(#dust-sky)"/>
+          <circle cx="452" cy="452" r="98" fill="url(#dust-sun-a)" opacity="0.95"/>
+          <circle cx="742" cy="516" r="46" fill="#d85f3c" opacity="0.9"/>
+          <path d="M0,520 L0,486 L150,486 L190,462 L470,462 L500,486 L1200,498 L1200,520 Z" fill="#3a2140" opacity="0.72"/>
+          <g class="ds-static">
+            <path d="M0,640 L0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494 L1200,640 Z" fill="#2b1837"/>
+            <path d="M0,640 L0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566 L1200,640 Z" fill="#140b20"/>
           </g>
         </svg>
-        <canvas class="fx-canvas" data-canvas="sonora"></canvas>
+        <canvas class="fx-canvas" data-canvas="dune"></canvas>
       </div>
       <div class="world-card glass">
-        <p class="w-eyebrow microlabel">World 01 &middot; Field data collection</p>
-        <h2 id="h-sonora">Sonora</h2>
-        <p class="w-copy">Field data, collected clean: offline first, synced when the signal returns.</p>
-        <p class="w-proof">Proof, live right now:
-          <a href="https://proud-desert-053089610.7.azurestaticapps.net/" rel="noopener">EcoPlot Mobile</a>
-          <span aria-hidden="true">&middot;</span>
-          <a href="https://github.com/tgilbert14/VGS-Batch-Importer-App" rel="noopener">VGS Batch Importer</a>
-        </p>
-        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+        <p class="w-eyebrow microlabel">Sector 01 &middot; Desert giant</p>
+        <h2 id="h-dust">Dust Sea</h2>
+        <p class="w-copy">Two suns down. Something vast turns beneath the dunes.</p>
+        <p class="w-note w-note--live microlabel">Stay a while. The dunes are not as empty as they look.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
 
-    <!-- ============ WORLD 02 · NEON MESA ============ -->
-    <section id="world-neon-mesa" class="scene world" data-scene="neon-mesa" data-fx="mesa" aria-labelledby="h-mesa">
+    <!-- ============ SECTOR 02 · VELOCITY ============ -->
+    <section id="world-velocity" class="scene world" data-scene="velocity" data-fx="mesa" aria-labelledby="h-velocity">
       <div class="world-fx" aria-hidden="true">
         <div class="mesa-sun"></div>
+        <canvas class="fx-canvas" data-canvas="velocity"></canvas>
         <div class="mesa-skyline" id="mesa-skyline"></div>
         <div class="mesa-grid"></div>
-        <canvas class="fx-canvas" data-canvas="mesa"></canvas>
+        <svg class="velocity-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <g fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6">
+            <path d="M-40,470 L250,470 L250,438 L470,438 L600,470 L820,470 L820,502 L1040,502 L1240,470" stroke="#29e6ff"/>
+            <path d="M-40,506 L250,506 L250,538 L470,538 L600,506 L820,506 L820,474 L1040,474 L1240,506" stroke="#ff2e97"/>
+          </g>
+          <rect x="596" y="256" width="8" height="205" fill="#ff9a3d" opacity="0.28"/>
+          <circle cx="1150" cy="480" r="4.5" fill="#29e6ff"/>
+          <circle cx="1150" cy="497" r="4.5" fill="#ff2e97"/>
+        </svg>
       </div>
       <div class="world-card glass">
-        <p class="w-eyebrow microlabel">World 02 &middot; Dashboards &amp; analytics</p>
-        <h2 id="h-mesa">Neon Mesa</h2>
-        <p class="w-copy">Dashboards with a pulse: live numbers your whole team can read at a glance.</p>
-        <p class="w-note microlabel">The skyline is the chart. It has been easing between real render frames since you arrived.</p>
-        <p class="w-proof">Proof, live right now:
-          <a href="https://girthindex.desertdatalab.com/" rel="noopener">Big 12 Girth Index</a>
-        </p>
-        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+        <p class="w-eyebrow microlabel">Sector 02 &middot; Neon metropolis</p>
+        <h2 id="h-velocity">Velocity</h2>
+        <p class="w-copy">Two riders. One horizon. The city never blinks.</p>
+        <p class="w-note w-note--live microlabel">The skyline re-renders on the orrery clock while you watch.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
 
-    <!-- ============ WORLD 03 · UNDERCURRENT ============ -->
-    <section id="world-undercurrent" class="scene world" data-scene="undercurrent" data-fx="current" aria-labelledby="h-current">
+    <!-- ============ SECTOR 03 · THE GRID ============ -->
+    <section id="world-grid" class="scene world" data-scene="grid" data-fx="grid" aria-labelledby="h-grid">
       <div class="world-fx" aria-hidden="true">
-        <div class="uc-depth"></div>
-        <canvas class="fx-canvas" data-canvas="current"></canvas>
+        <div class="grid-floor"></div>
+        <canvas class="fx-canvas" data-canvas="grid"></canvas>
+        <div class="grid-static"></div>
       </div>
       <div class="world-card glass">
-        <p class="w-eyebrow microlabel">World 03 &middot; Pipelines, ETL &amp; QA</p>
-        <h2 id="h-current">Undercurrent</h2>
-        <p class="w-copy">Pipelines that never sleep: your data moves nightly, checked at every gate.</p>
-        <p class="w-note microlabel"><span class="uc-flag">&#9888;</span> Watch the current: flagged records divert at the gate. Never committed.</p>
-        <p class="w-proof">Proof, live right now:
-          <a href="https://github.com/tgilbert14/VGS-Batch-Importer-App" rel="noopener">ETL + QA importer</a>
-          <span aria-hidden="true">&middot;</span>
-          <a href="https://desertdatalabs.com/process.html" rel="noopener">How we work</a>
-        </p>
-        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+        <p class="w-eyebrow microlabel">Sector 03 &middot; Cyberspace</p>
+        <h2 id="h-grid">The Grid</h2>
+        <p class="w-copy">The rain is code. It always was.</p>
+        <p class="w-note w-note--live microlabel">Watch for the white trace. It knows where it is going.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
 
-    <!-- ============ WORLD 04 · THE LATTICE ============ -->
-    <section id="world-lattice" class="scene world" data-scene="lattice" data-fx="lattice" aria-labelledby="h-lattice">
+    <!-- ============ SECTOR 04 · ABYSSAL ============ -->
+    <section id="world-abyssal" class="scene world" data-scene="abyssal" data-fx="abyss" aria-labelledby="h-abyssal">
       <div class="world-fx" aria-hidden="true">
+        <div class="aby-depth"></div>
+        <canvas class="fx-canvas" data-canvas="abyssal"></canvas>
+        <!-- the same wonder, frozen: shown when motion is off or JS is absent -->
+        <svg class="aby-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid slice">
+          <defs>
+            <linearGradient id="aby-shaft" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="rgba(191,255,233,0.16)"/>
+              <stop offset="1" stop-color="rgba(191,255,233,0)"/>
+            </linearGradient>
+          </defs>
+          <polygon points="300,0 340,0 420,470 220,470" fill="url(#aby-shaft)"/>
+          <polygon points="760,0 790,0 862,430 700,430" fill="url(#aby-shaft)" opacity="0.7"/>
+          <g opacity="0.85">
+            <ellipse cx="880" cy="150" rx="300" ry="46" fill="rgba(1,7,13,0.8)"/>
+            <ellipse cx="1120" cy="150" rx="140" ry="28" fill="rgba(1,7,13,0.8)"/>
+            <path d="M790,120 Q822,42 872,124 Z" fill="rgba(1,7,13,0.8)"/>
+            <g fill="#35f0c8">
+              <circle cx="700" cy="164" r="2.4"/><circle cx="800" cy="168" r="2"/>
+              <circle cx="900" cy="168" r="2.4"/><circle cx="1000" cy="164" r="2"/>
+              <circle cx="1096" cy="158" r="2"/>
+            </g>
+          </g>
+          <g>
+            <path d="M360,332 a56,56 0 0 1 112,0 q-20,26 -56,20 q-36,6 -56,-20 Z" fill="rgba(143,123,255,0.55)"/>
+            <path d="M377,318 a40,40 0 0 1 78,4" stroke="rgba(191,255,233,0.85)" stroke-width="2.4" fill="none"/>
+            <g stroke="rgba(143,123,255,0.5)" stroke-width="2" fill="none">
+              <path d="M382,352 q-8,60 4,118"/><path d="M405,356 q6,64 -4,132"/>
+              <path d="M428,356 q-6,58 6,124"/><path d="M448,352 q10,54 2,104"/>
+            </g>
+          </g>
+          <g opacity="0.75">
+            <path d="M806,436 a34,34 0 0 1 68,0 q-12,16 -34,12 q-22,4 -34,-12 Z" fill="rgba(143,123,255,0.45)"/>
+            <path d="M816,428 a24,24 0 0 1 48,2" stroke="rgba(191,255,233,0.7)" stroke-width="2" fill="none"/>
+            <g stroke="rgba(143,123,255,0.45)" stroke-width="1.6" fill="none">
+              <path d="M818,448 q-6,40 2,78"/><path d="M840,452 q4,44 -2,86"/><path d="M860,448 q-4,38 4,72"/>
+            </g>
+          </g>
+          <g fill="rgba(191,255,233,0.4)">
+            <circle cx="120" cy="90" r="2"/><circle cx="240" cy="300" r="1.6"/><circle cx="180" cy="520" r="2.2"/>
+            <circle cx="520" cy="140" r="1.6"/><circle cx="600" cy="420" r="2"/><circle cx="660" cy="560" r="1.6"/>
+            <circle cx="760" cy="260" r="2"/><circle cx="950" cy="360" r="1.6"/><circle cx="1020" cy="520" r="2.2"/>
+            <circle cx="1100" cy="260" r="1.6"/><circle cx="420" cy="580" r="1.8"/><circle cx="80" cy="380" r="1.6"/>
+          </g>
+        </svg>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">Sector 04 &middot; Hadal zone</p>
+        <h2 id="h-abyssal">Abyssal</h2>
+        <p class="w-copy">Ten thousand meters down, the lights are alive.</p>
+        <p class="w-note w-note--live microlabel">Every half minute or so, the dark gets a little bigger. Keep watching.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 05 · ARCADIA ============ -->
+    <section id="world-arcadia" class="scene world" data-scene="arcadia" data-fx="arcadia" aria-labelledby="h-arcadia">
+      <div class="world-fx" aria-hidden="true">
+        <canvas class="fx-canvas" data-canvas="arcadia"></canvas>
+        <div class="arc-crt"></div>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">Sector 05 &middot; Cabinet world</p>
+        <h2 id="h-arcadia">Arcadia</h2>
+        <p class="w-copy">Insert coin. The high score is still yours to lose.</p>
+        <p class="w-note w-note--live microlabel">The defenders march. The little ship holds the line, forever.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ SECTOR 06 · AURORA ============ -->
+    <section id="world-aurora" class="scene world" data-scene="aurora" data-fx="aurora" aria-labelledby="h-aurora">
+      <div class="world-fx" aria-hidden="true">
+        <div class="aurora-ice"></div>
+        <canvas class="fx-canvas" data-canvas="aurora"></canvas>
         <svg class="lattice-scene" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice">
           <g class="lat-edges" stroke="#3a5f8f" stroke-width="1.5" fill="none">
             <path class="trace" pathLength="1" d="M300,220 L520,150"/>
@@ -185,39 +257,34 @@
             <g class="lat-node" transform="translate(390,560)"><circle r="18"/><circle class="core" r="6"/></g>
           </g>
         </svg>
-        <canvas class="fx-canvas" data-canvas="lattice"></canvas>
+        <div class="aurora-static"></div>
       </div>
       <div class="world-card glass">
-        <p class="w-eyebrow microlabel">World 04 &middot; Databases &amp; research data</p>
-        <h2 id="h-lattice">The Lattice</h2>
-        <p class="w-copy">Databases designed to stay fast, honest, and yours.</p>
-        <p class="w-note"><button class="w-toy" id="run-query" type="button">Run a query</button>
-          <span class="microlabel">send a current through the schema</span></p>
-        <p class="w-proof">Proof, live right now:
-          <a href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" rel="noopener">Small Mammal Tracker</a>
-          <span aria-hidden="true">&middot;</span>
-          <a href="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" rel="noopener">Water Chemistry Viewer</a>
-        </p>
-        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+        <p class="w-eyebrow microlabel">Sector 06 &middot; Frozen world</p>
+        <h2 id="h-aurora">Aurora</h2>
+        <p class="w-copy">The sky rehearses its colors over the ice.</p>
+        <p class="w-note"><button class="w-toy" id="run-query" type="button">Send a pulse</button>
+          <span class="microlabel">light the constellation</span></p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
 
-    <!-- ============ WORLD 05 · DDL-5: UNDESIGNATED ============ -->
-    <section id="world-undesignated" class="scene world" data-scene="undesignated" data-fx="draft" aria-labelledby="h-un">
+    <!-- ============ SECTOR 07 · UNCHARTED ============ -->
+    <section id="world-uncharted" class="scene world" data-scene="uncharted" data-fx="draft" aria-labelledby="h-uncharted">
       <div class="world-fx" aria-hidden="true">
         <div class="un-blueprint"></div>
         <canvas class="fx-canvas" data-canvas="draft"></canvas>
       </div>
       <div class="world-card glass">
-        <p class="w-eyebrow microlabel">World 05 &middot; Awaiting designation</p>
-        <h2 id="h-un">DDL&#8209;5: Undesignated</h2>
-        <p class="w-copy">Every client gets a world. Yours is still unnamed.</p>
-        <p class="w-note microlabel">Move the pointer: the survey drafts wherever you look. It stays unfinished on purpose.</p>
+        <p class="w-eyebrow microlabel">Sector 07 &middot; Awaiting designation</p>
+        <h2 id="h-uncharted">Uncharted</h2>
+        <p class="w-copy">Every fleet needs a next world. This one is waiting for a name.</p>
+        <p class="w-note w-note--live microlabel">Move the pointer: the survey drafts wherever you look. It stays unfinished on purpose.</p>
         <p class="w-cta">
-          <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Start your world: book a free discovery session</a>
+          <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Name it with us</a>
         </p>
-        <p class="w-proof microlabel">Free 30 minutes &middot; video or in person in Tucson &middot; you leave with a written plan</p>
-        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+        <p class="w-proof microlabel">Desert Data Labs builds worlds like these around real data. A first conversation is free.</p>
+        <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
 
