@@ -5,16 +5,17 @@
 An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of seven
 themed universes, each with its own atmosphere, palette, motion identity, and
 musical voicing. Click a planet, warp there, return to orbit. No frameworks, no build magic beyond
-concatenation, no image assets, no audio files: every star, planet texture, ember, current, and note is
-procedural.
+concatenation; the worlds, weather, planets, and music are all procedural code, and the Artifact at the
+center wears hand-made renders as its skins.
 
-v4 "The Artifact": a giant liquid-gold sphere holds the center of orbit, its surface flowing like slow
-molten metal, and the seven worlds now truly circle it, passing behind and in front. A sonar pulse rings
-out from it every few seconds to draw the eye and the ear. The mood goes deeper: a near-black sea-glass
-void, dust suspended in the dark, failing instrument-lights that flicker, a dread score of hull groans
-and a slow heartbeat, and the sphere answering, slightly wrong, when you touch it. Built on v3's
-foundation: rotating noise-textured planets in pure Canvas 2D, submerged art-deco brass chrome,
-a score engine with a generated concert hall, and one old code that summons something enormous.
+v5 "The Faces of the Artifact": a giant gold sphere holds the center of orbit, and it ANSWERS you.
+Hover a world and the Artifact crossfades into that world's face: engraved orrery rings at rest, molten
+gold for the Dust Sea, art-deco towers for Velocity, etched machinery for the Grid, bioluminescent veins
+for Abyssal. Touch it three times and, for a moment, the plates part and you see what is underneath.
+The seven worlds truly circle it, passing behind and in front; a sonar pulse rings out every few seconds;
+living light (a breathing specular constellation, rare flares, ripples) rides on top of every face.
+The mood stays deep: near-black sea-glass void, dust suspended in the dark, flickering instrument lights,
+a dread score of hull groans and a slow heartbeat, and a low, slightly-wrong answering tone when touched.
 
 **Live:** https://tgilbert14.github.io/ddl-orrery/
 

@@ -241,6 +241,35 @@ const SphereForge = (() => {
     hotSpr = c;
   }
 
+  /* ---------- the skin plates: real renders, lazy, crossfaded ----------
+     The Commission lifted the no-assets law: the Artifact now wears
+     hand-made renders as its faces. The procedural gold stays as the
+     instant-boot base (zero-request first paint) and the living light
+     (flow sheen, constellation, ripple, sonar) rides on top of both. */
+  const SKIN_SRC = {
+    orrery: 'assets/artifact/skin-orrery.webp',   /* the hub's face: it IS an orrery */
+    molten: 'assets/artifact/skin-molten.webp',
+    deco: 'assets/artifact/skin-deco.webp',
+    veins: 'assets/artifact/skin-veins.webp',
+    machine: 'assets/artifact/skin-machine.webp',
+    biomech: 'assets/artifact/skin-biomech.webp', /* what is underneath (the reveal) */
+  };
+  const SKIN_OF = { hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine', abyssal: 'veins' };
+  const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
+  const FADE_MS = 650;
+  const skins = {};                        /* key -> { img, ready } */
+  let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
+  let revealReq = 0, revealUntil = -1;
+  function loadSkin(k) {
+    if (skins[k] || !SKIN_SRC[k]) return;
+    const img = new Image();
+    const rec = { img, ready: false };
+    skins[k] = rec;
+    img.onload = () => { rec.ready = true; };
+    img.onerror = () => { delete skins[k]; };          /* a 404 must not wedge the want-latch */
+    img.src = SKIN_SRC[k];
+  }
+
   /* ---------- runtime state (pooled; no per-frame allocation) ---------- */
   let ripplePending = false, rippleT0 = -1, pending = 0;
   const rings = [{ on: false, born: 0 }, { on: false, born: 0 }, { on: false, born: 0 }];
@@ -271,6 +300,14 @@ const SphereForge = (() => {
       }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
+      /* skins: the hub face loads first (it is the marquee); the rest arrive
+         on a lazy stagger so boot paint never waits on a network byte */
+      loadSkin('orrery');
+      let di = 0;
+      for (const k in SKIN_SRC) {
+        if (k === 'orrery') continue;
+        setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+      }
     },
 
     draw(g, x, y, R, clockMs, opts) {
@@ -295,29 +332,70 @@ const SphereForge = (() => {
       const fscroll = half - ((t * FLOW_SPD) % 1) * half;   /* opposite drift */
       const A = R * 0.028;                 /* liquid warp amplitude, subtle */
 
+      /* skin state machine: latch wants into fades; latch the reveal */
+      if (revealReq) { revealUntil = clockMs + revealReq; revealReq = 0; }
+      const revealing = revealUntil > clockMs && skins.biomech && skins.biomech.ready;
+      if (wantSkin !== curSkin && !nxtSkin) {
+        const wr = skins[wantSkin];
+        if (wr && wr.ready) {
+          if (reduced2) { curSkin = wantSkin; }        /* rm: an instant, designed swap */
+          else { nxtSkin = wantSkin; fadeT0 = clockMs; }
+        }
+      }
+      if (nxtSkin) {
+        if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
+      }
+      const curRec = skins[revealing ? 'biomech' : curSkin];
+      const skinOn = !!(curRec && curRec.ready);
+
       g.save();
       g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
 
-      /* the molten surface: 24 slices, one seam-free blit each */
-      const sh = TEX_H / NS, dh = D / NS;
-      for (let i = 0; i < NS; i++) {
-        let off = A * Math.sin(t * 0.00093 + i * 0.53)
-                + A * 0.6 * Math.sin(t * 0.00061 - i * 0.31 + 2.1);
-        if (rippling) {                    /* local amplitude surge near the ring */
-          const sd = Math.abs(y - R + (i + 0.5) * dh - y) - ringR;
-          off += A * 2.6 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
-               * Math.sin(t * 0.012 + i * 1.3);
+      if (skinOn) {
+        /* the plate: a real render under the living light. It sways and
+           breathes rather than spins (a photo's baked highlights must not
+           carousel); the crossfade is the morph between its faces */
+        const sway = reduced2 ? 0 : Math.sin(t * 0.00016) * 0.045;
+        const br2 = reduced2 ? 1 : 1 + 0.012 * Math.sin(t * 0.00023);
+        const dp = R * SKIN_COVER * br2;
+        g.save();
+        g.translate(x, y); g.rotate(sway);
+        g.drawImage(curRec.img, -dp / 2, -dp / 2, dp, dp);
+        if (!revealing && nxtSkin && skins[nxtSkin] && skins[nxtSkin].ready) {
+          const fp = (clockMs - fadeT0) / FADE_MS;
+          g.globalAlpha = fp < 0 ? 0 : fp > 1 ? 1 : fp;
+          g.drawImage(skins[nxtSkin].img, -dp / 2, -dp / 2, dp, dp);
+          g.globalAlpha = 1;
         }
-        g.drawImage(baseTex, 0, i * sh, TEX_W * 2, sh,
-          x - R - pad - scroll + off, y - R + i * dh, dw, dh + 0.5);
+        g.restore();
+        /* the liquid sheen stays alive over the plate, quieter */
+        g.globalCompositeOperation = 'screen';
+        g.globalAlpha = reduced2 ? 0.08 : 0.07 + 0.03 * Math.sin(t * 0.0004);
+        g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      } else {
+        /* the molten surface: 24 slices, one seam-free blit each
+           (the zero-request base — first paint never waits on a skin byte) */
+        const sh = TEX_H / NS, dh = D / NS;
+        for (let i = 0; i < NS; i++) {
+          let off = A * Math.sin(t * 0.00093 + i * 0.53)
+                  + A * 0.6 * Math.sin(t * 0.00061 - i * 0.31 + 2.1);
+          if (rippling) {                  /* local amplitude surge near the ring */
+            const sd = Math.abs(y - R + (i + 0.5) * dh - y) - ringR;
+            off += A * 2.6 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
+                 * Math.sin(t * 0.012 + i * 1.3);
+          }
+          g.drawImage(baseTex, 0, i * sh, TEX_W * 2, sh,
+            x - R - pad - scroll + off, y - R + i * dh, dw, dh + 0.5);
+        }
+        /* flow layer: brighter streaks, screen blend, opposite scroll */
+        g.globalCompositeOperation = 'screen';
+        g.globalAlpha = reduced2 ? 0.14 : 0.13 + 0.05 * Math.sin(t * 0.0004);
+        g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
       }
-
-      /* flow layer: brighter streaks, screen blend, opposite scroll */
-      g.globalCompositeOperation = 'screen';
-      g.globalAlpha = reduced2 ? 0.14 : 0.13 + 0.05 * Math.sin(t * 0.0004);
-      g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
 
       /* the ripple: a bright band sweeping outward + a soft face-lift */
       if (rippling) {
@@ -348,7 +426,10 @@ const SphereForge = (() => {
       g.globalCompositeOperation = 'lighter';
       for (let hI = 0; hI < hots.length; hI++) {
         const h = hots[hI];
+        /* over a skin plate the render brings its own baked highlights:
+           the constellation drops to an accent, not the whole light show */
         let ha2 = reduced2 ? 0.58 : 0.55 + 0.18 * Math.sin(t * h.rate + h.ph);
+        if (skinOn) ha2 *= 0.5;
         let hs2 = h.r * R * 2;
         if (!reduced2) {
           const ft = (t + h.fo) % h.fi;
@@ -429,6 +510,20 @@ const SphereForge = (() => {
     ping() {                               /* ring only: the sonar */
       if (rm()) return;
       pending = pending < 3 ? pending + 1 : 3;
+    },
+
+    /* the Artifact answers a hover: it wears the face of the world you are
+       considering (accepts a world slug or 'hub'; unmapped worlds keep the
+       hub face). Crossfaded in draw(); rm gets an instant designed swap. */
+    setSkin(slug) {
+      wantSkin = SKIN_OF[slug] || 'orrery';
+      loadSkin(wantSkin);
+    },
+    /* the reveal: for a moment the plates part and you see what is
+       underneath. The caller times it; the ripple masks the swap. */
+    reveal(ms) {
+      loadSkin('biomech');
+      revealReq = ms || 2600;
     },
 
     drawShadowPass(g, x, y, R) {           /* seats the Artifact INTO the scene */

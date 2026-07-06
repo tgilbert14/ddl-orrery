@@ -311,13 +311,17 @@ function placeArtifactDom() {
     artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
   }
 }
-let artLast = 0;
+let artLast = 0, artTouches = 0;
 function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
   artLast = now;
+  artTouches++;
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
+    /* provoke it enough and, for a moment, the plates part: you see what
+       is underneath (every third touch; the ripple masks the swap) */
+    if (artTouches % 3 === 0 && SphereForge.reveal) SphereForge.reveal(2600);
     if (!skyTask) Orrery.startAmbient();
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));
@@ -352,9 +356,15 @@ anchors.forEach((a, slug) => {
     hovered = slug;
     html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
     html.style.setProperty('--acc-rgb', w.a.join(','));
+    /* the Artifact considers the world with you: it wears that world's face */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug);
+    if (!skyTask && !reduced()) Orrery.startAmbient();   /* the morph needs frames */
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
-  const untint = () => { if (hovered === slug) hovered = null; };
+  const untint = () => {
+    if (hovered === slug) hovered = null;
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
+  };
   a.addEventListener('pointerenter', tint);
   a.addEventListener('focus', tint);
   a.addEventListener('pointerleave', untint);
