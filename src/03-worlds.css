@@ -1,0 +1,201 @@
+/* ============================================================
+   03-worlds.css — five worlds, one token graph.
+   Each world: ONE signature effect + palette + card. No seconds.
+   Reduced-motion end-state per surface is DESIGNED, not stripped.
+   ============================================================ */
+
+/* ---------- shared world scaffolding ---------- */
+.world { display: grid; place-items: center; }
+.world-fx { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+.world-fx .fx-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.world-fx svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.world-card {
+  position: relative; z-index: 10;
+  width: min(92vw, 34rem);
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+  margin-block: 5.5rem 4rem;
+}
+.w-eyebrow { color: var(--wa, var(--acc)); margin-bottom: 0.7rem; }
+.world-card h2 {
+  font-size: var(--fs-h2); font-weight: 800; letter-spacing: -0.02em; line-height: 1.02;
+  margin-bottom: 0.7rem;
+}
+.w-copy { font-size: var(--fs-sub); color: var(--ink); max-width: 30em; }
+.w-note { margin-top: 0.9rem; color: var(--ink-dim); }
+.w-proof { margin-top: 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
+.w-proof a { color: var(--wa, var(--acc)); font-weight: 600; }
+.w-proof a:hover { color: var(--ink); }
+.w-return {
+  display: inline-block; margin-top: 1.5rem;
+  font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-dim); text-decoration: none;
+  padding: 0.5rem 0.95rem; border: 1px solid var(--line); border-radius: 999px;
+  transition: color 0.25s, border-color 0.25s, transform 0.45s var(--spring);
+}
+.w-return:hover, .w-return:focus-visible { color: var(--ink); border-color: var(--wa, var(--acc)); transform: translateY(-2px); }
+
+.w-toy {
+  font-size: var(--fs-label); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--wa); border: 1px solid var(--wa); border-radius: 999px;
+  padding: 0.5rem 1rem; margin-right: 0.6rem;
+  transition: background 0.25s, color 0.25s, transform 0.45s var(--spring);
+}
+.w-toy:hover, .w-toy:focus-visible { background: rgba(var(--wa-rgb), 0.16); transform: translateY(-2px); }
+
+/* brochure mode: give each stacked world its ground so no-JS reads designed */
+.world { background: var(--wground, var(--night)); }
+html.js .world { background: transparent; }
+html.js .world::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: var(--wground, var(--night));
+}
+
+/* ---------- per-world palette hookup ---------- */
+[data-scene="sonora"]        { --wa: var(--w-sonora-a);  --wa-rgb: var(--w-sonora-a-rgb);  --wglow-rgb: var(--w-sonora-glow-rgb);  --wground: var(--w-sonora-ground); }
+[data-scene="neon-mesa"]     { --wa: var(--w-mesa-a);    --wa-rgb: var(--w-mesa-a-rgb);    --wglow-rgb: var(--w-mesa-glow-rgb);    --wground: var(--w-mesa-ground); }
+[data-scene="undercurrent"]  { --wa: var(--w-current-a); --wa-rgb: var(--w-current-a-rgb); --wglow-rgb: var(--w-current-glow-rgb); --wground: var(--w-current-ground); }
+[data-scene="lattice"]       { --wa: var(--w-lattice-a); --wa-rgb: var(--w-lattice-a-rgb); --wglow-rgb: var(--w-lattice-glow-rgb); --wground: var(--w-lattice-ground); }
+[data-scene="undesignated"]  { --wa: var(--w-un-a);      --wa-rgb: var(--w-un-a-rgb);      --wglow-rgb: var(--w-un-glow-rgb);      --wground: var(--w-un-ground); }
+
+/* ============================================================
+   WORLD 01 · SONORA — heat-shimmer dusk over circuit saguaros
+   ============================================================ */
+[data-scene="sonora"] .sonora-scene { }
+html.js:not(.rm) [data-scene="sonora"].is-active .son-sun,
+html.js:not(.rm) [data-scene="sonora"].is-active .son-ridge { filter: url(#heat); }
+.saguaros .trace {
+  stroke-dasharray: 1; stroke-dashoffset: 0;   /* end-state = drawn (reduced-motion base) */
+}
+html.js:not(.rm) [data-scene="sonora"].is-active .saguaros .trace {
+  animation: son-draw 2.4s var(--ease-out) both;
+}
+html.js:not(.rm) [data-scene="sonora"].is-active .saguaros .trace:nth-child(2) { animation-delay: 0.35s; }
+html.js:not(.rm) [data-scene="sonora"].is-active .saguaros .trace:nth-child(3) { animation-delay: 0.7s; }
+@keyframes son-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.saguaro-nodes circle { opacity: 1; }
+html.js:not(.rm) [data-scene="sonora"].is-active .saguaro-nodes circle {
+  animation: son-node 0.5s var(--spring) both; animation-delay: calc(2s + var(--ni, 0) * 0.12s);
+}
+.saguaro-nodes circle:nth-child(1) { --ni: 0; } .saguaro-nodes circle:nth-child(2) { --ni: 1; }
+.saguaro-nodes circle:nth-child(3) { --ni: 2; } .saguaro-nodes circle:nth-child(4) { --ni: 3; }
+.saguaro-nodes circle:nth-child(5) { --ni: 4; } .saguaro-nodes circle:nth-child(6) { --ni: 5; }
+.saguaro-nodes circle:nth-child(7) { --ni: 6; } .saguaro-nodes circle:nth-child(8) { --ni: 7; }
+@keyframes son-node { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+
+/* ============================================================
+   WORLD 02 · NEON MESA — the skyline IS the chart
+   ============================================================ */
+.mesa-sun {
+  position: absolute; left: 50%; top: 24%; transform: translateX(-50%);
+  width: clamp(180px, 26vw, 320px); aspect-ratio: 1; border-radius: 50%;
+  background: linear-gradient(180deg, #ffd76e 0%, var(--w-mesa-glow) 45%, var(--w-mesa-a) 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0 55%, transparent 55.5% 58%, #000 58.5% 66%, transparent 66.5% 70%, #000 70.5% 78%, transparent 78.5% 83%, #000 83.5% 100%);
+  mask-image: linear-gradient(180deg, #000 0 55%, transparent 55.5% 58%, #000 58.5% 66%, transparent 66.5% 70%, #000 70.5% 78%, transparent 78.5% 83%, #000 83.5% 100%);
+  filter: drop-shadow(0 0 44px rgba(var(--w-mesa-glow-rgb), 0.55));
+}
+.mesa-skyline {
+  position: absolute; left: 0; right: 0; bottom: 28%;
+  display: flex; align-items: flex-end; justify-content: center; gap: clamp(4px, 0.8vw, 10px);
+  height: 34%; padding: 0 6vw; z-index: 2;
+}
+.mesa-skyline .bar {
+  flex: 1 1 0; max-width: 3.2vw; min-width: 8px;
+  height: calc(var(--h, 0.5) * 100%);
+  background: linear-gradient(180deg, rgba(var(--w-mesa-b-rgb), 0.9), rgba(var(--w-mesa-a-rgb), 0.28) 70%, transparent);
+  border-top: 2px solid var(--w-mesa-b);
+  box-shadow: 0 0 12px rgba(var(--w-mesa-b-rgb), 0.35);
+  transition: height 1.6s var(--ease-out);
+}
+.mesa-grid {
+  position: absolute; left: -20%; right: -20%; bottom: 0; height: 30%;
+  transform: perspective(340px) rotateX(61deg);
+  transform-origin: 50% 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(var(--w-mesa-a-rgb), 0.5) 0 2px, transparent 2px 84px),
+    repeating-linear-gradient(0deg, rgba(var(--w-mesa-b-rgb), 0.42) 0 2px, transparent 2px 46px),
+    linear-gradient(180deg, #2a0f45, var(--w-mesa-ground));
+}
+html.js:not(.rm) [data-scene="neon-mesa"].is-active .mesa-grid {
+  animation: grid-run 2.6s linear infinite;
+}
+@keyframes grid-run { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 0, 0 46px, 0 0; } }
+
+/* ============================================================
+   WORLD 03 · UNDERCURRENT — depth field; the canvas carries the current
+   ============================================================ */
+.uc-depth {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% 115%, rgba(var(--w-current-a-rgb), 0.16), transparent 60%),
+    radial-gradient(ellipse 70% 40% at 20% -10%, rgba(var(--w-current-b-rgb), 0.12), transparent 60%),
+    linear-gradient(180deg, #062032 0%, var(--w-current-ground) 70%);
+}
+.uc-flag { color: #ff5470; }
+
+/* reduced-motion / no-JS current: the story as a static diagram */
+html.rm [data-scene="undercurrent"] .fx-canvas,
+html:not(.js) [data-scene="undercurrent"] .fx-canvas { display: none; }
+
+/* ============================================================
+   WORLD 04 · THE LATTICE — the schema self-draws; queries race the joins
+   ============================================================ */
+.lattice-scene { opacity: 0.95; }
+.lat-node circle { fill: rgba(8, 17, 40, 0.85); stroke: rgba(var(--w-lattice-a-rgb), 0.55); stroke-width: 1.5; }
+.lat-node .core { fill: var(--w-lattice-a); stroke: none; filter: drop-shadow(0 0 8px rgba(var(--w-lattice-a-rgb), 0.8)); }
+.lat-edges .trace { stroke-dasharray: 1; stroke-dashoffset: 0; }   /* end-state drawn */
+html.js:not(.rm) [data-scene="lattice"].is-active .lat-edges .trace {
+  animation: lat-draw 1.8s var(--ease-out) both; animation-delay: calc(var(--ei, 0) * 0.12s);
+}
+.lat-edges .trace:nth-child(1) { --ei: 0; } .lat-edges .trace:nth-child(2) { --ei: 1; }
+.lat-edges .trace:nth-child(3) { --ei: 2; } .lat-edges .trace:nth-child(4) { --ei: 3; }
+.lat-edges .trace:nth-child(5) { --ei: 4; } .lat-edges .trace:nth-child(6) { --ei: 5; }
+.lat-edges .trace:nth-child(7) { --ei: 6; } .lat-edges .trace:nth-child(8) { --ei: 7; }
+.lat-edges .trace:nth-child(9) { --ei: 8; } .lat-edges .trace:nth-child(10) { --ei: 9; }
+@keyframes lat-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+.lat-flow { opacity: 0; }
+.lat-flow .flowpath { stroke-dasharray: 0.12 0.88; stroke-dashoffset: 0.12; stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(var(--w-lattice-a-rgb), 0.9)); }
+[data-scene="lattice"].is-querying .lat-flow { opacity: 1; }
+[data-scene="lattice"].is-querying .flowpath { animation: lat-query 1.4s linear 2; }
+@keyframes lat-query { from { stroke-dashoffset: 0.12; } to { stroke-dashoffset: -1; } }
+html.rm [data-scene="lattice"].is-querying .flowpath { animation-duration: 0.9s; animation-iteration-count: 1; }
+
+/* ============================================================
+   WORLD 05 · DDL-5 UNDESIGNATED — the blueprint that never finishes
+   ============================================================ */
+.un-blueprint {
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(var(--w-un-a-rgb), 0.05) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(90deg, rgba(var(--w-un-a-rgb), 0.05) 0 1px, transparent 1px 56px),
+    radial-gradient(ellipse 80% 60% at 50% 45%, #141b26 0%, var(--w-un-ground) 75%);
+}
+.w-cta { margin-top: 1.4rem; }
+.cta-btn {
+  display: inline-block;
+  font-weight: 800; letter-spacing: 0.02em; text-decoration: none;
+  color: var(--coral-ink); background: var(--coral);
+  padding: 0.95rem 1.5rem; border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(var(--coral-rgb), 0.35);
+  transition: transform 0.5s var(--spring), box-shadow 0.35s;
+}
+.cta-btn:hover, .cta-btn:focus-visible {
+  color: var(--coral-ink);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 14px 44px rgba(var(--coral-rgb), 0.5);
+}
+
+/* ---------- mobile card comfort ---------- */
+@media (max-width: 700px) {
+  .world-card { width: 94vw; margin-block: 6.5rem 3rem; }
+  .mesa-skyline .bar { max-width: 7vw; }
+}
+
+/* ---------- print: the brochure, clean ---------- */
+@media print {
+  #sky, #warpfx, .world-fx, .hud, .audio-toggle { display: none !important; }
+  .scene { position: static !important; opacity: 1 !important; visibility: visible !important; }
+  body { background: #fff; color: #111; }
+}

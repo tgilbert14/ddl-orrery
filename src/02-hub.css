@@ -1,0 +1,169 @@
+/* ============================================================
+   02-hub.css — the orbit hall.
+   LAW (galadriel): all worlds live in the DOM from byte one.
+   Default CSS = the stacked no-JS brochure. html.js = the app.
+   ============================================================ */
+
+/* ---------- the sky ---------- */
+#sky {
+  position: fixed; inset: 0; z-index: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+/* CSS starfield fallback (no-JS / pre-boot): layered gradients, zero requests */
+#orrery {
+  position: relative; z-index: 1;
+  background:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgba(233,238,249,0.8), transparent 60%),
+    radial-gradient(1px 1px at 68% 12%, rgba(233,238,249,0.65), transparent 60%),
+    radial-gradient(1.2px 1.2px at 33% 74%, rgba(168,233,255,0.5), transparent 60%),
+    radial-gradient(1px 1px at 85% 55%, rgba(233,238,249,0.55), transparent 60%),
+    radial-gradient(1.4px 1.4px at 52% 38%, rgba(207,216,255,0.45), transparent 60%),
+    radial-gradient(1px 1px at 20% 92%, rgba(233,238,249,0.4), transparent 60%),
+    radial-gradient(ellipse 120% 80% at 50% 120%, #0d1330 0%, var(--void) 60%);
+}
+html.js #orrery { background:
+  radial-gradient(ellipse 120% 80% at 50% 120%, #0d1330 0%, var(--void) 60%); }
+
+/* ---------- scenes: brochure by default, stage under .js ---------- */
+.scene { position: relative; min-height: 100svh; padding: 6rem 1.4rem 4.5rem; }
+html.js .scene {
+  position: fixed; inset: 0; z-index: 10;
+  min-height: 100svh; overflow-y: auto; overflow-x: hidden;
+  opacity: 0; visibility: hidden; pointer-events: none;
+}
+html.js .scene.is-active {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity 0.45s var(--ease-out);
+}
+html.js .scene.is-leaving { opacity: 0; transition: opacity 0.3s ease-in; }
+
+/* ---------- the hub ---------- */
+.scene-hub {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 1rem;
+}
+.hub-copy { margin-top: clamp(2.5rem, 8vh, 6rem); position: relative; z-index: 30; }
+.hub-h1 {
+  font-size: var(--fs-hero); font-weight: 800; letter-spacing: -0.02em; line-height: 1.08;
+  /* LCP text: NEVER opacity-gated. Decoration animates, the headline paints. */
+  text-wrap: balance;
+}
+.hub-h1::after {
+  content: ""; display: block; width: 72px; height: 3px; margin: 1.1rem auto 0;
+  background: linear-gradient(90deg, var(--coral), var(--acc));
+  border-radius: 2px;
+}
+.hub-sub { color: var(--ink-dim); font-size: var(--fs-sub); margin-top: 0.9rem; max-width: 34em; margin-inline: auto; }
+.hub-hint { margin-top: 1.1rem; color: var(--ink-faint); }
+html.js .hub-sub, html.js .hub-hint {
+  animation: rise-in 0.9s var(--ease-out) both; animation-delay: 0.25s;
+}
+html.js .hub-hint { animation-delay: 0.55s; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* ---------- the orbits (brochure list by default) ---------- */
+.orbits {
+  display: grid; gap: 1rem; width: min(100%, 40rem);
+  margin: 2.5rem auto 0; text-align: left;
+}
+.planet-anchor {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1rem;
+  padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 14px;
+  text-decoration: none; color: var(--ink);
+  background: var(--glass);
+}
+.pa-dot {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, rgba(255,255,255,0.85), rgba(255,255,255,0) 42%),
+              radial-gradient(circle at 60% 65%, var(--pa, var(--acc)) 0%, color-mix(in oklab, var(--pa, var(--acc)) 45%, #000) 85%);
+  box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35);
+}
+.pa-ring { display: none; }
+.pa-label b { display: block; font-weight: 800; letter-spacing: 0.02em; font-size: 1.05rem; }
+.pa-label em { display: block; font-style: normal; color: var(--ink-dim); font-size: 0.85rem; }
+.pa-tick { display: block; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--w-current-a); margin-top: 0.25rem; }
+.pa-tick[hidden] { display: none; }
+
+/* world hues on the anchors (one source: the token families) */
+.planet-anchor[data-world="sonora"]        { --pa: var(--w-sonora-a);  --pa-rgb: var(--w-sonora-a-rgb); }
+.planet-anchor[data-world="neon-mesa"]     { --pa: var(--w-mesa-a);    --pa-rgb: var(--w-mesa-a-rgb); }
+.planet-anchor[data-world="undercurrent"]  { --pa: var(--w-current-a); --pa-rgb: var(--w-current-a-rgb); }
+.planet-anchor[data-world="lattice"]       { --pa: var(--w-lattice-a); --pa-rgb: var(--w-lattice-a-rgb); }
+.planet-anchor[data-world="undesignated"]  { --pa: var(--w-un-a);      --pa-rgb: var(--w-un-a-rgb); }
+
+/* ---------- app-mode orbits: anchors become the planets' focus targets ---------- */
+@media (min-width: 701px) {
+  html.js .orbits {
+    display: block; position: absolute; inset: 0; margin: 0; width: auto; z-index: 20;
+  }
+  html.js .planet-anchor {
+    position: absolute; left: 0; top: 0;
+    /* JS writes --pax/--pay each frame; the CSS drift below carries pre-boot */
+    transform: translate(-50%, -50%) translate(var(--pax, 50vw), var(--pay, 60vh));
+    display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+    padding: 0.6rem; border: 0; background: none; border-radius: 50%;
+    min-width: 44px; min-height: 44px;
+  }
+  html.js .planet-anchor .pa-dot {
+    width: var(--psize, 52px); height: var(--psize, 52px);
+    transition: transform 0.5s var(--spring), box-shadow 0.4s;
+  }
+  html.js .planet-anchor .pa-ring {
+    display: block; position: absolute; inset: -10px; border-radius: 50%;
+    border: 1px solid rgba(var(--pa-rgb), 0.0);
+    transition: border-color 0.35s, inset 0.35s;
+  }
+  html.js .planet-anchor .pa-label {
+    position: absolute; top: calc(100% + 0.2rem); left: 50%; transform: translateX(-50%);
+    text-align: center; white-space: nowrap;
+    opacity: 0.92; transition: opacity 0.3s, transform 0.4s var(--ease-out);
+  }
+  html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
+  html.js .planet-anchor .pa-label em { font-size: 0.72rem; opacity: 0; transform: translateY(-4px); transition: opacity 0.3s, transform 0.3s; }
+  html.js .planet-anchor:hover .pa-dot,
+  html.js .planet-anchor:focus-visible .pa-dot { transform: scale(1.12); box-shadow: 0 0 34px rgba(var(--pa-rgb), 0.65); }
+  html.js .planet-anchor:hover .pa-ring,
+  html.js .planet-anchor:focus-visible .pa-ring { border-color: rgba(var(--pa-rgb), 0.6); inset: -14px; }
+  html.js .planet-anchor:hover .pa-label em,
+  html.js .planet-anchor:focus-visible .pa-label em { opacity: 1; transform: none; }
+  html.js .pa-unnamed .pa-dot {
+    background: none; border: 2px dashed rgba(var(--pa-rgb), 0.75);
+    box-shadow: 0 0 14px rgba(var(--pa-rgb), 0.2) inset;
+  }
+}
+
+/* mobile app-mode: the star-chart column (big targets, tells intact) */
+@media (max-width: 700px) {
+  html.js .orbits { position: relative; z-index: 20; }
+  html.js .planet-anchor { min-height: 64px; }
+}
+
+/* ---------- pre-boot / no-JS planet drift (negative-delay ensemble, §2.7) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .pa-dot { animation: pa-bob calc(var(--beat) * 2) ease-in-out infinite alternate; animation-delay: calc(var(--i, 0) * -1.6s); }
+  @keyframes pa-bob { from { transform: translateY(-3px); } to { transform: translateY(3px); } }
+}
+
+/* ---------- the warp layer ---------- */
+#warpfx {
+  position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at var(--wx, 50%) var(--wy, 50%),
+    rgba(var(--acc-rgb), 0.85) 0%,
+    rgba(var(--acc-rgb), 0.35) 22%,
+    rgba(5, 7, 15, 0.0) 62%);
+}
+html.warping #warpfx { animation: warp-flood var(--warp-ms) var(--ease-out) both; }
+@keyframes warp-flood {
+  0% { opacity: 0; transform: scale(0.6); }
+  45% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.4); }
+}
+html.warping .scene-hub .hub-copy { animation: hub-dolly var(--warp-ms) ease-in both; }
+@keyframes hub-dolly { to { opacity: 0; transform: scale(1.06) translateY(-10px); } }
+
+/* ---------- reduced motion: the designed pose ---------- */
+html.rm .pa-dot, html.rm .hub-sub, html.rm .hub-hint { animation: none !important; }
+html.rm .scene, html.rm .scene.is-active { transition: opacity 0.25s linear; }
+html.rm #warpfx { display: none; }

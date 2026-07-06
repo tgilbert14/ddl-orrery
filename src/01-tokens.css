@@ -1,0 +1,188 @@
+/* ============================================================
+   THE ORRERY · Desert Data Labs
+   01-tokens.css — the single token source. One clock, one palette graph.
+   Registered properties first (Houdini law: register every animated
+   or calc-math custom property, or it renders 0 / refuses to animate).
+   ============================================================ */
+
+@property --px { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --py { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --warp { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --acc { syntax: "<color>"; inherits: true; initial-value: #64d5f5; }
+@property --draft { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+:root {
+  /* -- the night (base space) -- */
+  --void: #05070f;
+  --night: #0a0f22;
+  --ink: #e9eef9;          /* body text, 16.5:1 on void */
+  --ink-dim: #a9b6d0;      /* captions, 8.9:1 on void */
+  --ink-faint: #6b7994;    /* hints, 4.6:1 on void — floor respected */
+  --line: rgba(233, 238, 249, 0.14);
+  --glass: rgba(10, 15, 34, 0.55);
+
+  /* -- world families: a (accent) · b (second) · glow · ground -- */
+  --w-sonora-a: #ffb25e;      --w-sonora-a-rgb: 255, 178, 94;
+  --w-sonora-b: #9fc07e;
+  --w-sonora-glow: #ff7a45;   --w-sonora-glow-rgb: 255, 122, 69;
+  --w-sonora-ground: #241430;
+
+  --w-mesa-a: #ff2e97;        --w-mesa-a-rgb: 255, 46, 151;
+  --w-mesa-b: #29e6ff;        --w-mesa-b-rgb: 41, 230, 255;
+  --w-mesa-glow: #ff9a3d;     --w-mesa-glow-rgb: 255, 154, 61;
+  --w-mesa-ground: #12092b;
+
+  --w-current-a: #35f0c8;     --w-current-a-rgb: 53, 240, 200;
+  --w-current-b: #8f7bff;     --w-current-b-rgb: 143, 123, 255;
+  --w-current-glow: #bfffe9;  --w-current-glow-rgb: 191, 255, 233;
+  --w-current-ground: #03121f;
+
+  --w-lattice-a: #a8e9ff;     --w-lattice-a-rgb: 168, 233, 255;
+  --w-lattice-b: #cfd8ff;     --w-lattice-b-rgb: 207, 216, 255;
+  --w-lattice-glow: #ffffff;  --w-lattice-glow-rgb: 255, 255, 255;
+  --w-lattice-ground: #081128;
+
+  --w-un-a: #64d5f5;          --w-un-a-rgb: 100, 213, 245;
+  --w-un-b: #9fb4c8;
+  --w-un-glow: #64d5f5;       --w-un-glow-rgb: 100, 213, 245;
+  --w-un-ground: #0f141c;
+  --coral: #f97366;           --coral-rgb: 249, 115, 102;  /* the ONE warm CTA accent */
+  --coral-ink: #2a0f0b;       /* text on coral, 8.7:1 */
+
+  /* -- the live accent (retinted per hover / world; registered <color> above) -- */
+  --acc: #64d5f5;
+  --acc-rgb: 100, 213, 245;
+
+  /* -- type scale -- */
+  --font-display: ui-sans-serif, system-ui, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  --fs-hero: clamp(1.9rem, 1.1rem + 4.2vw, 4.2rem);
+  --fs-h2: clamp(2.2rem, 1.4rem + 4.6vw, 4.8rem);
+  --fs-sub: clamp(1rem, 0.9rem + 0.7vw, 1.3rem);
+  --fs-body: clamp(0.98rem, 0.92rem + 0.35vw, 1.12rem);
+  --fs-label: 0.72rem;
+
+  /* -- motion tokens (one clock: JS reads --beat for the shared tempo) -- */
+  --beat: 4s;                 /* one orrery beat; orbits/loops derive from it */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --spring: linear(0, 0.32, 0.72, 1.03, 1.01, 0.99, 1);
+  --warp-ms: 1100ms;
+}
+
+/* ============ reset + base ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { color-scheme: dark; scroll-behavior: smooth; }
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100svh;
+  overflow-x: hidden;
+}
+::selection { background: rgba(var(--acc-rgb), 0.35); }
+a { color: var(--acc); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+img, svg, canvas { max-width: 100%; display: block; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.skip-link {
+  position: fixed; top: -4rem; left: 1rem; z-index: 300;
+  background: var(--night); color: var(--ink);
+  padding: 0.6rem 1rem; border: 1px solid var(--line); border-radius: 8px;
+  transition: top 0.2s var(--ease-out);
+}
+.skip-link:focus-visible { top: 1rem; }
+
+/* small-caps micro-typography (house vocabulary) */
+.microlabel {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* glass surface (small regions only — backdrop-filter discipline) */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+/* ============ HUD chrome ============ */
+.hud {
+  position: fixed; left: 0; right: 0; z-index: 120;
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.85rem 1.4rem;
+  pointer-events: none;               /* islands opt back in */
+}
+.hud > * { pointer-events: auto; }
+.hud-top { top: 0; justify-content: space-between; }
+.hud-bottom { bottom: 0; justify-content: center; font-size: var(--fs-label); color: var(--ink-faint); }
+.hud-bottom a { color: var(--ink-dim); }
+
+.brand {
+  font-size: var(--fs-label); font-weight: 800; letter-spacing: 0.22em;
+  color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.brand b { color: var(--coral); }
+.hud-title {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.34em;
+  color: var(--ink-dim); text-transform: uppercase;
+}
+@media (max-width: 760px) { .hud-title, #hud-clock { display: none; } }
+.hud-right { display: flex; align-items: center; gap: 0.9rem; }
+#hud-clock { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-faint); letter-spacing: 0.08em; }
+
+/* location strip + return control (continuity: where you are / where you came from) */
+.hud-loc {
+  top: 3.2rem; justify-content: space-between; padding-top: 0; padding-bottom: 0;
+}
+#hud-loc-name {
+  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.18em;
+  color: var(--acc); text-transform: uppercase;
+  border-left: 2px solid var(--acc); padding-left: 0.6rem;
+  transition: color 0.6s, border-color 0.6s;
+}
+.return-orbit {
+  font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.12em;
+  color: var(--ink-dim); text-decoration: none; text-transform: uppercase;
+  padding: 0.45rem 0.9rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--glass);
+  transition: color 0.25s, border-color 0.25s, transform 0.45s var(--spring);
+}
+.return-orbit:hover, .return-orbit:focus-visible { color: var(--ink); border-color: var(--acc); transform: translateY(-2px); }
+.return-orbit[hidden] { display: none; }
+
+/* audio toggle — never claims to play until the context is truly running */
+.audio-toggle {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.14em;
+  color: var(--ink-dim); text-transform: uppercase;
+  padding: 0.45rem 0.9rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--glass);
+  transition: color 0.25s, border-color 0.25s;
+}
+.audio-toggle:hover, .audio-toggle:focus-visible { color: var(--ink); border-color: var(--acc); }
+.audio-toggle .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 10px; }
+.audio-toggle .eq i { width: 2.5px; height: 3px; background: currentColor; border-radius: 1px; }
+.audio-toggle[data-on="true"] { color: var(--acc); border-color: rgba(var(--acc-rgb), 0.55); }
+.audio-toggle[data-on="true"] .eq i { animation: eq-bounce 0.9s ease-in-out infinite alternate; }
+.audio-toggle[data-on="true"] .eq i:nth-child(2) { animation-delay: 0.15s; }
+.audio-toggle[data-on="true"] .eq i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes eq-bounce { from { height: 3px; } to { height: 10px; } }
+
+/* surveyed tick vocabulary (the hub remembers your journey) */
+.surveyed-tick { color: var(--w-current-a); font-weight: 800; }

@@ -1,0 +1,239 @@
+<!-- Hand-built by Desert Data Labs. No frameworks, no build magic, no assets.
+     You are standing in the source. https://desertdatalabs.com -->
+
+<a class="skip-link" href="#worlds-index">Skip to the world index</a>
+
+<div id="orrery">
+
+  <!-- the sky: pure scenery, never text (gate 6) -->
+  <canvas id="sky" aria-hidden="true"></canvas>
+  <div id="warpfx" aria-hidden="true"></div>
+
+  <!-- ============ HUD ============ -->
+  <header class="hud hud-top">
+    <a class="brand" href="https://desertdatalabs.com/">DESERT<b>·</b>DATA<b>·</b>LABS</a>
+    <div class="hud-title">The Orrery</div>
+    <div class="hud-right">
+      <span id="hud-clock" aria-hidden="true"></span>
+      <button class="audio-toggle" id="audio-toggle" type="button" data-on="false"
+              aria-pressed="false" aria-label="Turn the score on">
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="audio-label">Score: off</span>
+      </button>
+    </div>
+  </header>
+  <div class="hud hud-loc">
+    <span id="hud-loc-name">Orbit · choose a world</span>
+    <a class="return-orbit" id="return-orbit" href="#/" hidden>&#9666; Return to orbit</a>
+  </div>
+
+  <main id="stage">
+
+    <!-- ============ THE HUB ============ -->
+    <section id="hub" class="scene scene-hub" data-scene="hub">
+      <div class="hub-copy">
+        <h1 class="hub-h1">Five worlds. One clock.<br>Everything you see is code.</h1>
+        <p class="hub-sub">A working model of what Desert Data Labs can build for you.</p>
+        <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
+      </div>
+
+      <nav class="orbits" id="worlds-index" aria-label="The five worlds">
+        <a class="planet-anchor" data-world="sonora" href="#/world/sonora" style="--i:0">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Sonora</b><em>field data where there is no signal</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="neon-mesa" href="#/world/neon-mesa" style="--i:1">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Neon Mesa</b><em>dashboards with a pulse</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="undercurrent" href="#/world/undercurrent" style="--i:2">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>Undercurrent</b><em>pipelines that never sleep</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor" data-world="lattice" href="#/world/lattice" style="--i:3">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>The Lattice</b><em>databases that stay honest</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+        <a class="planet-anchor pa-unnamed" data-world="undesignated" href="#/world/undesignated" style="--i:4">
+          <span class="pa-ring" aria-hidden="true"></span>
+          <span class="pa-dot" aria-hidden="true"></span>
+          <span class="pa-label"><b>DDL&#8209;5: Undesignated</b><em>yours is still unnamed</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+        </a>
+      </nav>
+    </section>
+
+    <!-- ============ WORLD 01 · SONORA ============ -->
+    <section id="world-sonora" class="scene world" data-scene="sonora" data-fx="sonora" aria-labelledby="h-sonora">
+      <div class="world-fx" aria-hidden="true">
+        <svg class="sonora-scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <filter id="heat" x="-20%" y="-20%" width="140%" height="140%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.012 0.05" numOctaves="2" seed="7" result="n">
+                <animate attributeName="baseFrequency" dur="9s" values="0.012 0.05; 0.016 0.06; 0.012 0.05" repeatCount="indefinite"/>
+              </feTurbulence>
+              <feDisplacementMap in="SourceGraphic" in2="n" scale="14" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+            <linearGradient id="sonsky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#241430"/>
+              <stop offset="0.55" stop-color="#5b2440"/>
+              <stop offset="0.8" stop-color="#c4503a"/>
+              <stop offset="1" stop-color="#ffb25e"/>
+            </linearGradient>
+          </defs>
+          <rect class="son-sky" width="1200" height="640" fill="url(#sonsky)"/>
+          <circle class="son-sun" cx="600" cy="560" r="130" fill="#ffd9a0" opacity="0.9"/>
+          <g class="son-ridge" fill="#1b0f26">
+            <path d="M0,640 L0,560 L140,520 L300,565 L470,505 L640,560 L820,510 L990,558 L1200,520 L1200,640 Z"/>
+          </g>
+          <g class="saguaros" stroke="#2f1b3d" stroke-width="7" stroke-linecap="round" fill="none">
+            <path class="trace" pathLength="1" d="M180,610 L180,455 M180,520 C150,520 145,505 145,478 M180,540 C215,540 220,522 220,492"/>
+            <path class="trace" pathLength="1" d="M960,615 L960,430 M960,505 C925,505 918,485 918,452 M960,545 C998,545 1004,525 1004,488"/>
+            <path class="trace" pathLength="1" d="M545,620 L545,505 M545,560 C522,560 518,548 518,526"/>
+          </g>
+          <g class="saguaro-nodes" fill="#ffb25e">
+            <circle cx="180" cy="455" r="5"/><circle cx="145" cy="478" r="4"/><circle cx="220" cy="492" r="4"/>
+            <circle cx="960" cy="430" r="5"/><circle cx="918" cy="452" r="4"/><circle cx="1004" cy="488" r="4"/>
+            <circle cx="545" cy="505" r="4"/><circle cx="518" cy="526" r="3.5"/>
+          </g>
+        </svg>
+        <canvas class="fx-canvas" data-canvas="sonora"></canvas>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">World 01 &middot; Field data collection</p>
+        <h2 id="h-sonora">Sonora</h2>
+        <p class="w-copy">Field data, collected clean: offline first, synced when the signal returns.</p>
+        <p class="w-proof">Proof, live right now:
+          <a href="https://proud-desert-053089610.7.azurestaticapps.net/" rel="noopener">EcoPlot Mobile</a>
+          <span aria-hidden="true">&middot;</span>
+          <a href="https://github.com/tgilbert14/VGS-Batch-Importer-App" rel="noopener">VGS Batch Importer</a>
+        </p>
+        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ WORLD 02 · NEON MESA ============ -->
+    <section id="world-neon-mesa" class="scene world" data-scene="neon-mesa" data-fx="mesa" aria-labelledby="h-mesa">
+      <div class="world-fx" aria-hidden="true">
+        <div class="mesa-sun"></div>
+        <div class="mesa-skyline" id="mesa-skyline"></div>
+        <div class="mesa-grid"></div>
+        <canvas class="fx-canvas" data-canvas="mesa"></canvas>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">World 02 &middot; Dashboards &amp; analytics</p>
+        <h2 id="h-mesa">Neon Mesa</h2>
+        <p class="w-copy">Dashboards with a pulse: live numbers your whole team can read at a glance.</p>
+        <p class="w-note microlabel">The skyline is the chart. It has been easing between real render frames since you arrived.</p>
+        <p class="w-proof">Proof, live right now:
+          <a href="https://girthindex.desertdatalab.com/" rel="noopener">Big 12 Girth Index</a>
+        </p>
+        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ WORLD 03 · UNDERCURRENT ============ -->
+    <section id="world-undercurrent" class="scene world" data-scene="undercurrent" data-fx="current" aria-labelledby="h-current">
+      <div class="world-fx" aria-hidden="true">
+        <div class="uc-depth"></div>
+        <canvas class="fx-canvas" data-canvas="current"></canvas>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">World 03 &middot; Pipelines, ETL &amp; QA</p>
+        <h2 id="h-current">Undercurrent</h2>
+        <p class="w-copy">Pipelines that never sleep: your data moves nightly, checked at every gate.</p>
+        <p class="w-note microlabel"><span class="uc-flag">&#9888;</span> Watch the current: flagged records divert at the gate. Never committed.</p>
+        <p class="w-proof">Proof, live right now:
+          <a href="https://github.com/tgilbert14/VGS-Batch-Importer-App" rel="noopener">ETL + QA importer</a>
+          <span aria-hidden="true">&middot;</span>
+          <a href="https://desertdatalabs.com/process.html" rel="noopener">How we work</a>
+        </p>
+        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ WORLD 04 · THE LATTICE ============ -->
+    <section id="world-lattice" class="scene world" data-scene="lattice" data-fx="lattice" aria-labelledby="h-lattice">
+      <div class="world-fx" aria-hidden="true">
+        <svg class="lattice-scene" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice">
+          <g class="lat-edges" stroke="#3a5f8f" stroke-width="1.5" fill="none">
+            <path class="trace" pathLength="1" d="M300,220 L520,150"/>
+            <path class="trace" pathLength="1" d="M520,150 L780,240"/>
+            <path class="trace" pathLength="1" d="M780,240 L950,170"/>
+            <path class="trace" pathLength="1" d="M300,220 L430,400"/>
+            <path class="trace" pathLength="1" d="M520,150 L620,380"/>
+            <path class="trace" pathLength="1" d="M780,240 L620,380"/>
+            <path class="trace" pathLength="1" d="M430,400 L620,380"/>
+            <path class="trace" pathLength="1" d="M620,380 L840,470"/>
+            <path class="trace" pathLength="1" d="M430,400 L390,560"/>
+            <path class="trace" pathLength="1" d="M840,470 L950,170"/>
+          </g>
+          <g class="lat-flow" stroke="#a8e9ff" stroke-width="2.5" fill="none" opacity="0">
+            <path class="flowpath" pathLength="1" d="M300,220 L520,150 L780,240 L620,380 L840,470"/>
+          </g>
+          <g class="lat-nodes">
+            <g class="lat-node" transform="translate(300,220)"><circle r="26"/><circle class="core" r="9"/></g>
+            <g class="lat-node" transform="translate(520,150)"><circle r="30"/><circle class="core" r="10"/></g>
+            <g class="lat-node" transform="translate(780,240)"><circle r="26"/><circle class="core" r="9"/></g>
+            <g class="lat-node" transform="translate(950,170)"><circle r="20"/><circle class="core" r="7"/></g>
+            <g class="lat-node" transform="translate(430,400)"><circle r="24"/><circle class="core" r="8"/></g>
+            <g class="lat-node" transform="translate(620,380)"><circle r="32"/><circle class="core" r="11"/></g>
+            <g class="lat-node" transform="translate(840,470)"><circle r="22"/><circle class="core" r="8"/></g>
+            <g class="lat-node" transform="translate(390,560)"><circle r="18"/><circle class="core" r="6"/></g>
+          </g>
+        </svg>
+        <canvas class="fx-canvas" data-canvas="lattice"></canvas>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">World 04 &middot; Databases &amp; research data</p>
+        <h2 id="h-lattice">The Lattice</h2>
+        <p class="w-copy">Databases designed to stay fast, honest, and yours.</p>
+        <p class="w-note"><button class="w-toy" id="run-query" type="button">Run a query</button>
+          <span class="microlabel">send a current through the schema</span></p>
+        <p class="w-proof">Proof, live right now:
+          <a href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" rel="noopener">Small Mammal Tracker</a>
+          <span aria-hidden="true">&middot;</span>
+          <a href="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" rel="noopener">Water Chemistry Viewer</a>
+        </p>
+        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+    <!-- ============ WORLD 05 · DDL-5: UNDESIGNATED ============ -->
+    <section id="world-undesignated" class="scene world" data-scene="undesignated" data-fx="draft" aria-labelledby="h-un">
+      <div class="world-fx" aria-hidden="true">
+        <div class="un-blueprint"></div>
+        <canvas class="fx-canvas" data-canvas="draft"></canvas>
+      </div>
+      <div class="world-card glass">
+        <p class="w-eyebrow microlabel">World 05 &middot; Awaiting designation</p>
+        <h2 id="h-un">DDL&#8209;5: Undesignated</h2>
+        <p class="w-copy">Every client gets a world. Yours is still unnamed.</p>
+        <p class="w-note microlabel">Move the pointer: the survey drafts wherever you look. It stays unfinished on purpose.</p>
+        <p class="w-cta">
+          <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Start your world: book a free discovery session</a>
+        </p>
+        <p class="w-proof microlabel">Free 30 minutes &middot; video or in person in Tucson &middot; you leave with a written plan</p>
+        <a class="w-return" href="#/">&#9666; Return to orbit</a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="hud hud-bottom">
+    <span>Hand-built by <a href="https://desertdatalabs.com/" rel="noopener">Desert Data Labs</a>
+      &middot; no frameworks &middot; no assets &middot;
+      <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
+  </footer>
+
+</div>
+
+<noscript>
+  <style>
+    /* the brochure IS the page: with no JS the scenes simply stack, styled by CSS defaults */
+    .hub-hint, .audio-toggle, #hud-clock, .w-note { display: none !important; }
+  </style>
+</noscript>
