@@ -2,8 +2,8 @@
 
 **Seven worlds. One clock. Everything you see is code.**
 
-An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of five
-themed worlds, each one a DDL capability with its own atmosphere, palette, motion identity, and
+An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of seven
+themed universes, each with its own atmosphere, palette, motion identity, and
 musical voicing. Click a planet, warp there, return to orbit. No frameworks, no build magic beyond
 concatenation, no image assets, no audio files: every star, planet, ember, current, and note is
 procedural.
