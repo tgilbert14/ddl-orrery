@@ -386,6 +386,11 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
   html.js .planet-anchor:hover .pa-label,
   html.js .planet-anchor:focus-visible .pa-label { opacity: 1; }
+  /* neighbors alternate label sides (odd above, even below): two worlds
+     passing close on the ring can no longer stack their nameplates */
+  html.js .planet-anchor:nth-child(odd) .pa-label {
+    top: auto; bottom: calc(100% + 0.2rem);
+  }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
   html.js .planet-anchor .pa-label em { font-size: 0.72rem; opacity: 0; transform: translateY(-4px); transition: opacity 0.3s, transform 0.3s; }
   html.js .planet-anchor:hover .pa-dot,
@@ -2110,21 +2115,56 @@ const seasonTilt = (() => {   /* the local-time sky: a deterministic per-visit r
   const h = new Date().getHours() + new Date().getMinutes() / 60;
   return (h / 24) * Math.PI * 2;
 })();
+/* nebula haze: two soft tinted blooms baked once, seated on the galactic band */
+let nebA = null, nebB = null;
+const neb1 = { x: 0, y: 0, s: 0 }, neb2 = { x: 0, y: 0, s: 0 };
+function bakeNebula() {
+  if (nebA) return;
+  const mk = (rgb) => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+    gr.addColorStop(0, `rgba(${rgb},0.10)`);
+    gr.addColorStop(0.55, `rgba(${rgb},0.05)`);
+    gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    return c;
+  };
+  nebA = mk('53,240,200'); nebB = mk('143,123,255');
+}
 function buildStars() {
-  const n = Math.round(Math.min(240, (W * H) / 6800));
+  /* a sky worth the name: ~3x the old density, a diagonal galactic band
+     carrying a third of the field, and a few glinting giants */
+  const n = Math.round(Math.min(460, (W * H) / 3600));
   stars = [];
   let seed = 42;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  bakeNebula();
+  const bandAng = -0.55, ca = Math.cos(bandAng), sa = Math.sin(bandAng);
+  const diag = Math.hypot(W, H);
   for (let i = 0; i < n; i++) {
     const depth = i % 3;
+    let x, y;
+    if (i % 3 === 0) {                                 /* the band: clustered along the diagonal */
+      const u = (rnd() - 0.5) * diag * 1.3;
+      const v = (rnd() + rnd() - 1) * H * 0.14;        /* triangular falloff off the spine */
+      x = W / 2 + ca * u - sa * v;
+      y = H / 2 + sa * u + ca * v;
+    } else { x = rnd() * W; y = rnd() * H; }
+    const giant = i % 41 === 0;                        /* rare bright giants with a cross-glint */
     stars.push({
-      x: rnd() * W, y: rnd() * H,
+      x, y,
       z: 0.35 + depth * 0.33,                          /* parallax factor */
-      r: 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
+      r: giant ? 1.7 + rnd() * 0.9 : 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
       tw: rnd() * Math.PI * 2,                         /* twinkle phase */
-      hue: rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
+      k: giant ? 1 : 0,
+      hue: giant ? (rnd() < 0.5 ? 'rgba(255,217,160,' : 'rgba(168,200,255,')
+         : rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
     });
   }
+  /* the nebulae sit on the band spine, one each side of center */
+  neb1.x = W / 2 - ca * diag * 0.24; neb1.y = H / 2 - sa * diag * 0.24; neb1.s = W * 0.52;
+  neb2.x = W / 2 + ca * diag * 0.28; neb2.y = H / 2 + sa * diag * 0.28; neb2.s = W * 0.4;
 }
 
 /* pointer parallax: latest target, applied once per frame (never per event) */
@@ -2154,8 +2194,8 @@ function measureOrbit() {
     ART.cx = W / 2;
     ART.cy = cb + room * 0.54;
     ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
-    ART.rx = Math.min(W * 0.42, ART.r * 2.75);
-    ART.ry = Math.max(ART.r * 0.52, Math.min(room * 0.30, ART.r * 0.72));
+    ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
+    ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
   } else {
     /* phone: the Artifact is a presence low in the deep, under the chart column */
     ART.cx = W / 2;
@@ -2186,6 +2226,12 @@ function drawSky(dt, clockMs) {
   par.x += (par.tx - par.x) * 0.06; par.y += (par.ty - par.y) * 0.06;
   const t = clockMs / 1000;
 
+  /* the nebulae ride behind everything (baked sprites, two blits) */
+  if (nebA && !warp.active) {
+    ctx.drawImage(nebA, neb1.x - neb1.s / 2, neb1.y - neb1.s / 2, neb1.s, neb1.s);
+    ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
+  }
+
   /* stars */
   for (const s of stars) {
     let x = s.x + par.x * 14 * s.z, y = s.y + par.y * 10 * s.z;
@@ -2203,6 +2249,15 @@ function drawSky(dt, clockMs) {
       const twinkle = reduced() ? 0.75 : 0.55 + 0.45 * Math.sin(t * 1.4 + s.tw);
       ctx.fillStyle = s.hue + (twinkle * 0.9) + ')';
       ctx.beginPath(); ctx.arc(x, y, s.r, 0, 7); ctx.fill();
+      if (s.k) {                                       /* the giants carry a cross-glint */
+        const gl = s.r * 4.5;
+        ctx.strokeStyle = s.hue + (twinkle * 0.35) + ')';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(x - gl, y); ctx.lineTo(x + gl, y);
+        ctx.moveTo(x, y - gl); ctx.lineTo(x, y + gl);
+        ctx.stroke();
+      }
     }
   }
 
@@ -2223,7 +2278,9 @@ function drawSky(dt, clockMs) {
       if (a) {
         a.style.setProperty('--pax', p.x.toFixed(1) + 'px');
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
-        a.style.setProperty('--psize', Math.round(w.size * p.sc) + 'px');
+        /* the anchor box matches the DRAWN planet (1.5x the registry size)
+           so tap targets and labels track the bigger v7 worlds */
+        a.style.setProperty('--psize', Math.round(w.size * 1.5 * p.sc) + 'px');
         /* a far-side world crossing the Artifact's face is OCCLUDED: its name
            must nearly vanish too, not float legible across the gold */
         const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r + 50;
@@ -2235,7 +2292,8 @@ function drawSky(dt, clockMs) {
       }
       const hov = hovered === w.slug;
       ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * p.sc * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
+      /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
+      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.74 * p.sc * (hov ? 1.18 : 1), clockMs, { hover: hov, rm: reduced() });
       ctx.globalAlpha = 1;
 
       if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
@@ -2243,7 +2301,7 @@ function drawSky(dt, clockMs) {
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72 * p.sc, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.95 * p.sc, 0, 7); ctx.stroke();
         ctx.setLineDash([]);
       }
     };
@@ -3599,8 +3657,30 @@ const SphereForge = (() => {
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
   const skins = {};                        /* key -> { img, ready } */
+  const bands = {};                        /* key -> mirror-wrapped equatorial band canvas */
   let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
   let revealReq = 0, revealUntil = -1;
+  const SKIN_SPD = 1 / 92000;              /* the Artifact turns: one revolution ~92s */
+
+  /* a render is a photo OF a sphere; to ROTATE it like a real planet we
+     strip its equatorial band (limb regions dropped: our own limb/gloss
+     lighting stays pinned on top) and mirror-wrap it into a seamless
+     scroll texture. Baked once per skin, on first use. */
+  function bandFor(key) {
+    const rec = skins[key];
+    if (!rec || !rec.ready) return null;
+    let b = bands[key];
+    if (b) return b;
+    const iw = rec.img.naturalWidth || rec.img.width, ih = rec.img.naturalHeight || rec.img.height;
+    const c = cv(2048, 512), g2 = c.getContext('2d');
+    const sx = iw * 0.10, sw = iw * 0.80, sy = ih * 0.14, sh2 = ih * 0.72;
+    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
+    g2.save(); g2.translate(2048, 0); g2.scale(-1, 1);   /* mirror half: seamless wrap */
+    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
+    g2.restore();
+    b = bands[key] = c;
+    return b;
+  }
   function loadSkin(k) {
     if (skins[k] || !SKIN_SRC[k]) return;
     const img = new Image();
@@ -3686,32 +3766,41 @@ const SphereForge = (() => {
       if (nxtSkin) {
         if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
       }
-      const curRec = skins[revealing ? 'biomech' : curSkin];
-      const skinOn = !!(curRec && curRec.ready);
+      const bandCur = bandFor(revealing ? 'biomech' : curSkin);
+      const skinOn = !!bandCur;
 
       g.save();
       g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
 
       if (skinOn) {
-        /* the plate: a real render under the living light. It sways and
-           breathes rather than spins (a photo's baked highlights must not
-           carousel); the crossfade is the morph between its faces */
-        const sway = reduced2 ? 0 : Math.sin(t * 0.00016) * 0.045;
-        const br2 = reduced2 ? 1 : 1 + 0.012 * Math.sin(t * 0.00023);
-        const dp = R * SKIN_COVER * br2;
-        g.save();
-        g.translate(x, y); g.rotate(sway);
-        g.drawImage(curRec.img, -dp / 2, -dp / 2, dp, dp);
-        if (!revealing && nxtSkin && skins[nxtSkin] && skins[nxtSkin].ready) {
-          const fp = (clockMs - fadeT0) / FADE_MS;
-          g.globalAlpha = fp < 0 ? 0 : fp > 1 ? 1 : fp;
-          g.drawImage(skins[nxtSkin].img, -dp / 2, -dp / 2, dp, dp);
-          g.globalAlpha = 1;
+        /* TRUE ROTATION: the skin's equatorial band scrolls under our pinned
+           lighting, sliced with a two-wave liquid warp: the surface turns
+           like a planet AND morphs like something alive under the metal */
+        const sscroll = ((t * SKIN_SPD) % 1) * half;
+        const A2 = R * 0.042;              /* morph amplitude, stronger than v5 */
+        const BS = 24, bsh = 512 / BS, bdh = D / BS;
+        const bandNxt = (!revealing && nxtSkin) ? bandFor(nxtSkin) : null;
+        const fp = bandNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
+        for (let i = 0; i < BS; i++) {
+          let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
+                  + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
+          if (rippling) {                  /* the ripple surges the warp locally */
+            const sd = ((i + 0.5) * bdh) - R - ringR;
+            off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
+                 * Math.sin(t * 0.012 + i * 1.3);
+          }
+          g.drawImage(bandCur, 0, i * bsh, 2048, bsh,
+            x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+          if (bandNxt && fp > 0) {
+            g.globalAlpha = fp;
+            g.drawImage(bandNxt, 0, i * bsh, 2048, bsh,
+              x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+            g.globalAlpha = 1;
+          }
         }
-        g.restore();
-        /* the liquid sheen stays alive over the plate, quieter */
+        /* the liquid sheen rides the turning surface, counter-drifting */
         g.globalCompositeOperation = 'screen';
-        g.globalAlpha = reduced2 ? 0.08 : 0.07 + 0.03 * Math.sin(t * 0.0004);
+        g.globalAlpha = reduced2 ? 0.09 : 0.08 + 0.03 * Math.sin(t * 0.0004);
         g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
@@ -3767,10 +3856,10 @@ const SphereForge = (() => {
       g.globalCompositeOperation = 'lighter';
       for (let hI = 0; hI < hots.length; hI++) {
         const h = hots[hI];
-        /* over a skin plate the render brings its own baked highlights:
-           the constellation drops to an accent, not the whole light show */
+        /* over a rotating band our own lighting carries the show: the
+           constellation stays strong (the band stripped the baked limb) */
         let ha2 = reduced2 ? 0.58 : 0.55 + 0.18 * Math.sin(t * h.rate + h.ph);
-        if (skinOn) ha2 *= 0.5;
+        if (skinOn) ha2 *= 0.75;
         let hs2 = h.r * R * 2;
         if (!reduced2) {
           const ft = (t + h.fo) % h.fi;

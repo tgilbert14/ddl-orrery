@@ -264,8 +264,30 @@ const SphereForge = (() => {
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
   const skins = {};                        /* key -> { img, ready } */
+  const bands = {};                        /* key -> mirror-wrapped equatorial band canvas */
   let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
   let revealReq = 0, revealUntil = -1;
+  const SKIN_SPD = 1 / 92000;              /* the Artifact turns: one revolution ~92s */
+
+  /* a render is a photo OF a sphere; to ROTATE it like a real planet we
+     strip its equatorial band (limb regions dropped: our own limb/gloss
+     lighting stays pinned on top) and mirror-wrap it into a seamless
+     scroll texture. Baked once per skin, on first use. */
+  function bandFor(key) {
+    const rec = skins[key];
+    if (!rec || !rec.ready) return null;
+    let b = bands[key];
+    if (b) return b;
+    const iw = rec.img.naturalWidth || rec.img.width, ih = rec.img.naturalHeight || rec.img.height;
+    const c = cv(2048, 512), g2 = c.getContext('2d');
+    const sx = iw * 0.10, sw = iw * 0.80, sy = ih * 0.14, sh2 = ih * 0.72;
+    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
+    g2.save(); g2.translate(2048, 0); g2.scale(-1, 1);   /* mirror half: seamless wrap */
+    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
+    g2.restore();
+    b = bands[key] = c;
+    return b;
+  }
   function loadSkin(k) {
     if (skins[k] || !SKIN_SRC[k]) return;
     const img = new Image();
@@ -351,32 +373,41 @@ const SphereForge = (() => {
       if (nxtSkin) {
         if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
       }
-      const curRec = skins[revealing ? 'biomech' : curSkin];
-      const skinOn = !!(curRec && curRec.ready);
+      const bandCur = bandFor(revealing ? 'biomech' : curSkin);
+      const skinOn = !!bandCur;
 
       g.save();
       g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
 
       if (skinOn) {
-        /* the plate: a real render under the living light. It sways and
-           breathes rather than spins (a photo's baked highlights must not
-           carousel); the crossfade is the morph between its faces */
-        const sway = reduced2 ? 0 : Math.sin(t * 0.00016) * 0.045;
-        const br2 = reduced2 ? 1 : 1 + 0.012 * Math.sin(t * 0.00023);
-        const dp = R * SKIN_COVER * br2;
-        g.save();
-        g.translate(x, y); g.rotate(sway);
-        g.drawImage(curRec.img, -dp / 2, -dp / 2, dp, dp);
-        if (!revealing && nxtSkin && skins[nxtSkin] && skins[nxtSkin].ready) {
-          const fp = (clockMs - fadeT0) / FADE_MS;
-          g.globalAlpha = fp < 0 ? 0 : fp > 1 ? 1 : fp;
-          g.drawImage(skins[nxtSkin].img, -dp / 2, -dp / 2, dp, dp);
-          g.globalAlpha = 1;
+        /* TRUE ROTATION: the skin's equatorial band scrolls under our pinned
+           lighting, sliced with a two-wave liquid warp: the surface turns
+           like a planet AND morphs like something alive under the metal */
+        const sscroll = ((t * SKIN_SPD) % 1) * half;
+        const A2 = R * 0.042;              /* morph amplitude, stronger than v5 */
+        const BS = 24, bsh = 512 / BS, bdh = D / BS;
+        const bandNxt = (!revealing && nxtSkin) ? bandFor(nxtSkin) : null;
+        const fp = bandNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
+        for (let i = 0; i < BS; i++) {
+          let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
+                  + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
+          if (rippling) {                  /* the ripple surges the warp locally */
+            const sd = ((i + 0.5) * bdh) - R - ringR;
+            off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
+                 * Math.sin(t * 0.012 + i * 1.3);
+          }
+          g.drawImage(bandCur, 0, i * bsh, 2048, bsh,
+            x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+          if (bandNxt && fp > 0) {
+            g.globalAlpha = fp;
+            g.drawImage(bandNxt, 0, i * bsh, 2048, bsh,
+              x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+            g.globalAlpha = 1;
+          }
         }
-        g.restore();
-        /* the liquid sheen stays alive over the plate, quieter */
+        /* the liquid sheen rides the turning surface, counter-drifting */
         g.globalCompositeOperation = 'screen';
-        g.globalAlpha = reduced2 ? 0.08 : 0.07 + 0.03 * Math.sin(t * 0.0004);
+        g.globalAlpha = reduced2 ? 0.09 : 0.08 + 0.03 * Math.sin(t * 0.0004);
         g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
@@ -432,10 +463,10 @@ const SphereForge = (() => {
       g.globalCompositeOperation = 'lighter';
       for (let hI = 0; hI < hots.length; hI++) {
         const h = hots[hI];
-        /* over a skin plate the render brings its own baked highlights:
-           the constellation drops to an accent, not the whole light show */
+        /* over a rotating band our own lighting carries the show: the
+           constellation stays strong (the band stripped the baked limb) */
         let ha2 = reduced2 ? 0.58 : 0.55 + 0.18 * Math.sin(t * h.rate + h.ph);
-        if (skinOn) ha2 *= 0.5;
+        if (skinOn) ha2 *= 0.75;
         let hs2 = h.r * R * 2;
         if (!reduced2) {
           const ft = (t + h.fo) % h.fi;

@@ -99,21 +99,56 @@ const seasonTilt = (() => {   /* the local-time sky: a deterministic per-visit r
   const h = new Date().getHours() + new Date().getMinutes() / 60;
   return (h / 24) * Math.PI * 2;
 })();
+/* nebula haze: two soft tinted blooms baked once, seated on the galactic band */
+let nebA = null, nebB = null;
+const neb1 = { x: 0, y: 0, s: 0 }, neb2 = { x: 0, y: 0, s: 0 };
+function bakeNebula() {
+  if (nebA) return;
+  const mk = (rgb) => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+    gr.addColorStop(0, `rgba(${rgb},0.10)`);
+    gr.addColorStop(0.55, `rgba(${rgb},0.05)`);
+    gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    return c;
+  };
+  nebA = mk('53,240,200'); nebB = mk('143,123,255');
+}
 function buildStars() {
-  const n = Math.round(Math.min(240, (W * H) / 6800));
+  /* a sky worth the name: ~3x the old density, a diagonal galactic band
+     carrying a third of the field, and a few glinting giants */
+  const n = Math.round(Math.min(460, (W * H) / 3600));
   stars = [];
   let seed = 42;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  bakeNebula();
+  const bandAng = -0.55, ca = Math.cos(bandAng), sa = Math.sin(bandAng);
+  const diag = Math.hypot(W, H);
   for (let i = 0; i < n; i++) {
     const depth = i % 3;
+    let x, y;
+    if (i % 3 === 0) {                                 /* the band: clustered along the diagonal */
+      const u = (rnd() - 0.5) * diag * 1.3;
+      const v = (rnd() + rnd() - 1) * H * 0.14;        /* triangular falloff off the spine */
+      x = W / 2 + ca * u - sa * v;
+      y = H / 2 + sa * u + ca * v;
+    } else { x = rnd() * W; y = rnd() * H; }
+    const giant = i % 41 === 0;                        /* rare bright giants with a cross-glint */
     stars.push({
-      x: rnd() * W, y: rnd() * H,
+      x, y,
       z: 0.35 + depth * 0.33,                          /* parallax factor */
-      r: 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
+      r: giant ? 1.7 + rnd() * 0.9 : 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
       tw: rnd() * Math.PI * 2,                         /* twinkle phase */
-      hue: rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
+      k: giant ? 1 : 0,
+      hue: giant ? (rnd() < 0.5 ? 'rgba(255,217,160,' : 'rgba(168,200,255,')
+         : rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
     });
   }
+  /* the nebulae sit on the band spine, one each side of center */
+  neb1.x = W / 2 - ca * diag * 0.24; neb1.y = H / 2 - sa * diag * 0.24; neb1.s = W * 0.52;
+  neb2.x = W / 2 + ca * diag * 0.28; neb2.y = H / 2 + sa * diag * 0.28; neb2.s = W * 0.4;
 }
 
 /* pointer parallax: latest target, applied once per frame (never per event) */
@@ -143,8 +178,8 @@ function measureOrbit() {
     ART.cx = W / 2;
     ART.cy = cb + room * 0.54;
     ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
-    ART.rx = Math.min(W * 0.42, ART.r * 2.75);
-    ART.ry = Math.max(ART.r * 0.52, Math.min(room * 0.30, ART.r * 0.72));
+    ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
+    ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
   } else {
     /* phone: the Artifact is a presence low in the deep, under the chart column */
     ART.cx = W / 2;
@@ -175,6 +210,12 @@ function drawSky(dt, clockMs) {
   par.x += (par.tx - par.x) * 0.06; par.y += (par.ty - par.y) * 0.06;
   const t = clockMs / 1000;
 
+  /* the nebulae ride behind everything (baked sprites, two blits) */
+  if (nebA && !warp.active) {
+    ctx.drawImage(nebA, neb1.x - neb1.s / 2, neb1.y - neb1.s / 2, neb1.s, neb1.s);
+    ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
+  }
+
   /* stars */
   for (const s of stars) {
     let x = s.x + par.x * 14 * s.z, y = s.y + par.y * 10 * s.z;
@@ -192,6 +233,15 @@ function drawSky(dt, clockMs) {
       const twinkle = reduced() ? 0.75 : 0.55 + 0.45 * Math.sin(t * 1.4 + s.tw);
       ctx.fillStyle = s.hue + (twinkle * 0.9) + ')';
       ctx.beginPath(); ctx.arc(x, y, s.r, 0, 7); ctx.fill();
+      if (s.k) {                                       /* the giants carry a cross-glint */
+        const gl = s.r * 4.5;
+        ctx.strokeStyle = s.hue + (twinkle * 0.35) + ')';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(x - gl, y); ctx.lineTo(x + gl, y);
+        ctx.moveTo(x, y - gl); ctx.lineTo(x, y + gl);
+        ctx.stroke();
+      }
     }
   }
 
@@ -212,7 +262,9 @@ function drawSky(dt, clockMs) {
       if (a) {
         a.style.setProperty('--pax', p.x.toFixed(1) + 'px');
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
-        a.style.setProperty('--psize', Math.round(w.size * p.sc) + 'px');
+        /* the anchor box matches the DRAWN planet (1.5x the registry size)
+           so tap targets and labels track the bigger v7 worlds */
+        a.style.setProperty('--psize', Math.round(w.size * 1.5 * p.sc) + 'px');
         /* a far-side world crossing the Artifact's face is OCCLUDED: its name
            must nearly vanish too, not float legible across the gold */
         const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r + 50;
@@ -224,7 +276,8 @@ function drawSky(dt, clockMs) {
       }
       const hov = hovered === w.slug;
       ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.55 * p.sc * (hov ? 1.12 : 1), clockMs, { hover: hov, rm: reduced() });
+      /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
+      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.74 * p.sc * (hov ? 1.18 : 1), clockMs, { hover: hov, rm: reduced() });
       ctx.globalAlpha = 1;
 
       if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
@@ -232,7 +285,7 @@ function drawSky(dt, clockMs) {
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.72 * p.sc, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.95 * p.sc, 0, 7); ctx.stroke();
         ctx.setLineDash([]);
       }
     };
