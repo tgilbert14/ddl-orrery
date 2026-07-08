@@ -58,3 +58,10 @@ Fragments concatenate in order: tokens → hub CSS → worlds CSS → deco → b
 - DPR capped at 2, one rAF ticker that stops when idle, silent in hidden tabs.
 
 Forged by the MITHRIL guild (Desert Data Labs' web-experience crew), 2026-07-05.
+
+## v7 — the Council of the Guild
+
+Twenty-two guild seats convened over the live source and drew the map for what comes next:
+[**PLAN.md**](PLAN.md) — the frame verdict, fourteen ranked upgrades, a five-milestone roadmap,
+and full seat-by-seat designs (six critics, the hub visionary, eleven world-smiths, three pivot
+scouts) in [docs/council-v7/](docs/council-v7/).
