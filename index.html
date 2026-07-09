@@ -243,6 +243,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .audio-toggle .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 10px; }
 .audio-toggle .eq i { width: 2.5px; height: 3px; background: currentColor; border-radius: 1px; }
 .audio-toggle[data-on="true"] { color: var(--acc); border-color: rgba(var(--acc-rgb), 0.55); }
+
+/* gloved-thumb floor: on coarse pointers every HUD pill and world toy meets
+   the 44px minimum; fine pointers keep the tight instrument look.
+   ([hidden] display:none and the #tour-toggle no-JS gate both outrank this.) */
+@media (pointer: coarse) {
+  .return-orbit, .audio-toggle, .tour-toggle, .w-toy, .w-return {
+    min-height: 44px;
+    display: inline-flex; align-items: center;
+  }
+}
 html:not(.rm) .audio-toggle[data-on="true"] .eq i { animation: eq-bounce 0.9s ease-in-out infinite alternate; }
 .audio-toggle[data-on="true"] .eq i:nth-child(2) { animation-delay: 0.15s; }
 .audio-toggle[data-on="true"] .eq i:nth-child(3) { animation-delay: 0.3s; }
@@ -1012,6 +1022,10 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
   padding-right: clamp(1.4rem, 3vw, 2.4rem);
 }
 .world-card.glass {
+  /* the 0.8-opaque plate hides the glass blur anyway — stop paying the
+     continuous backdrop-filter pass while the FX canvas animates behind */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   background-color: rgba(6, 22, 18, 0.8);       /* darker than old 0.72: captions keep 4.5:1 over FX */
   background-image:
     radial-gradient(4px 4px at 20px 20px,               rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
@@ -2058,7 +2072,9 @@ const Ticker = (() => {
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
-      for (const t of [...tasks]) { if (t(dt, clock) === false) tasks.delete(t); }
+      /* live Set iteration: deleting the current entry mid-walk is spec-safe,
+         and a task added mid-frame simply runs this frame — no per-frame copy */
+      for (const t of tasks) { if (t(dt, clock) === false) tasks.delete(t); }
     }
     if (tasks.size && running) { rafId = requestAnimationFrame(frame); }
     else { running = false; rafId = null; }
@@ -2084,7 +2100,7 @@ const WORLDS = [
   { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
   { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
 ];
-const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
+const bySlug = Object.fromEntries(WORLDS.map(w => [w.slug, w]));
 
 /* ---------- the sky canvas ---------- */
 const sky = document.getElementById('sky');
@@ -2183,7 +2199,7 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+/* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
 function measureOrbit() {
@@ -2232,6 +2248,17 @@ function drawSky(dt, clockMs) {
     ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
   }
 
+  /* the flood converges on the destination's accent as the jump builds:
+     streaks lift off star-white and land in the world's own color */
+  let wsc = '';
+  if (warp.active) {
+    const k = warp.p * 0.85;
+    const wr = Math.round(207 + (warp.tint[0] - 207) * k);
+    const wg = Math.round(216 + (warp.tint[1] - 216) * k);
+    const wb = Math.round(255 + (warp.tint[2] - 255) * k);
+    wsc = `rgba(${wr},${wg},${wb},`;
+  }
+
   /* stars */
   for (const s of stars) {
     let x = s.x + par.x * 14 * s.z, y = s.y + par.y * 10 * s.z;
@@ -2239,7 +2266,7 @@ function drawSky(dt, clockMs) {
       /* stretch into velocity streaks toward the warp origin */
       const dx = x - warp.cx * W, dy = y - warp.cy * H;
       const st = warp.p * 46 * s.z;
-      ctx.strokeStyle = s.hue + (0.5 + warp.p * 0.5) + ')';
+      ctx.strokeStyle = wsc + (0.5 + warp.p * 0.5) + ')';
       ctx.lineWidth = s.r * (0.8 + warp.p);
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -2433,6 +2460,7 @@ const Orrery = {
   stopAmbient() {
     if (skyTask) { Ticker.remove(skyTask); skyTask = null; }
     clearTimeout(cometTimer);
+    clearTimeout(showerT1); clearTimeout(showerT2);    /* a pending shower dies with the loop */
     drawStatic();                                      /* the designed pose, not a blank */
   },
   events: new EventTarget(),
@@ -2455,7 +2483,10 @@ anchors.forEach((a, slug) => {
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
   const untint = () => {
-    if (hovered === slug) hovered = null;
+    /* only the LIVE hover may reset the face: a stale leave/blur arriving
+       after another anchor's enter must not flash the sphere back to hub */
+    if (hovered !== slug) return;
+    hovered = null;
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
   };
   a.addEventListener('pointerenter', tint);
@@ -2629,6 +2660,7 @@ function travel(slug) {
   html.style.setProperty('--acc-rgb', w.a.join(','));
 
   warp.active = true; warp.p = 0; warp.cx = p.x / W; warp.cy = p.y / H;
+  warp.tint = w.a;                                     /* the streaks arrive INTO this world's color */
   if (!skyTask) Orrery.startAmbient();                 /* streaks need the loop */
   html.classList.remove('warping'); void html.offsetWidth;   /* restartable */
   html.classList.add('warping');
@@ -3721,13 +3753,20 @@ const SphereForge = (() => {
       }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
-      /* skins: the hub face loads first (it is the marquee); the rest arrive
-         on a lazy stagger so boot paint never waits on a network byte */
+      /* skins: the hub face loads first (it is the marquee); the reveal face
+         next (a touch rite works on ANY device and must be ready inside its
+         ripple window). The seven world faces only ever show under a
+         hover/focus crossfade — a fine-pointer affair — so touch devices
+         skip that ~2.7MB prefetch; setSkin() lazy-loads the rare face a
+         tap actually asks for. */
       loadSkin('orrery');
-      let di = 0;
-      for (const k in SKIN_SRC) {
-        if (k === 'orrery') continue;
-        setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+      setTimeout(() => loadSkin('biomech'), 1400);
+      if (matchMedia('(pointer: fine)').matches) {
+        let di = 1;
+        for (const k in SKIN_SRC) {
+          if (k === 'orrery' || k === 'biomech') continue;
+          setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+        }
       }
     },
 
@@ -3785,7 +3824,7 @@ const SphereForge = (() => {
           let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
                   + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
           if (rippling) {                  /* the ripple surges the warp locally */
-            const sd = ((i + 0.5) * bdh) - R - ringR;
+            const sd = Math.abs((i + 0.5) * bdh - R) - ringR;
             off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
                  * Math.sin(t * 0.012 + i * 1.3);
           }
@@ -3970,7 +4009,7 @@ window.SphereForge = SphereForge;
 
 
 /* ============================================================
-   06-worlds.js — the seven signatures. One effect per world, no seconds.
+   06-worlds.js — the eleven signatures. One effect per world, no seconds.
    Each FX owns one canvas, pools its particles, joins the shared
    Ticker, and leaves a designed end-state when motion is off.
    Forged by six parallel effect-smiths of the MITHRIL guild, 2026-07-05.
@@ -4775,7 +4814,12 @@ const WorldFX = (() => {
       const cols = Math.ceil(s.w / 56), rows = Math.ceil(s.h / 56);
       const lit = new Float32Array(cols * rows);
       const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
-      const move = (e) => { st.px = e.clientX; st.py = e.clientY; };
+      const move = (e) => {
+        /* canvas-local coordinates: the grid math below indexes THIS surface,
+           so a scrolled or offset stage must not skew the survey off-cursor */
+        const r = s.c.getBoundingClientRect();
+        st.px = e.clientX - r.left; st.py = e.clientY - r.top;
+      };
       s.c.parentElement.parentElement.addEventListener('pointermove', move, { passive: true });
       st.cleanup = () => s.c.parentElement.parentElement.removeEventListener('pointermove', move);
       return st;
@@ -4807,6 +4851,32 @@ const WorldFX = (() => {
           s.g.beginPath();
           s.g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
           s.g.stroke();
+        }
+      }
+    },
+    rm() {
+      /* the survey, held: a swath already drafted along a gentle diagonal —
+         the world stays deliberately unfinished, but never unstarted */
+      const c = document.querySelector('[data-canvas="draft"]');
+      if (!c || !c.parentElement) return;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const cols = Math.ceil(r.width / 56), rows = Math.ceil(r.height / 56);
+      for (let ri = 0; ri < rows; ri++) for (let ci = 0; ci < cols; ci++) {
+        const d = Math.abs(ri / rows - (0.32 + (ci / cols) * 0.3));
+        const v = Math.max(0, 1 - d * 5.5) * (0.55 + 0.45 * Math.sin(ci * 3.1 + ri * 1.7));
+        if (v <= 0.08) continue;
+        const x = ci * 56, y = ri * 56;
+        g.strokeStyle = `rgba(100,213,245,${(v * 0.5).toFixed(3)})`;
+        g.lineWidth = 1;
+        g.strokeRect(x + 3, y + 3, 50, 50);
+        if (v > 0.65) {
+          g.strokeStyle = `rgba(100,213,245,${((v - 0.65) * 0.9).toFixed(3)})`;
+          g.beginPath();
+          g.arc(x + 28, y + 28, 12 + ((ci * 7 + ri * 13) % 9), 0.4, 2.6);
+          g.stroke();
         }
       }
     },
@@ -5754,7 +5824,7 @@ window.WorldFX = WorldFX;
 
 /* ============================================================
    07-audio.js - Score v3: the dread engine. Zero files.
-   One synth graph, a generated concert hall, seven arrangements
+   One synth graph, a generated concert hall, eleven arrangements
    + the derelict hub (drone throb, heartbeat, hull groans, sonar).
    THE LAW (2.6): no pre-gesture sound. A boot-time resume() may
    succeed only where the browser itself already granted media
@@ -5769,7 +5839,7 @@ window.WorldFX = WorldFX;
 'use strict';
 
 const Score = (() => {
-  /* ---------- the seven arrangements + the hub (all original) ----------
+  /* ---------- the eleven arrangements + the hub (all original) ----------
      root Hz, scale (semitones), step ms, bright Hz, gap (silent steps after
      the motif so it breathes), layer gains dr/pd/ch, padIv (pad chord),
      lead voice, perc pattern (16 steps: K taiko, s shaker, . rest) */

@@ -2,20 +2,24 @@
 
 **Eleven worlds. One clock. One artifact, holding the center.**
 
-An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of seven
+An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of eleven
 themed universes, each with its own atmosphere, palette, motion identity, and
 musical voicing. Click a planet, warp there, return to orbit. No frameworks, no build magic beyond
 concatenation; the worlds, weather, planets, and music are all procedural code, and the Artifact at the
 center wears hand-made renders as its skins.
 
-v5 "The Faces of the Artifact": a giant gold sphere holds the center of orbit, and it ANSWERS you.
-Hover a world and the Artifact crossfades into that world's face: engraved orrery rings at rest, molten
-gold for the Dust Sea, art-deco towers for Velocity, etched machinery for the Grid, bioluminescent veins
-for Abyssal. Touch it three times and, for a moment, the plates part and you see what is underneath.
-The seven worlds truly circle it, passing behind and in front; a sonar pulse rings out every few seconds;
-living light (a breathing specular constellation, rare flares, ripples) rides on top of every face.
-The mood stays deep: near-black sea-glass void, dust suspended in the dark, flickering instrument lights,
-a dread score of hull groans and a slow heartbeat, and a low, slightly-wrong answering tone when touched.
+v6 "The Grand Tour": eleven worlds now hold their orbits, and the Artifact truly TURNS — its
+hand-made faces ride the sphere as real rotation, one revolution every 92 seconds. Hover a world and
+the gold crossfades into that world's face: engraved orrery rings at rest, molten gold for the Dust Sea,
+art-deco towers for Velocity, etched machinery for the Grid, bioluminescent veins for Abyssal (the four
+newest worlds keep their secrets, for now). Touch it three times and, for a moment, the plates part and
+you see what is underneath. The eleven worlds truly circle it, passing behind and in front; a sonar pulse
+rings out every few seconds; living light (a breathing specular constellation, rare flares, ripples)
+rides on top of every face. A hands-free Grand Tour walks every world for you — the kiosk button — and
+the sky got deeper too: a galactic band, twin nebulae, rare cross-glint giants, and one visit in three
+a shower of comets. The mood stays deep: near-black sea-glass void, dust suspended in the dark,
+flickering instrument lights, a dread score of hull groans and a slow heartbeat, and a low,
+slightly-wrong answering tone when touched.
 
 **Live:** https://tgilbert14.github.io/ddl-orrery/
 
@@ -34,8 +38,8 @@ a dread score of hull groans and a slow heartbeat, and a low, slightly-wrong ans
 | The Beacons | seven watch-fires catch one by one across a dusk range; when one lights, the next answers |
 
 Plus: a first-visit approach cinematic, a hands-free Grand Tour autopilot (the client-demo button),
-a surveyor's log that fills gold as you travel and honors a completed survey, and the Artifact itself,
-wearing a different hand-made face for every world you consider.
+a surveyor's log that fills gold as you travel and honors a completed survey, a procedural score with
+an original arrangement per world, and a secret the old code still opens.
 
 ## Build
 
@@ -44,12 +48,12 @@ node build.js     # src/ fragments -> index.html (+ fragment.html, headless)
 ```
 
 Fragments concatenate in order: tokens → hub CSS → worlds CSS → deco → body → core engine → planet forge
-→ sphere forge → world FX → score. The build fails loudly if any `__PLACEHOLDER__` survives.
+→ sphere forge → world FX → score → konami rite. The build fails loudly if any `__PLACEHOLDER__` survives.
 
 ## House rules it honors
 
-- One shared clock drives every orbit, ambient loop, and the score's tempo.
-- All seven worlds are in the DOM from byte one: no JS = a complete brochure; reduced motion = designed
+- One shared clock drives every orbit and ambient loop; the score keeps its own sample-accurate time.
+- All eleven worlds are in the DOM from byte one: no JS = a complete brochure; reduced motion = designed
   end-states, never stripped scenes (the sphere freezes mid-flow, the sonar holds one static ring).
 - The headline is the LCP and is never opacity-gated. Canvas is `aria-hidden` scenery; every word is real DOM.
   The Artifact has a real focusable button as its keyboard and screen-reader presence.
@@ -57,4 +61,4 @@ Fragments concatenate in order: tokens → hub CSS → worlds CSS → deco → b
   label never claims "on" until the audio context is truly running, and an explicit opt-out is remembered.
 - DPR capped at 2, one rAF ticker that stops when idle, silent in hidden tabs.
 
-Forged by the MITHRIL guild (Desert Data Labs' web-experience crew), 2026-07-05.
+Forged by the MITHRIL guild (Desert Data Labs' web-experience crew), July 2026.

@@ -1,6 +1,6 @@
 /* ============================================================
    07-audio.js - Score v3: the dread engine. Zero files.
-   One synth graph, a generated concert hall, seven arrangements
+   One synth graph, a generated concert hall, eleven arrangements
    + the derelict hub (drone throb, heartbeat, hull groans, sonar).
    THE LAW (2.6): no pre-gesture sound. A boot-time resume() may
    succeed only where the browser itself already granted media
@@ -15,7 +15,7 @@
 'use strict';
 
 const Score = (() => {
-  /* ---------- the seven arrangements + the hub (all original) ----------
+  /* ---------- the eleven arrangements + the hub (all original) ----------
      root Hz, scale (semitones), step ms, bright Hz, gap (silent steps after
      the motif so it breathes), layer gains dr/pd/ch, padIv (pad chord),
      lead voice, perc pattern (16 steps: K taiko, s shaker, . rest) */

@@ -328,13 +328,20 @@ const SphereForge = (() => {
       }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
-      /* skins: the hub face loads first (it is the marquee); the rest arrive
-         on a lazy stagger so boot paint never waits on a network byte */
+      /* skins: the hub face loads first (it is the marquee); the reveal face
+         next (a touch rite works on ANY device and must be ready inside its
+         ripple window). The seven world faces only ever show under a
+         hover/focus crossfade — a fine-pointer affair — so touch devices
+         skip that ~2.7MB prefetch; setSkin() lazy-loads the rare face a
+         tap actually asks for. */
       loadSkin('orrery');
-      let di = 0;
-      for (const k in SKIN_SRC) {
-        if (k === 'orrery') continue;
-        setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+      setTimeout(() => loadSkin('biomech'), 1400);
+      if (matchMedia('(pointer: fine)').matches) {
+        let di = 1;
+        for (const k in SKIN_SRC) {
+          if (k === 'orrery' || k === 'biomech') continue;
+          setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+        }
       }
     },
 
@@ -392,7 +399,7 @@ const SphereForge = (() => {
           let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
                   + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
           if (rippling) {                  /* the ripple surges the warp locally */
-            const sd = ((i + 0.5) * bdh) - R - ringR;
+            const sd = Math.abs((i + 0.5) * bdh - R) - ringR;
             off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
                  * Math.sin(t * 0.012 + i * 1.3);
           }

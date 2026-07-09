@@ -42,7 +42,9 @@ const Ticker = (() => {
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
-      for (const t of [...tasks]) { if (t(dt, clock) === false) tasks.delete(t); }
+      /* live Set iteration: deleting the current entry mid-walk is spec-safe,
+         and a task added mid-frame simply runs this frame — no per-frame copy */
+      for (const t of tasks) { if (t(dt, clock) === false) tasks.delete(t); }
     }
     if (tasks.size && running) { rafId = requestAnimationFrame(frame); }
     else { running = false; rafId = null; }
@@ -68,7 +70,7 @@ const WORLDS = [
   { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
   { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
 ];
-const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
+const bySlug = Object.fromEntries(WORLDS.map(w => [w.slug, w]));
 
 /* ---------- the sky canvas ---------- */
 const sky = document.getElementById('sky');
@@ -167,7 +169,7 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+/* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
 function measureOrbit() {
@@ -216,6 +218,17 @@ function drawSky(dt, clockMs) {
     ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
   }
 
+  /* the flood converges on the destination's accent as the jump builds:
+     streaks lift off star-white and land in the world's own color */
+  let wsc = '';
+  if (warp.active) {
+    const k = warp.p * 0.85;
+    const wr = Math.round(207 + (warp.tint[0] - 207) * k);
+    const wg = Math.round(216 + (warp.tint[1] - 216) * k);
+    const wb = Math.round(255 + (warp.tint[2] - 255) * k);
+    wsc = `rgba(${wr},${wg},${wb},`;
+  }
+
   /* stars */
   for (const s of stars) {
     let x = s.x + par.x * 14 * s.z, y = s.y + par.y * 10 * s.z;
@@ -223,7 +236,7 @@ function drawSky(dt, clockMs) {
       /* stretch into velocity streaks toward the warp origin */
       const dx = x - warp.cx * W, dy = y - warp.cy * H;
       const st = warp.p * 46 * s.z;
-      ctx.strokeStyle = s.hue + (0.5 + warp.p * 0.5) + ')';
+      ctx.strokeStyle = wsc + (0.5 + warp.p * 0.5) + ')';
       ctx.lineWidth = s.r * (0.8 + warp.p);
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -417,6 +430,7 @@ const Orrery = {
   stopAmbient() {
     if (skyTask) { Ticker.remove(skyTask); skyTask = null; }
     clearTimeout(cometTimer);
+    clearTimeout(showerT1); clearTimeout(showerT2);    /* a pending shower dies with the loop */
     drawStatic();                                      /* the designed pose, not a blank */
   },
   events: new EventTarget(),
@@ -439,7 +453,10 @@ anchors.forEach((a, slug) => {
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
   const untint = () => {
-    if (hovered === slug) hovered = null;
+    /* only the LIVE hover may reset the face: a stale leave/blur arriving
+       after another anchor's enter must not flash the sphere back to hub */
+    if (hovered !== slug) return;
+    hovered = null;
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
   };
   a.addEventListener('pointerenter', tint);
@@ -613,6 +630,7 @@ function travel(slug) {
   html.style.setProperty('--acc-rgb', w.a.join(','));
 
   warp.active = true; warp.p = 0; warp.cx = p.x / W; warp.cy = p.y / H;
+  warp.tint = w.a;                                     /* the streaks arrive INTO this world's color */
   if (!skyTask) Orrery.startAmbient();                 /* streaks need the loop */
   html.classList.remove('warping'); void html.offsetWidth;   /* restartable */
   html.classList.add('warping');

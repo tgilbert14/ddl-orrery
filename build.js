@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = path.join(__dirname, 'src');
+/* THE manifest: the one load-bearing fragment list. CSS/body/JS are derived
+   from it by extension, in this order — add a fragment here and only here. */
 const parts = [
   '01-tokens.css',
   '02-hub.css',
@@ -22,9 +24,9 @@ const parts = [
 
 const read = (f) => fs.readFileSync(path.join(SRC, f), 'utf8');
 
-const css = ['01-tokens.css', '02-hub.css', '03-worlds.css', '03b-deco.css'].map(read).join('\n\n');
-const body = read('04-body.html');
-const js = ['05-core.js', '05b-planetforge.js', '05c-sphereforge.js', '06-worlds.js', '07-audio.js', '08-konami.js'].map(read).join('\n\n');
+const css = parts.filter(f => f.endsWith('.css')).map(read).join('\n\n');
+const body = parts.filter(f => f.endsWith('.html')).map(read).join('\n\n');
+const js = parts.filter(f => f.endsWith('.js')).map(read).join('\n\n');
 
 const fragment = `<style>\n${css}\n</style>\n${body}\n<script>\n${js}\n</script>`;
 

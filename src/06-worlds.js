@@ -1,5 +1,5 @@
 /* ============================================================
-   06-worlds.js — the seven signatures. One effect per world, no seconds.
+   06-worlds.js — the eleven signatures. One effect per world, no seconds.
    Each FX owns one canvas, pools its particles, joins the shared
    Ticker, and leaves a designed end-state when motion is off.
    Forged by six parallel effect-smiths of the MITHRIL guild, 2026-07-05.
@@ -804,7 +804,12 @@ const WorldFX = (() => {
       const cols = Math.ceil(s.w / 56), rows = Math.ceil(s.h / 56);
       const lit = new Float32Array(cols * rows);
       const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
-      const move = (e) => { st.px = e.clientX; st.py = e.clientY; };
+      const move = (e) => {
+        /* canvas-local coordinates: the grid math below indexes THIS surface,
+           so a scrolled or offset stage must not skew the survey off-cursor */
+        const r = s.c.getBoundingClientRect();
+        st.px = e.clientX - r.left; st.py = e.clientY - r.top;
+      };
       s.c.parentElement.parentElement.addEventListener('pointermove', move, { passive: true });
       st.cleanup = () => s.c.parentElement.parentElement.removeEventListener('pointermove', move);
       return st;
@@ -836,6 +841,32 @@ const WorldFX = (() => {
           s.g.beginPath();
           s.g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
           s.g.stroke();
+        }
+      }
+    },
+    rm() {
+      /* the survey, held: a swath already drafted along a gentle diagonal —
+         the world stays deliberately unfinished, but never unstarted */
+      const c = document.querySelector('[data-canvas="draft"]');
+      if (!c || !c.parentElement) return;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const cols = Math.ceil(r.width / 56), rows = Math.ceil(r.height / 56);
+      for (let ri = 0; ri < rows; ri++) for (let ci = 0; ci < cols; ci++) {
+        const d = Math.abs(ri / rows - (0.32 + (ci / cols) * 0.3));
+        const v = Math.max(0, 1 - d * 5.5) * (0.55 + 0.45 * Math.sin(ci * 3.1 + ri * 1.7));
+        if (v <= 0.08) continue;
+        const x = ci * 56, y = ri * 56;
+        g.strokeStyle = `rgba(100,213,245,${(v * 0.5).toFixed(3)})`;
+        g.lineWidth = 1;
+        g.strokeRect(x + 3, y + 3, 50, 50);
+        if (v > 0.65) {
+          g.strokeStyle = `rgba(100,213,245,${((v - 0.65) * 0.9).toFixed(3)})`;
+          g.beginPath();
+          g.arc(x + 28, y + 28, 12 + ((ci * 7 + ri * 13) % 9), 0.4, 2.6);
+          g.stroke();
         }
       }
     },
