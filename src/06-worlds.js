@@ -1371,7 +1371,7 @@ const WorldFX = (() => {
     const x = c.getContext('2d');
     const g = x.createRadialGradient(128, 128, 8, 128, 128, 128);
     g.addColorStop(0, 'rgba(226,236,255,0.85)');
-    g.addColorStop(0.3, 'rgba(185,169,255,0.42)');
+    g.addColorStop(0.3, 'rgba(201,182,255,0.42)');
     g.addColorStop(0.7, 'rgba(150,140,235,0.12)');
     g.addColorStop(1, 'rgba(150,140,235,0)');
     x.fillStyle = g; x.fillRect(0, 0, 256, 256);
@@ -1480,7 +1480,7 @@ const WorldFX = (() => {
           g.lineTo(tx, hY); g.lineTo(tx, -6);
           g.closePath(); g.fill();
           if (L === 0) {                               /* pale light rides the leading face */
-            g.strokeStyle = 'rgba(185,169,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
+            g.strokeStyle = 'rgba(201,182,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
             g.lineWidth = 2;
             g.beginPath();
             g.moveTo(E[0], -6);

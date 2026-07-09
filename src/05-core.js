@@ -66,10 +66,12 @@ const Ticker = (() => {
 })();
 
 /* ---------- world registry (data; FX bodies live in 06) ----------
-   `poem`: the orbit em-line, hoisted here as the single source the Grand
-   Tour narrates from (was 'Stop 3 of 11'). `a`: the accent that tints the
-   hub + rim glow — the v6 cluster is de-collided (storm → violet, beacons
-   → ember) so the eleven pass the one-second read (hue audit, M3). */
+   `poem`: the world's one-line voice — the single source. The Grand Tour
+   narrates it, and bootOrrery re-syncs the orbit em-lines from it (the
+   HTML carries the same text for the no-JS brochure; app mode trusts the
+   registry). `a`: the accent that tints the hub + rim glow — the v6
+   cluster is de-collided (storm → violet, beacons → ember) so the eleven
+   pass the one-second read (hue audit, M3). */
 const WORLDS = [
   { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045, poem: 'the sand remembers a rhythm' },
   { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06,  poem: 'the city never blinks' },
@@ -84,6 +86,7 @@ const WORLDS = [
   { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 122, 60],  speed: 0.05,  poem: 'one fire lights the next' },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
+WORLDS.forEach(w => { w.tellStroke = `rgb(${w.a[0]},${w.a[1]},${w.a[2]})`; });  /* baked draw color */
 
 /* ---------- the sky canvas ---------- */
 const sky = document.getElementById('sky');
@@ -209,22 +212,42 @@ const desktop = () => innerWidth > 700;
 /* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
-/* the dial's graduations: 60 tick segments (every 6°) baked as flat
-   [x0,y0,x1,y1,…] endpoints — one beginPath/stroke per frame, zero alloc */
+/* the engraved dial — main rail, inner rail, sixty graduations — is static
+   between resizes, so it bakes ONCE into an offscreen sprite (the nebula
+   idiom) and costs the frame a single drawImage instead of ~62 path
+   segments and three stroke passes at 120fps */
 const RING_TICKS = 60;
-let ringTicks = new Float32Array(RING_TICKS * 4);
-function bakeRingTicks() {
+let dialSpr = null, dialW = 0, dialH = 0;
+function bakeDial() {
+  const pad = 8;
+  dialW = Math.ceil(ART.rx * 1.03 * 2) + pad * 2;
+  dialH = Math.ceil(ART.ry * 1.03 * 2) + pad * 2;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  dialSpr = document.createElement('canvas');
+  dialSpr.width = Math.round(dialW * dpr); dialSpr.height = Math.round(dialH * dpr);
+  const g = dialSpr.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = dialW / 2, cy = dialH / 2;
+  g.strokeStyle = 'rgba(201,163,92,0.14)';
+  g.lineWidth = 1;
+  g.beginPath(); g.ellipse(cx, cy, ART.rx, ART.ry, 0, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(201,163,92,0.06)';
+  g.beginPath(); g.ellipse(cx, cy, ART.rx * 0.93, ART.ry * 0.93, 0, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(201,163,92,0.13)';
+  g.beginPath();
   for (let i = 0; i < RING_TICKS; i++) {
     const th = (i / RING_TICKS) * Math.PI * 2;
     const c = Math.cos(th), s = Math.sin(th);
     const long = i % 5 === 0;                           /* every 30° a longer graduation */
     const i0 = long ? 0.965 : 0.982, i1 = long ? 1.028 : 1.014;
-    ringTicks[i * 4]     = ART.cx + c * ART.rx * i0;
-    ringTicks[i * 4 + 1] = ART.cy + s * ART.ry * i0;
-    ringTicks[i * 4 + 2] = ART.cx + c * ART.rx * i1;
-    ringTicks[i * 4 + 3] = ART.cy + s * ART.ry * i1;
+    g.moveTo(cx + c * ART.rx * i0, cy + s * ART.ry * i0);
+    g.lineTo(cx + c * ART.rx * i1, cy + s * ART.ry * i1);
   }
+  g.stroke();
 }
+/* hoisted draw-loop constants: no arrays or strings minted per frame */
+const DASH_ARC = [3, 5], DASH_TELL = [5, 7], DASH_NONE = [];
+const BRASS_STROKE = 'rgba(201,163,92,1)';
 function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
   const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
@@ -235,7 +258,7 @@ function measureOrbit() {
     ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
     ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
     ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
-    bakeRingTicks();                                    /* graduations on the dial (M3) */
+    bakeDial();                                         /* re-engrave the dial sprite (M3) */
   } else {
     /* the pocket orrery (M2): the Artifact seats IN the .hub-stage spacer
        and belongs to the scroll flow — its live rect places the sphere, so
@@ -319,25 +342,8 @@ function drawSky(dt, clockMs) {
 
   /* hub decoration only while the hub is on stage */
   if (Scenes.current === 'hub' && desktop()) {
-    /* THE DIAL, ENGRAVED (M3): the Orrery finally draws an orrery — the main
-       brass ellipse, a fainter inner rail, and sixty graduations. Batched:
-       three beginPath/stroke passes, zero allocation. */
-    ctx.strokeStyle = 'rgba(201,163,92,0.14)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, 0, 7);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(201,163,92,0.06)';
-    ctx.beginPath();
-    ctx.ellipse(ART.cx, ART.cy, ART.rx * 0.93, ART.ry * 0.93, 0, 0, 7);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(201,163,92,0.13)';
-    ctx.beginPath();
-    for (let i = 0; i < RING_TICKS; i++) {
-      ctx.moveTo(ringTicks[i * 4], ringTicks[i * 4 + 1]);
-      ctx.lineTo(ringTicks[i * 4 + 2], ringTicks[i * 4 + 3]);
-    }
-    ctx.stroke();
+    /* THE DIAL, ENGRAVED (M3): baked once per resize, blitted once per frame */
+    if (dialSpr) ctx.drawImage(dialSpr, ART.cx - dialW / 2, ART.cy - dialH / 2, dialW, dialH);
 
     /* z-sort: far worlds first, then the Artifact, then near worlds */
     const ps = WORLDS.map((w, i) => ({ w, p: planetPos(i, clockMs) }));
@@ -368,28 +374,35 @@ function drawSky(dt, clockMs) {
       const th = Math.atan2(dy0 / ART.ry, dx0 / ART.rx);
       /* the armature: a faint radius from the Artifact's limb out to the
          world's bearing, brighter on the near side and igniting on hover —
-         the brass spokes an orrery is supposed to have (M3). */
-      ctx.strokeStyle = `rgba(201,163,92,${((hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim)).toFixed(3)})`;
-      ctx.lineWidth = hov ? 1.2 : 1;
-      ctx.beginPath();
-      ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
+         the brass spokes an orrery is supposed to have (M3). Constant brass
+         + globalAlpha: the draw loop mints no strings (house rule). Skipped
+         while the world crosses the sphere's face/back (hyp ≤ limb: the
+         'radius' would otherwise overshoot outward past the planet). */
+      ctx.strokeStyle = BRASS_STROKE;
+      if (hyp > ART.r + 8) {
+        ctx.globalAlpha = (hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim);
+        ctx.lineWidth = hov ? 1.2 : 1;
+        ctx.beginPath();
+        ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
       /* the survey, given a face on the dial: the ~11° of ring each world
          owns fills SOLID brass once surveyed, and stays a dim dashed gap
          until then — the ring visibly gilds itself as you complete the tour */
       const span = (Math.PI * 2 / WORLDS.length) * 0.46;
       if (surveyed.has(w.slug)) {
-        ctx.strokeStyle = `rgba(201,163,92,${(0.42 * (0.45 + 0.55 * dim)).toFixed(3)})`;
+        ctx.globalAlpha = 0.42 * (0.45 + 0.55 * dim);
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
       } else {
-        ctx.strokeStyle = `rgba(201,163,92,${(0.24 * (0.45 + 0.55 * dim)).toFixed(3)})`;
-        ctx.lineWidth = 1.4; ctx.setLineDash([3, 5]);
+        ctx.globalAlpha = 0.24 * (0.45 + 0.55 * dim);
+        ctx.lineWidth = 1.4; ctx.setLineDash(DASH_ARC);
         ctx.lineDashOffset = reduced() ? 0 : -t * 6;
         ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.setLineDash(DASH_NONE);
       }
+      ctx.globalAlpha = 1;
       /* staged bake (M2): a world still in the oven draws nothing; a fresh
          one materializes — grows in over half a second as the orrery wakes */
       const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
@@ -404,12 +417,14 @@ function drawSky(dt, clockMs) {
 
       if (w.tell === 'dashed' && mat > 0) {            /* the unknown keeps its survey ring —
                                                           but not before the world itself exists */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${(0.55 * (0.5 + 0.5 * dim) * mat).toFixed(3)})`;
-        ctx.setLineDash([5, 7]);
+        ctx.strokeStyle = w.tellStroke;                /* baked once below: zero per-frame strings */
+        ctx.globalAlpha = 0.55 * (0.5 + 0.5 * dim) * mat;
+        ctx.setLineDash(DASH_TELL);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.95 * p.sc, 0, 7); ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.setLineDash(DASH_NONE);
+        ctx.globalAlpha = 1;
       }
     };
     for (const e of ps) if (e.p.depth <= 0) drawWorld(e);
@@ -649,6 +664,9 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
   const total = WORLDS.length;
   const COMPLETE_KEY = 'orrery-survey-complete';        /* localStorage: the rite fires once ever */
   const HONOR = 'Master surveyor. The orrery remembers.';
+  /* the survey's aria-live voice: progress and the rite, spoken politely */
+  const liveEl = document.getElementById('survey-live');
+  const announce = (t) => { if (liveEl) liveEl.textContent = t; };
 
   /* one ringed dot per world, in registry order, built once */
   const dots = WORLDS.map((w) => {
@@ -672,8 +690,13 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     sealed = true;
   }
 
+  let lastN = countSurveyed();                          /* boot pose: never announced */
   function paint() {
     const n = countSurveyed();
+    if (n !== lastN) {
+      lastN = n;
+      if (n < total) announce(n + ' of ' + total + ' worlds surveyed.');
+    }
     for (const d of dots) d.classList.toggle('is-surveyed', surveyed.has(d.dataset.world));
     if (countEl) countEl.textContent = n + '/' + total;
     const done = n >= total;
@@ -699,9 +722,17 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     if (done && keep.get(COMPLETE_KEY) === '1') showSeal();   /* already earned */
   }
 
+  let riteDone = false;                                /* in-memory once-guard: blocked storage
+                                                          must not re-fire the rite per scene */
   function maybeCompletionRite() {
     if (countSurveyed() < total) return;
-    if (keep.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once, ever */
+    if (riteDone || keep.get(COMPLETE_KEY) === '1') { riteDone = true; showSeal(); return; }
+    /* completion is always REACHED inside the 11th world — but the rite's
+       stage (the ring, the sphere) is the hub. Hold fire until homecoming:
+       the 'scene' listener re-runs this the moment they return to orbit,
+       and the orrery answers where the visitor can actually see it. */
+    if (Scenes.current !== 'hub') return;
+    riteDone = true;
     keep.set(COMPLETE_KEY, '1');
     showSeal();
     /* THE RITE — the Artifact answers the completed survey at last:
@@ -712,6 +743,7 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
       artLabel.textContent = 'Object 0 · survey accepted';
     }
     if (artHit) artHit.setAttribute('aria-label', 'Object 0. Survey accepted. It knows you now.');
+    announce('All eleven worlds surveyed. ' + HONOR);   /* AT shares the moment */
     if (window.SphereForge && SphereForge.reveal && !reduced()) SphereForge.reveal(5200);
     document.querySelectorAll('.planet-anchor').forEach(a => {
       a.classList.remove('pa-rite'); void a.offsetWidth; a.classList.add('pa-rite');
@@ -719,13 +751,12 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     });
     try { Orrery.events.dispatchEvent(new CustomEvent('mastery')); } catch (_) {}
     const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
-    if (hint) {
-      hint.textContent = HONOR;
-      setTimeout(() => {
-        if (hint.textContent === HONOR) hint.textContent = hint.dataset.home || HONOR;
-        if (artLabel) { artLabelLock = false; paint(); }         /* release to the resting arc line */
-      }, 10000);
-    }
+    if (hint) hint.textContent = HONOR;
+    setTimeout(() => {                                 /* the release must NOT depend on the hint */
+      if (hint && hint.textContent === HONOR) hint.textContent = hint.dataset.home || HONOR;
+      artLabelLock = false;
+      paint();                                         /* settle to the resting arc line */
+    }, 10000);
   }
 
   /* live: setScene runs markSurveyed, THEN dispatches 'scene' — by the time we
@@ -942,7 +973,10 @@ const TourController = (() => {
   const onInput = (e) => {
     if (!running) return;
     if (e && e.type === 'keydown') {
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Spacebar') { stepWorld(1); return; }
+      /* arrows only: Space can't be claimed from a passive listener (its
+         default scroll still fires, and its keyup re-activates a focused
+         tour button — a cancel disguised as a steer) */
+      if (e.key === 'ArrowRight') { stepWorld(1); return; }
       if (e.key === 'ArrowLeft') { stepWorld(-1); return; }
     }
     const t = e && e.target;
@@ -1110,6 +1144,12 @@ function bootOrrery() {
     bootHint.textContent = 'Tap a world to travel · it holds the center';
     bootHint.dataset.home = bootHint.textContent;
   }
+  /* one source of truth for the poems: app mode re-syncs the orbit em-lines
+     from the registry (the HTML copies serve the no-JS brochure only) */
+  anchors.forEach((a, slug) => {
+    const em = a.querySelector('.pa-label em');
+    if (em && bySlug[slug] && bySlug[slug].poem) em.textContent = bySlug[slug].poem;
+  });
   sizeSky();
   setRM();
   /* the pocket stage scrolls with the hub column: keep the sphere glued to

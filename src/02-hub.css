@@ -185,6 +185,12 @@ html.js .hub-hint { animation-delay: 0.55s; }
   22%      { border-color: rgba(255, 205, 90, 0.95); box-shadow: 0 0 30px 4px rgba(255, 205, 90, 0.55); }
 }
 html.rm .planet-anchor.pa-rite .pa-dot { box-shadow: 0 0 30px 3px rgba(255, 205, 90, 0.6); }
+/* rm desktop: .pa-dot is opacity:0 there (the canvas draws the planets), so
+   the held glow must ride the ring or the earned climax vanishes */
+html.rm .planet-anchor.pa-rite .pa-ring {
+  border-color: rgba(255, 205, 90, 0.8);
+  box-shadow: 0 0 22px 3px rgba(255, 205, 90, 0.4);
+}
 
 /* ---------- pre-boot / no-JS planet drift (negative-delay ensemble, §2.7) ---------- */
 @media (prefers-reduced-motion: no-preference) {

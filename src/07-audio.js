@@ -382,8 +382,11 @@ const Score = (() => {
   }
   /* the reply is slightly WRONG: 196 sagging to 185, all visit long — until
      the survey completes, when the wrong note finally comes true and RISES
-     185→196, fuller and longer. The whole arc lands on this one interval. */
+     185→196, fuller and longer. The whole arc lands on this one interval.
+     Restored from localStorage: a master surveyor's return visit must not
+     regress to the wrong tone (the rite fires once, ever). */
   let artifactTrue = false;
+  try { artifactTrue = localStorage.getItem('orrery-survey-complete') === '1'; } catch (_) {}
   function artifactAnswer(when) {
     const o = ctx.createOscillator(); o.type = 'sine';
     const dur = artifactTrue ? 2.2 : 1.2;

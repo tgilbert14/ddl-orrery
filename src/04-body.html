@@ -32,7 +32,9 @@
     <!-- ============ THE HUB ============ -->
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
-        <h1 class="hub-h1">Eleven worlds. One clock.<br>One artifact, holding the center.</h1>
+        <!-- no hard <br>: text-wrap:balance sets the monument lockup at every
+             width; a forced break went ragged under the bigger engraved face -->
+        <h1 class="hub-h1">Eleven worlds. One clock. One artifact, holding the center.</h1>
         <p class="hub-sub">Eleven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
@@ -488,8 +490,8 @@
             </linearGradient>
             <radialGradient id="sw-flashg" cx="0.5" cy="0.5" r="0.5">
               <stop offset="0" stop-color="#e2ecff" stop-opacity="0.5"/>
-              <stop offset="0.45" stop-color="#b9a9ff" stop-opacity="0.2"/>
-              <stop offset="1" stop-color="#b9a9ff" stop-opacity="0"/>
+              <stop offset="0.45" stop-color="#c9b6ff" stop-opacity="0.2"/>
+              <stop offset="1" stop-color="#c9b6ff" stop-opacity="0"/>
             </radialGradient>
           </defs>
           <rect width="1200" height="640" fill="url(#sw-skyg)"/>
@@ -499,7 +501,7 @@
           <path d="M1200,0 L840,0 L862,60 L836,124 L866,188 L842,252 L872,316 L848,380 L876,444 L854,512 L1200,512 Z" fill="#111322"/>
           <ellipse cx="960" cy="170" rx="150" ry="120" fill="url(#sw-flashg)"/>
           <ellipse cx="1090" cy="340" rx="110" ry="88" fill="url(#sw-flashg)" opacity="0.7"/>
-          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(185,169,255,0.3)" stroke-width="2"/>
+          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(201,182,255,0.3)" stroke-width="2"/>
           <!-- the plain -->
           <rect y="512" width="1200" height="128" fill="#17142a"/>
           <path d="M0,640 L0,584 C220,568 480,596 720,580 C920,568 1080,590 1200,578 L1200,640 Z" fill="#0d0b18"/>
@@ -620,6 +622,9 @@
         <span class="survey-count">0/0</span>
       </span>
     </div>
+    <!-- the survey's voice for AT: progress + the completion rite are spoken
+         here (the visual log is role=img and the hint is decorative) -->
+    <span id="survey-live" class="sr-only" aria-live="polite"></span>
   </footer>
 
   <div class="porthole" aria-hidden="true"></div>
