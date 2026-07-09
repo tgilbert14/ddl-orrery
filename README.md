@@ -38,6 +38,10 @@ slightly-wrong answering tone when touched.
 | Stormwall | a living storm front rolls the horizon; sparks race ahead of it and the rockbuds close up safe |
 | The Beacons | seven watch-fires catch one by one across a dusk range; when one lights, the next answers |
 
+And THE SHIP: the surveyor's vessel is finally visible. She holds station off the Artifact, banks and
+runs ahead of the warp flood when you choose a world, is absent while you walk one (you are aboard her,
+looking out the porthole), and glides back to station when you return to orbit.
+
 Plus: a first-visit approach cinematic, a hands-free Grand Tour autopilot (the client-demo button),
 a surveyor's log that fills gold as you travel and honors a completed survey, a procedural score with
 an original arrangement per world, and a secret the old code still opens.
@@ -53,6 +57,8 @@ Fragments concatenate in order: tokens → hub CSS → worlds CSS → deco → b
 
 ## House rules it honors
 
+- THE JOURNEY IS VISUAL. The scenes speak; cards are nameplates (sector, name, one control), never
+  copy blocks. No instructions, no marketing prose inside the fiction.
 - One shared clock drives every orbit and ambient loop; the score keeps its own sample-accurate time.
 - All eleven worlds are in the DOM from byte one: no JS = a complete brochure; reduced motion = designed
   end-states, never stripped scenes (the sphere freezes mid-flow, the sonar holds one static ring).
