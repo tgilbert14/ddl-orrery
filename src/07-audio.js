@@ -540,7 +540,7 @@ const Score = (() => {
      reply (a shared timestamp would let one world's toy mute another's
      across an rm-instant world hop). */
   const toyLast = { consult: -9, drill: -9, storm: -9 };
-  let lastBeacon = -9;
+  let lastBeacon = -99;   /* clears the 9.2s beacon gate even at ctx birth */
   const toyGate = (k) => {
     if (!ready()) return false;
     if (ctx.currentTime - toyLast[k] < 1) return false;
@@ -639,7 +639,7 @@ const Score = (() => {
     if (!ready()) return;
     const n = (e.detail && e.detail.n) || 7;
     const stg = ((e.detail && e.detail.stagger) || 900) / 1000;
-    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 2.7) return;  /* the full chain, the far answer included */
+    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 3.8) return;  /* the full chain, the Eye's swell included */
     lastBeacon = ctx.currentTime;
     muteHorns();                                            /* a re-strike silences any leftover run */
     const v = ARR.beacons, t = ctx.currentTime + 0.05;
@@ -647,9 +647,11 @@ const Score = (() => {
       const d = v.scale[i % v.scale.length] + 12 * Math.floor(i / v.scale.length);
       hornGains.push(note(v.root * Math.pow(2, d / 12), t + i * stg, 0.06, 0.9, 'sawtooth', bus, 0.28, 0.25 + i * 0.06));
     }
-    /* the 8th horn: the answer from beyond the range — faint, high, almost
-       all hall. It lands with the far light the FX raises at the same beat. */
-    hornGains.push(note(v.root * 4, t + (n - 1) * stg + 1.3, 0.032, 1.3, 'sawtooth', bus, 0.3, 0.85));
+    /* the answer from beyond the range is no horn at all: a low furnace
+       swell with a minor-second rub, landing on the beat the Eye opens */
+    const tAns = t + (n - 1) * stg + 1.3;
+    hornGains.push(note(v.root / 2, tAns, 0.06, 2.4, 'sawtooth', bus, 0.15, 0.7));
+    hornGains.push(note((v.root / 2) * Math.pow(2, 1 / 12), tAns + 0.05, 0.035, 2.2, 'sawtooth', bus, 0.15, 0.75));
   });
   window.Orrery.events.addEventListener('konami', () => {
     if (!ready()) return;
