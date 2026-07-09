@@ -314,6 +314,195 @@ const PlanetForge = (() => {
     });
   }
 
+  function buildArchive(rnd, tctx, brightCtx) {
+    const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3);
+    const L = makeLut([[0, '#0b0e24'], [0.45, '#141a3d'], [0.68, '#26305e'], [0.86, '#6b5a3d'], [1, '#ecc27a']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => {
+      /* shelved strata: the stacks read as fine horizontal ledgers, sheared
+         just enough by noise to feel grown rather than printed */
+      const shelf = 0.5 + 0.5 * Math.sin(v * 34 + warp(u, v) * 2.6);
+      return (fb(u, v) * 0.66 + shelf * 0.26 - 0.5) * 1.3 + 0.42;
+    });
+    /* the records: mark-rain motes drifting between the stacks */
+    const motes = [];
+    for (let i = 0; i < 90; i++) motes.push([rnd() * TEX_W, TEX_H * (0.06 + rnd() * 0.88), 0.4 + rnd() * 0.8, 0.1 + rnd() * 0.25]);
+    wrapped(tctx, () => {
+      for (const m of motes) {
+        tctx.fillStyle = `rgba(236,194,122,${m[3].toFixed(2)})`;
+        tctx.beginPath(); tctx.arc(m[0], m[1], m[2], 0, TAU); tctx.fill();
+      }
+    });
+    /* the chosen future: ONE gold path girdles the whole record and closes
+       on itself (integer frequencies -> seamless wrap). It lives in the
+       bright layer, so the planet's pulse is the path kindling and dimming —
+       the archive re-reading tomorrow. Faint blue stubs are the futures it
+       weighed and set aside. */
+    const y0 = TEX_H * (0.36 + rnd() * 0.24), amp = 12 + rnd() * 14;
+    const k = 2 + (rnd() * 2 | 0), ph = rnd() * TAU;
+    const k2 = k + 1 + (rnd() * 2 | 0), ph2 = rnd() * TAU;
+    const pathAt = (xx) => y0 + Math.sin((xx / TEX_W) * TAU * k + ph) * amp
+                              + Math.sin((xx / TEX_W) * TAU * k2 + ph2) * amp * 0.4;
+    const drawPath = (g2, col, wdt, blur) => {
+      if (blur) { g2.shadowColor = '#ffd98f'; g2.shadowBlur = blur; }   /* gen-time only */
+      g2.strokeStyle = col; g2.lineWidth = wdt; g2.lineCap = 'round';
+      g2.beginPath();
+      for (let xx = 0; xx <= TEX_W; xx += 5) {
+        const yy = pathAt(xx);
+        if (xx === 0) g2.moveTo(xx, yy); else g2.lineTo(xx, yy);
+      }
+      g2.stroke();
+      g2.shadowBlur = 0;
+    };
+    drawPath(tctx, 'rgba(236,194,122,0.3)', 1.2, 0);
+    drawPath(brightCtx, 'rgba(255,217,143,0.9)', 1.6, 5);
+    const stubs = [];
+    for (let i = 0; i < 9; i++) {
+      const bx = rnd() * TEX_W;
+      stubs.push([bx, pathAt(bx), (rnd() - 0.5) * 30, -(6 + rnd() * 18)]);
+    }
+    wrapped(brightCtx, () => {
+      brightCtx.strokeStyle = 'rgba(142,162,232,0.35)'; brightCtx.lineWidth = 1;
+      for (const s2 of stubs) {
+        brightCtx.beginPath(); brightCtx.moveTo(s2[0], s2[1]);
+        brightCtx.quadraticCurveTo(s2[0] + s2[2] * 0.5, s2[1] + s2[3] * 0.6, s2[0] + s2[2], s2[1] + s2[3]);
+        brightCtx.stroke();
+      }
+    });
+  }
+
+  function buildDrillyard(rnd, tctx) {
+    const fb = makeFbm(rnd, 6, 4, 4);
+    const L = makeLut([[0, '#070b16'], [0.45, '#16233a'], [0.78, '#2e4a6c'], [1, '#4f77a6']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => (fb(u, v) - 0.5) * 1.3 + 0.42);
+    /* the drill lattice: a world gridded for training */
+    tctx.strokeStyle = 'rgba(151,200,246,0.3)'; tctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const yy = TEX_H * (0.12 + i * 0.19);
+      tctx.beginPath(); tctx.moveTo(0, yy); tctx.lineTo(TEX_W, yy); tctx.stroke();
+    }
+    for (let i = 0; i < 8; i++) {
+      const xx = (i / 8) * TEX_W;
+      tctx.beginPath(); tctx.moveTo(xx, TEX_H * 0.08); tctx.lineTo(xx, TEX_H * 0.92); tctx.stroke();
+    }
+    /* three squads mid-formation — wedge, line, vic — the drills never stop.
+       Squad colors match the yard's own lights (green / steel / amber). */
+    const SQ = ['102,255,158', '127,178,229', '255,196,94'];
+    const dots = [];
+    for (let s2 = 0; s2 < 3; s2++) {
+      const x0 = (s2 / 3) * TEX_W + 30 + rnd() * 40, y0 = TEX_H * (0.3 + rnd() * 0.4);
+      const ang = rnd() * TAU, ca = Math.cos(ang), sa = Math.sin(ang);
+      for (let m = 0; m < 7; m++) {                    /* a 1-2-2-2 wedge, rotated whole */
+        const row = m === 0 ? 0 : ((m + 1) / 2) | 0;
+        const lat = m === 0 ? 0 : (m % 2 === 1 ? -1 : 1) * row * 5;
+        const lx = -row * 7, ly = lat;
+        dots.push([x0 + lx * ca - ly * sa, y0 + lx * sa + ly * ca, s2]);
+      }
+    }
+    wrapped(tctx, () => {
+      for (const d2 of dots) {
+        tctx.fillStyle = `rgba(${SQ[d2[2]]},0.3)`;
+        tctx.beginPath(); tctx.arc(d2[0], d2[1], 4.4, 0, TAU); tctx.fill();
+        tctx.fillStyle = `rgba(${SQ[d2[2]]},0.95)`;
+        tctx.beginPath(); tctx.arc(d2[0], d2[1], 1.9, 0, TAU); tctx.fill();
+      }
+      /* the arena marker: one amber survey diamond, the yard's own sigil */
+      tctx.strokeStyle = 'rgba(255,196,94,0.75)'; tctx.lineWidth = 1.4;
+      const dx2 = TEX_W * 0.62, dy2 = TEX_H * 0.24;
+      tctx.beginPath();
+      tctx.moveTo(dx2, dy2 - 9); tctx.lineTo(dx2 + 7, dy2); tctx.lineTo(dx2, dy2 + 9); tctx.lineTo(dx2 - 7, dy2);
+      tctx.closePath(); tctx.stroke();
+    });
+  }
+
+  function buildStormwall(rnd, tctx, brightCtx) {
+    const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3);
+    const L = makeLut([[0, '#0d0b18'], [0.35, '#1c1b33'], [0.6, '#2e344e'], [0.82, '#4a4a74'], [1, '#b9a9ff']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => {
+      /* a banded tempest giant: latitudinal jets, noise-sheared */
+      const band = 0.5 + 0.5 * Math.sin(v * 23 + warp(u, v) * 5.2);
+      return (fb(u, v) * 0.55 + band * 0.45 - 0.5) * 1.35 + 0.44;
+    });
+    /* THE WALL: one front girdles the world — dark core, pale leading
+       fringe — and comes around with every turn. Jagged like the plain's
+       own sky-wall, seamless because it never crosses the wrap. */
+    const fx0 = 40 + rnd() * (TEX_W - 130);
+    const edge = [];
+    for (let yy = 0; yy <= TEX_H; yy += 16) edge.push([fx0 + Math.sin(yy * 0.11 + rnd() * 0.8) * 9 + (rnd() - 0.5) * 6, yy]);
+    wrapped(tctx, () => {
+      tctx.fillStyle = 'rgba(10,11,22,0.5)';
+      tctx.beginPath(); tctx.moveTo(edge[0][0], -2);
+      for (const e of edge) tctx.lineTo(e[0], e[1]);
+      tctx.lineTo(edge[edge.length - 1][0] + 46, TEX_H + 2); tctx.lineTo(edge[0][0] + 46, -2);
+      tctx.closePath(); tctx.fill();
+      tctx.strokeStyle = 'rgba(185,169,255,0.6)'; tctx.lineWidth = 1.8; tctx.lineJoin = 'round';
+      tctx.beginPath();
+      for (let i = 0; i < edge.length; i++) { if (i === 0) tctx.moveTo(edge[i][0], edge[i][1]); else tctx.lineTo(edge[i][0], edge[i][1]); }
+      tctx.stroke();
+    });
+    /* the flashes live in the bright layer: sheet lightning INSIDE the wall,
+       kindling and dimming as the planet pulses (gen-time blur only) */
+    const blooms = [];
+    for (let i = 0; i < 5; i++) blooms.push([fx0 + 8 + rnd() * 30, TEX_H * (0.15 + rnd() * 0.7), 8 + rnd() * 14]);
+    wrapped(brightCtx, () => {
+      for (const b of blooms) {
+        const g2 = brightCtx.createRadialGradient(b[0], b[1], 1, b[0], b[1], b[2]);
+        g2.addColorStop(0, 'rgba(226,236,255,0.8)');
+        g2.addColorStop(0.4, 'rgba(185,169,255,0.3)');
+        g2.addColorStop(1, 'rgba(185,169,255,0)');
+        brightCtx.fillStyle = g2;
+        brightCtx.beginPath(); brightCtx.arc(b[0], b[1], b[2], 0, TAU); brightCtx.fill();
+      }
+    });
+  }
+
+  function buildBeacons(rnd, tctx, brightCtx) {
+    const fb = makeFbm(rnd, 6, 4, 4), rid = makeFbm(rnd, 7, 4, 3);
+    const L = makeLut([[0, '#070c1c'], [0.4, '#101a35'], [0.7, '#1e2c52'], [0.88, '#39466e'], [1, '#5b6a94']]);
+    paintBase(tctx, TEX_W, TEX_H, L, (u, v) => {
+      const rg = 1 - Math.abs(2 * rid(u, v) - 1);        /* ridged: the night ranges */
+      return (fb(u, v) * 0.5 + rg * 0.32 - 0.5) * 1.3 + 0.4;
+    });
+    /* the watch-fires: a chain girdling the world along one wandering
+       ridgeline that closes on itself (integer frequency -> seamless).
+       The base keeps the embers and the old signal road; the bright layer
+       carries the blaze, so the planet's pulse IS the signal running the
+       range — one fire lights the next, forever. */
+    const y0 = TEX_H * (0.42 + rnd() * 0.16), amp = 10 + rnd() * 14;
+    const k = 1 + (rnd() * 2 | 0), ph = rnd() * TAU;
+    const chainAt = (xx) => y0 + Math.sin((xx / TEX_W) * TAU * k + ph) * amp;
+    tctx.strokeStyle = 'rgba(255,165,58,0.12)'; tctx.lineWidth = 1;
+    tctx.beginPath();
+    for (let xx = 0; xx <= TEX_W; xx += 6) {
+      const yy = chainAt(xx);
+      if (xx === 0) tctx.moveTo(xx, yy); else tctx.lineTo(xx, yy);
+    }
+    tctx.stroke();
+    const fires = [];
+    const NF = 9;
+    for (let i = 0; i < NF; i++) {
+      const fx2 = (i / NF) * TEX_W + rnd() * 16;
+      fires.push([fx2, chainAt(fx2), 0.8 + rnd() * 0.5]);
+    }
+    wrapped(tctx, () => {
+      for (const f of fires) {
+        tctx.fillStyle = 'rgba(255,140,60,0.25)';
+        tctx.beginPath(); tctx.arc(f[0], f[1], 4 * f[2], 0, TAU); tctx.fill();
+        tctx.fillStyle = 'rgba(255,196,120,0.9)';
+        tctx.beginPath(); tctx.arc(f[0], f[1], 1.3 * f[2], 0, TAU); tctx.fill();
+      }
+    });
+    wrapped(brightCtx, () => {
+      brightCtx.shadowColor = '#ffa53a'; brightCtx.shadowBlur = 6;    /* gen-time only */
+      for (const f of fires) {
+        brightCtx.fillStyle = 'rgba(255,150,50,0.5)';
+        brightCtx.beginPath(); brightCtx.arc(f[0], f[1], 3.2 * f[2], 0, TAU); brightCtx.fill();
+        brightCtx.fillStyle = 'rgba(255,246,210,0.95)';
+        brightCtx.beginPath(); brightCtx.arc(f[0], f[1], 1.5 * f[2], 0, TAU); brightCtx.fill();
+      }
+      brightCtx.shadowBlur = 0;
+    });
+  }
+
   /* fallback for unknown slugs: a generic noise ball in the world hue */
   function buildGeneric(rnd, tctx, a) {
     const fb = makeFbm(rnd, 6, 4, 4);
@@ -362,6 +551,23 @@ const PlanetForge = (() => {
         buildAbyssal(rnd, tctx);
         p.cloud = buildClouds(rnd, 235, 250, 255, 0.58, 2.6); p.cloudA = 0.5; break;
       case 'aurora': buildAurora(rnd, tctx); p.crown = true; break;
+      case 'archive': {
+        const b = cv(TEX_W, TEX_H);
+        buildArchive(rnd, tctx, b.getContext('2d'));
+        p.bright = b; break;
+      }
+      case 'drillyard': buildDrillyard(rnd, tctx); break;
+      case 'stormwall': {
+        const b = cv(TEX_W, TEX_H);
+        buildStormwall(rnd, tctx, b.getContext('2d'));
+        p.bright = b;
+        p.cloud = buildClouds(rnd, 205, 215, 255, 0.6, 2.4); p.cloudA = 0.4; break;
+      }
+      case 'beacons': {
+        const b = cv(TEX_W, TEX_H);
+        buildBeacons(rnd, tctx, b.getContext('2d'));
+        p.bright = b; break;
+      }
       default: buildGeneric(rnd, tctx, w.a);
     }
     return p;
@@ -435,8 +641,9 @@ const PlanetForge = (() => {
       const shift = (((rot % 1) + 1) % 1) * dw;
       g.drawImage(p.tex, x - r - shift, y - r, dw, r * 2);
       g.drawImage(p.tex, x - r - shift + dw, y - r, dw, r * 2);
-      if (p.bright) {                                     /* grid: circuit pulse crossfade */
-        g.globalAlpha = rm ? 0.34 : 0.16 + 0.34 * (0.5 + 0.5 * Math.sin(t * 2.2 + 1.3));
+      if (p.bright) {                                     /* the living-layer crossfade pulse;
+                                                             seed-phased so no two worlds blink together */
+        g.globalAlpha = rm ? 0.34 : 0.16 + 0.34 * (0.5 + 0.5 * Math.sin(t * 2.2 + 1.3 + p.su * 6));
         g.drawImage(p.bright, x - r - shift, y - r, dw, r * 2);
         g.drawImage(p.bright, x - r - shift + dw, y - r, dw, r * 2);
         g.globalAlpha = 1;
