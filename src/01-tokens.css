@@ -145,6 +145,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .skip-link:focus-visible { top: 1rem; }
 
+/* screen-reader-only: real words for AT where the visual page speaks in art.
+   Hidden entirely without JS: the copy documents app-mode behavior (Enter
+   travels, Escape returns) that the scriptless brochure does not have */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+html:not(.js) .sr-only { display: none; }
+
 /* small-caps micro-typography (house vocabulary) */
 .microlabel {
   font-size: var(--fs-label);

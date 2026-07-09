@@ -133,6 +133,16 @@ const Score = (() => {
   let schedTimer = null, nextNote = 0, stepIdx = 0, holdUntil = 0, nextCallAt = 0, lastFanfare = -9;
   let nextGroanAt = 0, lastAnswer = -9, armed = false;
   let on = false, cfg = ARR.hub, rig = null;
+  /* the beacon horns schedule ~5s ahead — track their gains so a scene
+     change or a re-strike can mute the run mid-flight (declared here, with
+     the rest of the state, so no listener races its initialization) */
+  let hornGains = [];
+  function muteHorns() {
+    if (!hornGains.length) return;
+    const t = ctx.currentTime;
+    hornGains.forEach(g => { try { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05); } catch (_) {} });
+    hornGains = [];
+  }
 
   const btn = document.getElementById('audio-toggle');
   const label = btn.querySelector('.audio-label');
@@ -273,6 +283,7 @@ const Score = (() => {
     if (wetAmt > 0) { const s = ctx.createGain(); s.gain.value = wetAmt; g.connect(s).connect(verb); }
     o.start(when); o2.start(when); o.stop(when + dur + 0.1); o2.stop(when + dur + 0.1);
     o.onended = () => g.disconnect();
+    return g;                        /* callers that schedule far ahead can mute a run mid-flight */
   }
   function playLead(v, st, when) {
     const L = v.lead;
@@ -461,6 +472,7 @@ const Score = (() => {
   function setWorld(name) {
     const next = ARR[name] || ARR.hub;
     if (next === cfg) return;
+    muteHorns();                      /* the horns must not follow the traveler off-world */
     cfg = next;
     stepIdx = 0;
     if (!ready()) return;                              /* rig is built on the next turnOn */
@@ -473,12 +485,30 @@ const Score = (() => {
 
   const ready = () => on && ctx && ctx.state === 'running';
 
-  /* two-note preview of a world's scale on hover, sent through the hall */
+  /* hover preview in the world's OWN voice (wave / delay / hall — the ARR
+     table's character, not a shared doorbell), quantized to the running
+     score's half-step grid so sweeping the ring plays in time with it */
+  let lastPreview = -9, lastPreviewAt = -9;
   window.Orrery.events.addEventListener('preview', (e) => {
     if (!ready()) return;
+    /* a fast sweep across the ring must not stack eleven riffs on one grid
+       line (same-sample chord blast); one voice per 150ms reads as intended */
+    if (ctx.currentTime - lastPreview < 0.15) return;
+    lastPreview = ctx.currentTime;
     const v = ARR[e.detail.slug] || ARR.hub;
-    note(v.root * 2, ctx.currentTime + 0.02, 0.06, 0.3, 'sine', bus, 0, 0.45);
-    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, ctx.currentTime + 0.14, 0.05, 0.35, 'sine', bus, 0, 0.45);
+    const L = v.lead, dest = L.dry ? dry : bus;
+    const now = ctx.currentTime;
+    const sub = Math.max(0.12, cfg.step / 2000);       /* the active grid's half-step */
+    let at = nextNote;
+    while (at - sub > now + 0.02) at -= sub;           /* nearest upcoming grid line */
+    if (at < now + 0.02) at = now + 0.02;
+    if (at <= lastPreviewAt + 0.001) at = lastPreviewAt + sub;   /* two riffs never share one line */
+    lastPreviewAt = at;
+    const m0 = v.motif.find(Boolean) || { d: 0 };      /* the motif's opening degree */
+    const gapN = Math.min(0.16, v.step / 2000);        /* the riff paces to its world's own step */
+    note(v.root * 2, at, 0.06, 0.3, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, at + gapN, 0.05, 0.35, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[m0.d % v.scale.length] / 12) * 2, at + gapN * 2, 0.045, 0.4, L.wave, dest, L.dly, L.wet);
   });
 
   /* the warp: riser swells into the whoosh, which blooms in the hall */
@@ -493,6 +523,66 @@ const Score = (() => {
     const v = ARR.aurora;
     v.scale.slice(0, 4).forEach((deg, i) =>
       note(v.root * Math.pow(2, deg / 12) * 2, ctx.currentTime + i * 0.09, 0.07, 0.32, 'triangle', bus, 0.2, 0.3));
+  });
+  /* the other four toys: their events were dispatched into a void (M1).
+     Each answers in its world's own voice, gated PER TOY like the artifact's
+     reply (a shared timestamp would let one world's toy mute another's
+     across an rm-instant world hop). */
+  const toyLast = { consult: -9, drill: -9, storm: -9 };
+  let lastBeacon = -9;
+  const toyGate = (k) => {
+    if (!ready()) return false;
+    if (ctx.currentTime - toyLast[k] < 1) return false;
+    toyLast[k] = ctx.currentTime;
+    return true;
+  };
+  window.Orrery.events.addEventListener('consult', () => {  /* the dice-cascade: futures reshuffling */
+    if (!toyGate('consult')) return;
+    const v = ARR.archive, t = ctx.currentTime + 0.03;
+    [6, 4, 2, 1, 0].forEach((d, i) =>
+      note(v.root * Math.pow(2, v.scale[d] / 12) * 2 * (i === 2 ? 1.012 : 1),  /* one lands wrong */
+           t + i * 0.07, 0.055, 0.5, 'triangle', bus, 0.5, 0.3));
+  });
+  window.Orrery.events.addEventListener('drill', () => {    /* boatswain call; the squads answer */
+    if (!toyGate('drill')) return;
+    const v = ARR.drillyard, t = ctx.currentTime + 0.03;
+    note(v.root * 2, t, 0.07, 0.16, 'triangle', bus, 0.3, 0.22);
+    note(v.root * 2 * Math.pow(2, 5 / 12), t + 0.15, 0.07, 0.3, 'triangle', bus, 0.3, 0.22);
+    [7, 12, 7].forEach((s, i) =>
+      note(v.root * Math.pow(2, s / 12), t + 0.45 + i * 0.09, 0.045, 0.2, 'triangle', bus, 0.3, 0.22));
+    taiko(t + 0.45, 0.3);
+  });
+  window.Orrery.events.addEventListener('storm', () => {    /* the front called in early */
+    if (!toyGate('storm')) return;
+    const t = ctx.currentTime + 0.03;
+    groan(t);                                               /* reads as far thunder in this voicing */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(2200, t);
+    bp.frequency.exponentialRampToValueAtTime(240, t + 0.5); /* the gust sweeps DOWN into the wall */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    n.connect(bp); bp.connect(g); g.connect(bus);
+    n.start(t); n.stop(t + 0.6);
+    n.onended = () => g.disconnect();
+    taiko(t + 0.5, 0.5);
+  });
+  window.Orrery.events.addEventListener('beacon', (e) => {  /* horns at the pyres' own cadence —
+                                                               the EVENT carries the chain's tempo,
+                                                               so sound and fire can never disagree */
+    if (!ready()) return;
+    const n = (e.detail && e.detail.n) || 7;
+    const stg = ((e.detail && e.detail.stagger) || 900) / 1000;
+    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 0.9) return;  /* the full chain, last ring included */
+    lastBeacon = ctx.currentTime;
+    muteHorns();                                            /* a re-strike silences any leftover run */
+    const v = ARR.beacons, t = ctx.currentTime + 0.05;
+    for (let i = 0; i < n; i++) {                           /* each horn wetter than the last */
+      const d = v.scale[i % v.scale.length] + 12 * Math.floor(i / v.scale.length);
+      hornGains.push(note(v.root * Math.pow(2, d / 12), t + i * stg, 0.06, 0.9, 'sawtooth', bus, 0.28, 0.25 + i * 0.06));
+    }
   });
   window.Orrery.events.addEventListener('konami', () => {
     if (!ready()) return;

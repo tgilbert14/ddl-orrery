@@ -176,6 +176,14 @@
                      calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
 }
 
+/* the press frame itself answers: every control acknowledges the finger
+   before its effect lands (user-initiated, so rm-safe by definition) */
+.w-toy:active, .w-return:active, .cta-btn:active,
+.audio-toggle:active, .tour-toggle:active, .return-orbit:active {
+  transform: translateY(1px) scale(0.97);
+  transition-duration: 0.05s;
+}
+
 /* ---------- 6 · brochure list chrome (mobile / no-JS planet index) ----------
    EXTENDS .planet-anchor (02-hub.css); desktop app-mode strips border/bg itself */
 .planet-anchor { border-radius: 4px; }
@@ -304,9 +312,12 @@ html.js .artifact-label { display: block; }
   background: transparent; border: 0; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc */
+/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc.
+   The transparent outline is real to forced-colors mode, which strips the
+   box-shadow and repaints the outline in Highlight — the ring never vanishes. */
 #artifact-hit:focus-visible {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: -4px;
   box-shadow: 0 0 0 2px rgba(var(--brass-rgb), 0.9),
               0 0 22px 4px rgba(255, 205, 90, 0.5) inset;
 }
@@ -433,6 +444,12 @@ html.js .survey-log {
   border-color: rgba(var(--brass-rgb), 0.9);
   box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
 }
+/* forced-colors strips gradients and shadows: state must survive on borders */
+@media (forced-colors: active) {
+  .survey-dot { border: 1px solid CanvasText; }
+  .survey-dot.is-surveyed { border: 4px solid CanvasText; }
+  html.js .planet-anchor { border: 1px solid CanvasText; }
+}
 /* the fill eases only where motion is welcome (konami-ring precedent); rm snaps */
 @media (prefers-reduced-motion: no-preference) {
   html:not(.rm) .survey-dot {
@@ -480,6 +497,12 @@ html.js .survey-log {
    is (0,4,1) so it still wins WHILE drifting. Order-independent. */
 html.js.approached .hub-sub,
 html.js.approached .hub-hint { animation: none; }
+
+/* invisible is untouchable: while the cinematic runs, the fading-in anchors
+   and the artifact disc take no clicks — a stray early click aborts the
+   cinematic (window capture) without also warping the visitor blind */
+html.approaching .planet-anchor,
+html.approaching #artifact-hit { pointer-events: none; }
 
 @media (prefers-reduced-motion: no-preference) {
 

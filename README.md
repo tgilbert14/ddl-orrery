@@ -2,7 +2,7 @@
 
 **Eleven worlds. One clock. One artifact, holding the center.**
 
-An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of seven
+An interactive showcase by [Desert Data Labs](https://desertdatalabs.com): a hand-built orrery of eleven
 themed universes, each with its own atmosphere, palette, motion identity, and
 musical voicing. Click a planet, warp there, return to orbit. No frameworks, no build magic beyond
 concatenation; the worlds, weather, planets, and music are all procedural code, and the Artifact at the
@@ -11,8 +11,8 @@ center wears hand-made renders as its skins.
 v5 "The Faces of the Artifact": a giant gold sphere holds the center of orbit, and it ANSWERS you.
 Hover a world and the Artifact crossfades into that world's face: engraved orrery rings at rest, molten
 gold for the Dust Sea, art-deco towers for Velocity, etched machinery for the Grid, bioluminescent veins
-for Abyssal. Touch it three times and, for a moment, the plates part and you see what is underneath.
-The seven worlds truly circle it, passing behind and in front; a sonar pulse rings out every few seconds;
+for Abyssal. Provoke it enough and, for a moment, you may see something you were not meant to.
+The eleven worlds truly circle it, passing behind and in front; a sonar pulse rings out every few seconds;
 living light (a breathing specular constellation, rare flares, ripples) rides on top of every face.
 The mood stays deep: near-black sea-glass void, dust suspended in the dark, flickering instrument lights,
 a dread score of hull groans and a slow heartbeat, and a low, slightly-wrong answering tone when touched.
@@ -49,7 +49,7 @@ Fragments concatenate in order: tokens → hub CSS → worlds CSS → deco → b
 ## House rules it honors
 
 - One shared clock drives every orbit, ambient loop, and the score's tempo.
-- All seven worlds are in the DOM from byte one: no JS = a complete brochure; reduced motion = designed
+- All eleven worlds are in the DOM from byte one: no JS = a complete brochure; reduced motion = designed
   end-states, never stripped scenes (the sphere freezes mid-flow, the sonar holds one static ring).
 - The headline is the LCP and is never opacity-gated. Canvas is `aria-hidden` scenery; every word is real DOM.
   The Artifact has a real focusable button as its keyboard and screen-reader presence.
@@ -65,3 +65,9 @@ Twenty-two guild seats convened over the live source and drew the map for what c
 [**PLAN.md**](PLAN.md) — the frame verdict, fourteen ranked upgrades, a five-milestone roadmap,
 and full seat-by-seat designs (six critics, the hub visionary, eleven world-smiths, three pivot
 scouts) in [docs/council-v7/](docs/council-v7/).
+
+M1 "Sound the Wires" has landed: all five toys now answer through the score in their world's
+own voice, hover previews play each world's true lead on the score's grid, buttons acknowledge the press frame,
+reduced-motion visitors get the skin morphs and an Artifact that answers, the missing rm/no-JS
+poses (Uncharted, Arcadia) are designed, forced-colors keeps its focus rings, and the copy
+sweep recommitted every world to its own trope.

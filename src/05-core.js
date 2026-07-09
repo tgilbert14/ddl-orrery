@@ -167,7 +167,7 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+/* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
 function measureOrbit() {
@@ -311,6 +311,15 @@ function drawSky(dt, clockMs) {
 
 function drawStatic() { drawSky(16, Ticker.clock); }
 
+/* event-driven repaints coalesce to one per frame: the rm hover/touch paths
+   ask for a repaint instead of painting inline, so sweeping the whole ring
+   (11 enters + 11 leaves) costs one drawSky pass, not twenty-two */
+let staticReq = 0;
+function requestStatic() {
+  if (staticReq) return;
+  staticReq = requestAnimationFrame(() => { staticReq = 0; drawStatic(); });
+}
+
 /* ---------- ambient: the idle loop + random-cadence comets (pooled, §2.10)
    A 3-slot pool: the usual lone wanderer, and one visit in three a
    SHOWER of three staggered streaks. The pool is its own lock. ---------- */
@@ -388,7 +397,7 @@ function placeArtifactDom() {
     artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
   }
 }
-let artLast = 0, artTouches = 0;
+let artLast = 0, artTouches = 0, artRmT = null;
 function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
@@ -400,6 +409,17 @@ function touchArtifact() {
        is underneath (every third touch; the ripple masks the swap) */
     if (artTouches % 3 === 0 && SphereForge.reveal) SphereForge.reveal(2600);
     if (!skyTask) Orrery.startAmbient();
+  } else if (reduced()) {
+    /* rm: the answer is designed, not stripped — a repaint (any pending skin
+       swap lands on it) and the plate acknowledges in text for a beat.
+       No reveal here: with the clock held, the glimpse could never end. */
+    requestStatic();
+    if (artLabel) {
+      if (!artLabel.dataset.home) artLabel.dataset.home = artLabel.textContent;
+      artLabel.textContent = 'Object 0 · it heard you';
+      clearTimeout(artRmT);
+      artRmT = setTimeout(() => { artLabel.textContent = artLabel.dataset.home; }, 2000);
+    }
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));
 }
@@ -409,7 +429,7 @@ if (artHit) artHit.addEventListener('click', touchArtifact);
 let skyTask = null;
 const Orrery = {
   startAmbient() {
-    if (skyTask || reduced()) { drawStatic(); return; }
+    if (skyTask || reduced()) { requestStatic(); return; }
     skyTask = (dt, c) => { drawSky(dt, c); return true; };
     Ticker.add(skyTask);
     scheduleComet();
@@ -422,6 +442,7 @@ const Orrery = {
   events: new EventTarget(),
   ticker: Ticker,
   reduced,
+  requestStatic,                     /* SphereForge repaints late-landing rm skins through this */
   worlds: WORLDS,
 };
 window.Orrery = Orrery;
@@ -435,12 +456,14 @@ anchors.forEach((a, slug) => {
     html.style.setProperty('--acc-rgb', w.a.join(','));
     /* the Artifact considers the world with you: it wears that world's face */
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug);
-    if (!skyTask && !reduced()) Orrery.startAmbient();   /* the morph needs frames */
+    if (!skyTask) Orrery.startAmbient();       /* the morph needs frames; under rm this
+                                                  IS the one designed repaint (drawStatic) */
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
   const untint = () => {
     if (hovered === slug) hovered = null;
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
+    if (reduced()) requestStatic();            /* rm: return the resting face too */
   };
   a.addEventListener('pointerenter', tint);
   a.addEventListener('focus', tint);
@@ -808,6 +831,15 @@ tickClock();
 function bootOrrery() {
   PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
   if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
+  /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
+     a thumb. TourController's parse-time stash has already claimed the one
+     true resting line (dataset.home), so re-point BOTH — otherwise the tour
+     or the survey honor would restore keyboard wording onto a touch screen */
+  const bootHint = document.querySelector('.hub-hint');
+  if (bootHint && matchMedia('(pointer: coarse)').matches) {
+    bootHint.textContent = 'Tap a world to travel · it holds the center';
+    bootHint.dataset.home = bootHint.textContent;
+  }
   sizeSky();
   setRM();
   route(true);

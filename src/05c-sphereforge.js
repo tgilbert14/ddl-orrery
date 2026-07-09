@@ -260,6 +260,9 @@ const SphereForge = (() => {
   const SKIN_OF = {
     hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine',
     abyssal: 'veins', arcadia: 'arcadia', aurora: 'aurora', uncharted: 'uncharted',
+    /* the v6 worlds borrow the nearest face until their own renders land:
+       the Artifact must never go mute when a world is considered (M1) */
+    archive: 'uncharted', drillyard: 'machine', stormwall: 'veins', beacons: 'molten',
   };
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
@@ -293,7 +296,13 @@ const SphereForge = (() => {
     const img = new Image();
     const rec = { img, ready: false };
     skins[k] = rec;
-    img.onload = () => { rec.ready = true; };
+    img.onload = () => {
+      rec.ready = true;
+      /* rm has no ambient loop: if a hover is still waiting on this face,
+         ask the engine for its one designed repaint — otherwise the swap
+         is silently lost until some unrelated redraw */
+      if (rm() && wantSkin === k && window.Orrery && window.Orrery.requestStatic) window.Orrery.requestStatic();
+    };
     img.onerror = () => { delete skins[k]; };          /* a 404 must not wedge the want-latch */
     img.src = SKIN_SRC[k];
   }

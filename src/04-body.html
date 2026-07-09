@@ -44,10 +44,11 @@
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
+        <p class="sr-only">Eleven world links follow. Enter travels to a world; Escape returns to orbit.</p>
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>Dust Sea</b><em>two suns, and something beneath</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Dust Sea</b><em>the sand remembers a rhythm</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
         <a class="planet-anchor" data-world="velocity" href="#world-velocity" style="--i:1">
           <span class="pa-ring" aria-hidden="true"></span>
@@ -132,7 +133,7 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 01 &middot; Desert giant</p>
         <h2 id="h-dust">Dust Sea</h2>
-        <p class="w-copy">Two suns down. Something vast turns beneath the dunes.</p>
+        <p class="w-copy">Two suns down. Something vast keeps the rhythm beneath.</p>
         <p class="w-note w-note--live microlabel">Stay a while. The dunes are not as empty as they look.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -159,7 +160,7 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 02 &middot; Neon metropolis</p>
         <h2 id="h-velocity">Velocity</h2>
-        <p class="w-copy">Two riders. One horizon. The city never blinks.</p>
+        <p class="w-copy">The sun never sets here. It loops. The city never blinks.</p>
         <p class="w-note w-note--live microlabel">The skyline re-renders on the orrery clock while you watch.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -244,6 +245,46 @@
     <section id="world-arcadia" class="scene world" data-scene="arcadia" data-fx="arcadia" aria-labelledby="h-arcadia">
       <div class="world-fx" aria-hidden="true">
         <canvas class="fx-canvas" data-canvas="arcadia"></canvas>
+        <!-- the same attract screen, frozen: shown only when JS is absent
+             (rm is painted by the canvas). Shapes are the engine's own
+             INVADER_A / PLAYER bitmaps at the 4px grid. -->
+        <svg class="arc-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <g id="arc-inv">
+              <rect x="12" y="0" width="8" height="4"/>
+              <rect x="8" y="4" width="16" height="4"/>
+              <rect x="4" y="8" width="24" height="4"/>
+              <rect x="0" y="12" width="8" height="4"/><rect x="12" y="12" width="8" height="4"/><rect x="24" y="12" width="8" height="4"/>
+              <rect x="0" y="16" width="32" height="4"/>
+              <rect x="8" y="20" width="4" height="4"/><rect x="20" y="20" width="4" height="4"/>
+              <rect x="4" y="24" width="4" height="4"/><rect x="12" y="24" width="8" height="4"/><rect x="24" y="24" width="4" height="4"/>
+              <rect x="0" y="28" width="4" height="4"/><rect x="8" y="28" width="4" height="4"/><rect x="20" y="28" width="4" height="4"/><rect x="28" y="28" width="4" height="4"/>
+            </g>
+          </defs>
+          <g fill="rgba(230,240,255,0.7)">
+            <rect x="96" y="60" width="4" height="4"/><rect x="288" y="132" width="4" height="4"/>
+            <rect x="472" y="48" width="4" height="4"/><rect x="668" y="104" width="4" height="4"/>
+            <rect x="852" y="64" width="4" height="4"/><rect x="1024" y="140" width="4" height="4"/>
+            <rect x="1132" y="76" width="4" height="4"/><rect x="196" y="300" width="4" height="4"/>
+            <rect x="560" y="356" width="4" height="4"/><rect x="944" y="320" width="4" height="4"/>
+            <rect x="376" y="440" width="4" height="4"/><rect x="1076" y="420" width="4" height="4"/>
+          </g>
+          <g fill="#7dff5a">
+            <use href="#arc-inv" x="296" y="152"/><use href="#arc-inv" x="360" y="152"/>
+            <use href="#arc-inv" x="424" y="152"/><use href="#arc-inv" x="488" y="152"/>
+            <use href="#arc-inv" x="552" y="152"/><use href="#arc-inv" x="616" y="152"/>
+            <use href="#arc-inv" x="680" y="152"/><use href="#arc-inv" x="744" y="152"/>
+            <use href="#arc-inv" x="808" y="152"/><use href="#arc-inv" x="872" y="152"/>
+          </g>
+          <rect x="598" y="472" width="4" height="12" fill="#e6f0ff"/>
+          <g fill="#ffd23f">
+            <rect x="596" y="564" width="8" height="8"/>
+            <rect x="592" y="572" width="16" height="4"/>
+            <rect x="588" y="576" width="24" height="4"/>
+            <rect x="584" y="580" width="32" height="12"/>
+            <rect x="584" y="592" width="12" height="4"/><rect x="604" y="592" width="12" height="4"/>
+          </g>
+        </svg>
         <div class="arc-crt"></div>
       </div>
       <div class="world-card glass">
@@ -365,7 +406,7 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 08 &middot; Predictive archive</p>
         <h2 id="h-archive">The Archive</h2>
-        <p class="w-copy">Ten thousand years of records, and the mathematics to read them forward. Every branch is a future the numbers weigh; the brightest is the one worth planning for.</p>
+        <p class="w-copy">Ten thousand years of records, read forward. The brightest branch is the one worth planning for.</p>
         <p class="w-note w-note--live microlabel">The fans branch and weight, then every few seconds collapse to the single lit path.</p>
         <p class="w-note"><button class="w-toy" id="consult-archive" type="button">Consult the archive</button>
           <span class="microlabel">re-roll the futures</span></p>
@@ -413,7 +454,6 @@
         <p class="w-note w-note--live microlabel">Wait for the slow turn: the arena picks a new down, and the drills simply continue.</p>
         <p class="w-note"><button class="w-toy" id="call-drill" type="button">Call a drill</button>
           <span class="microlabel">cycle the next formation</span></p>
-        <p class="w-proof microlabel">Desert Data Labs drills real teams the same way: training tools, practice runs, and live operational dashboards that keep every crew oriented when the ground moves.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -485,7 +525,6 @@
         <p class="w-copy">The weather here is a wall. The light knows before you do.</p>
         <p class="w-note"><button class="w-toy" id="brace-wall" type="button">Brace for the wall</button>
           <span class="microlabel">call the front in early</span></p>
-        <p class="w-proof microlabel">Desert Data Labs schedules pipelines the way this plain reads weather: jobs that see the front coming, close up safe, and reopen with nothing lost.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -532,7 +571,7 @@
         <p class="w-copy">One pyre catches at dusk, and the next answers down the range, faster than any rider could carry the word.</p>
         <p class="w-note"><button class="w-toy" id="light-beacons" type="button">Light the beacons</button>
           <span class="microlabel">run the signal down the range</span></p>
-        <p class="w-proof microlabel">Desert Data Labs wires the same chain into your systems: when one lights, the next answers within the minute. Nobody rides all night to find out.</p>
+        <p class="w-proof microlabel">Nobody rides all night to find out.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
