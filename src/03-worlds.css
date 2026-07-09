@@ -62,6 +62,17 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
 .w-toy.is-running:hover, .w-toy.is-running:focus-visible { background: transparent; transform: none; }
 .w-toy.is-running:active { transform: translateY(1px) scale(0.97); }
 
+/* M4 — the verb worlds: a whisper of what the hand can do. The hint only
+   exists where the verb does (animated JS path); brochure and rm never see
+   it, so it can never promise an interaction that is not wired. */
+.w-verb { display: none; }
+html.js:not(.rm) .w-verb { display: block; }
+html.js:not(.rm) [data-scene="dust-sea"],
+html.js:not(.rm) [data-scene="velocity"],
+html.js:not(.rm) [data-scene="grid"],
+html.js:not(.rm) [data-scene="abyssal"],
+html.js:not(.rm) [data-scene="arcadia"] { cursor: crosshair; }
+
 /* brochure mode: give each stacked world its ground so no-JS reads designed */
 .world { background: var(--wground, var(--night)); }
 html.js .world { background: transparent; }
@@ -429,12 +440,18 @@ html:not(.js) [data-scene="stormwall"] .sw-static { display: block; }
 [data-scene="beacons"] .fx-canvas     { z-index: 1; }
 [data-scene="beacons"] .beacon-static { z-index: 2; }
 
+/* alpenglow: night indigo overhead falling through violet into one last
+   amber band right where the far ridge line cuts the sky (~36-58%); below
+   that the dusk haze the mountains stand in. The canvas mist rides on top. */
 .beacon-sky {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 120% 46% at 50% 100%, rgba(var(--w-beacon-glow-rgb), 0.10), transparent 60%),
-    radial-gradient(ellipse 80% 34% at 26% 8%, rgba(var(--w-beacon-b-rgb), 0.06), transparent 60%),
-    linear-gradient(180deg, #060a1f 0%, var(--w-beacon-ground) 46%, #14224a 82%, #26305a 100%);
+    radial-gradient(ellipse 130% 40% at 52% 48%, rgba(255,150,66,0.18), transparent 62%),
+    radial-gradient(ellipse 80% 34% at 20% 10%, rgba(120,110,210,0.10), transparent 60%),
+    linear-gradient(180deg,
+      #04030f 0%, #0b0930 14%, #1c1246 26%,
+      #45204e 36%, #8c3c48 44%, #cf6d38 52%, #eda04e 58%,
+      #503047 68%, #1a1234 82%, #100c26 100%);
 }
 
 /* reduced-motion / no-JS: the range frozen mid-burn, all seven lit (Smaug kill 2) */

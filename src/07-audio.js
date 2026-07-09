@@ -580,13 +580,63 @@ const Score = (() => {
     n.onended = () => g.disconnect();
     taiko(t + 0.5, 0.5);
   });
+  /* M4 — the five verbs. Each answers in its world's own ARR voice, gated
+     per key so one world's hammering can never mute another's reply. */
+  const verbLast = { worm: -9, boost: -9, trace: -9, ping: -9, shot: -9, invader: -9 };
+  const verbGate = (k, gap) => {
+    if (!ready()) return false;
+    if (ctx.currentTime - verbLast[k] < gap) return false;
+    verbLast[k] = ctx.currentTime;
+    return true;
+  };
+  window.Orrery.events.addEventListener('worm', () => {     /* the dune answers: ground-thumps + a sub swell */
+    if (!verbGate('worm', 2.5)) return;
+    const v = ARR['dust-sea'], t = ctx.currentTime + 0.03;
+    taiko(t, 0.5);
+    note(v.root / 2, t + 0.1, 0.09, 3.2, 'sine', bus, 0.1, 0.3);
+    taiko(t + 0.42, 0.3);
+    shaker(t + 0.55);
+  });
+  window.Orrery.events.addEventListener('boost', () => {    /* throttle open: a fifth snapped up the octave */
+    if (!verbGate('boost', 0.35)) return;
+    const v = ARR.velocity, t = ctx.currentTime + 0.02;
+    note(v.root * 2, t, 0.07, 0.10, 'square', bus, 0.2, 0);
+    note(v.root * 2 * Math.pow(2, 7 / 12), t + 0.07, 0.07, 0.12, 'square', bus, 0.2, 0);
+    note(v.root * 4, t + 0.14, 0.08, 0.3, 'square', bus, 0.22, 0.08);
+  });
+  window.Orrery.events.addEventListener('trace', () => {    /* one white column: a pluck up the add9 */
+    if (!verbGate('trace', 0.15)) return;
+    const v = ARR.grid, t = ctx.currentTime + 0.02;
+    note(v.root * 4, t, 0.06, 0.5, 'triangle', bus, 0.55, 0.12);
+    note(v.root * 4 * Math.pow(2, v.scale[2] / 12), t + 0.09, 0.05, 0.6, 'triangle', bus, 0.55, 0.15);
+  });
+  window.Orrery.events.addEventListener('ping', () => {     /* your sonar: blip + echo; sometimes the deep replies */
+    if (!verbGate('ping', 0.4)) return;
+    const t = ctx.currentTime + 0.02;
+    ping(t, 0.06);
+    ping(t + 0.24, 0.024);
+    if (Math.random() < 0.3) deepCall(t + 1.4);
+  });
+  window.Orrery.events.addEventListener('shot', () => {     /* dry cabinet pew, straight from the speaker cone */
+    if (!verbGate('shot', 0.2)) return;
+    const v = ARR.arcadia, t = ctx.currentTime + 0.01;
+    note(v.root * 4, t, 0.05, 0.06, 'square', dry, 0, 0);
+    note(v.root * 3, t + 0.05, 0.045, 0.05, 'square', dry, 0, 0);
+  });
+  window.Orrery.events.addEventListener('invader', () => {  /* the hit: a falling 8-bit crunch */
+    if (!verbGate('invader', 0.2)) return;
+    const v = ARR.arcadia, t = ctx.currentTime + 0.02;
+    note(v.root * 2 * Math.pow(2, 7 / 12), t, 0.06, 0.08, 'square', dry, 0, 0);
+    note(v.root * 2 * Math.pow(2, 4 / 12), t + 0.05, 0.06, 0.08, 'square', dry, 0, 0);
+    note(v.root * 2, t + 0.10, 0.06, 0.10, 'square', dry, 0, 0);
+  });
   window.Orrery.events.addEventListener('beacon', (e) => {  /* horns at the pyres' own cadence —
                                                                the EVENT carries the chain's tempo,
                                                                so sound and fire can never disagree */
     if (!ready()) return;
     const n = (e.detail && e.detail.n) || 7;
     const stg = ((e.detail && e.detail.stagger) || 900) / 1000;
-    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 0.9) return;  /* the full chain, last ring included */
+    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 2.7) return;  /* the full chain, the far answer included */
     lastBeacon = ctx.currentTime;
     muteHorns();                                            /* a re-strike silences any leftover run */
     const v = ARR.beacons, t = ctx.currentTime + 0.05;
@@ -594,6 +644,9 @@ const Score = (() => {
       const d = v.scale[i % v.scale.length] + 12 * Math.floor(i / v.scale.length);
       hornGains.push(note(v.root * Math.pow(2, d / 12), t + i * stg, 0.06, 0.9, 'sawtooth', bus, 0.28, 0.25 + i * 0.06));
     }
+    /* the 8th horn: the answer from beyond the range — faint, high, almost
+       all hall. It lands with the far light the FX raises at the same beat. */
+    hornGains.push(note(v.root * 4, t + (n - 1) * stg + 1.3, 0.032, 1.3, 'sawtooth', bus, 0.3, 0.85));
   });
   window.Orrery.events.addEventListener('konami', () => {
     if (!ready()) return;
