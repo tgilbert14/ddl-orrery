@@ -133,6 +133,16 @@ const Score = (() => {
   let schedTimer = null, nextNote = 0, stepIdx = 0, holdUntil = 0, nextCallAt = 0, lastFanfare = -9;
   let nextGroanAt = 0, lastAnswer = -9, armed = false;
   let on = false, cfg = ARR.hub, rig = null;
+  /* the beacon horns schedule ~5s ahead — track their gains so a scene
+     change or a re-strike can mute the run mid-flight (declared here, with
+     the rest of the state, so no listener races its initialization) */
+  let hornGains = [];
+  function muteHorns() {
+    if (!hornGains.length) return;
+    const t = ctx.currentTime;
+    hornGains.forEach(g => { try { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05); } catch (_) {} });
+    hornGains = [];
+  }
 
   const btn = document.getElementById('audio-toggle');
   const label = btn.querySelector('.audio-label');
@@ -273,6 +283,7 @@ const Score = (() => {
     if (wetAmt > 0) { const s = ctx.createGain(); s.gain.value = wetAmt; g.connect(s).connect(verb); }
     o.start(when); o2.start(when); o.stop(when + dur + 0.1); o2.stop(when + dur + 0.1);
     o.onended = () => g.disconnect();
+    return g;                        /* callers that schedule far ahead can mute a run mid-flight */
   }
   function playLead(v, st, when) {
     const L = v.lead;
@@ -369,18 +380,29 @@ const Score = (() => {
     o.start(when); o.stop(when + 0.14);
     o.onended = () => g.disconnect();
   }
-  function artifactAnswer(when) {                    /* the reply is slightly wrong: 196 sagging to 185 */
+  /* the reply is slightly WRONG: 196 sagging to 185, all visit long — until
+     the survey completes, when the wrong note finally comes true and RISES
+     185→196, fuller and longer. The whole arc lands on this one interval.
+     Restored from localStorage: a master surveyor's return visit must not
+     regress to the wrong tone (the rite fires once, ever). */
+  let artifactTrue = false;
+  try { artifactTrue = localStorage.getItem('orrery-survey-complete') === '1'; } catch (_) {}
+  function artifactAnswer(when) {
     const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(196, when);
-    o.frequency.linearRampToValueAtTime(185, when + 1.2);
+    const dur = artifactTrue ? 2.2 : 1.2;
+    if (artifactTrue) { o.frequency.setValueAtTime(185, when); o.frequency.linearRampToValueAtTime(196, when + dur); }
+    else { o.frequency.setValueAtTime(196, when); o.frequency.linearRampToValueAtTime(185, when + dur); }
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(0.07, when + 0.25);
-    g.gain.setTargetAtTime(0.0001, when + 1.2, 0.5);
+    g.gain.linearRampToValueAtTime(artifactTrue ? 0.09 : 0.07, when + 0.25);
+    g.gain.setTargetAtTime(0.0001, when + dur, artifactTrue ? 0.7 : 0.5);
     o.connect(g); g.connect(bus);
     const w = ctx.createGain(); w.gain.value = 0.8; g.connect(w).connect(verb);
-    o.start(when); o.stop(when + 3.4);
+    o.start(when); o.stop(when + dur + 2.2);
     o.onended = () => g.disconnect();
+    if (artifactTrue) {                             /* a bloomed fifth crowns the resolved tone */
+      note(294, when + 0.12, 0.05, dur, 'sine', bus, 0, 0.7);
+    }
   }
   function riser(when) {                               /* pre-warp reverse-swell into the arrival */
     const n = noiseSrc();
@@ -461,6 +483,7 @@ const Score = (() => {
   function setWorld(name) {
     const next = ARR[name] || ARR.hub;
     if (next === cfg) return;
+    muteHorns();                      /* the horns must not follow the traveler off-world */
     cfg = next;
     stepIdx = 0;
     if (!ready()) return;                              /* rig is built on the next turnOn */
@@ -473,12 +496,52 @@ const Score = (() => {
 
   const ready = () => on && ctx && ctx.state === 'running';
 
-  /* two-note preview of a world's scale on hover, sent through the hall */
+  /* hover preview in the world's OWN voice (wave / delay / hall — the ARR
+     table's character, not a shared doorbell), quantized to the running
+     score's half-step grid so sweeping the ring plays in time with it */
+  let lastPreview = -9, lastPreviewAt = -9;
   window.Orrery.events.addEventListener('preview', (e) => {
     if (!ready()) return;
+    /* a fast sweep across the ring must not stack eleven riffs on one grid
+       line (same-sample chord blast); one voice per 150ms reads as intended */
+    if (ctx.currentTime - lastPreview < 0.15) return;
+    lastPreview = ctx.currentTime;
     const v = ARR[e.detail.slug] || ARR.hub;
-    note(v.root * 2, ctx.currentTime + 0.02, 0.06, 0.3, 'sine', bus, 0, 0.45);
-    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, ctx.currentTime + 0.14, 0.05, 0.35, 'sine', bus, 0, 0.45);
+    const L = v.lead, dest = L.dry ? dry : bus;
+    const now = ctx.currentTime;
+    const sub = Math.max(0.12, cfg.step / 2000);       /* the active grid's half-step */
+    let at = nextNote;
+    while (at - sub > now + 0.02) at -= sub;           /* nearest upcoming grid line */
+    if (at < now + 0.02) at = now + 0.02;
+    if (at <= lastPreviewAt + 0.001) at = lastPreviewAt + sub;   /* two riffs never share one line */
+    lastPreviewAt = at;
+    const m0 = v.motif.find(Boolean) || { d: 0 };      /* the motif's opening degree */
+    const gapN = Math.min(0.16, v.step / 2000);        /* the riff paces to its world's own step */
+    note(v.root * 2, at, 0.06, 0.3, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, at + gapN, 0.05, 0.35, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[m0.d % v.scale.length] / 12) * 2, at + gapN * 2, 0.045, 0.4, L.wave, dest, L.dly, L.wet);
+  });
+
+  /* the sortie: the shuttle undocks — a soft latch-click and a rising hiss
+     ~760ms before the warp's riser takes over */
+  let lastSortie = -9;
+  window.Orrery.events.addEventListener('sortie', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastSortie < 0.6) return;
+    lastSortie = ctx.currentTime;
+    const t = ctx.currentTime + 0.02;
+    note(880, t, 0.03, 0.04, 'square', dry, 0, 0);       /* the latch */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(2400, t + 0.6);
+    const gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t);
+    gn.gain.exponentialRampToValueAtTime(0.05, t + 0.3);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    n.connect(bp); bp.connect(gn); gn.connect(bus);
+    n.start(t); n.stop(t + 0.75);
+    n.onended = () => gn.disconnect();
   });
 
   /* the warp: riser swells into the whoosh, which blooms in the hall */
@@ -493,6 +556,124 @@ const Score = (() => {
     const v = ARR.aurora;
     v.scale.slice(0, 4).forEach((deg, i) =>
       note(v.root * Math.pow(2, deg / 12) * 2, ctx.currentTime + i * 0.09, 0.07, 0.32, 'triangle', bus, 0.2, 0.3));
+  });
+  /* the other four toys: their events were dispatched into a void (M1).
+     Each answers in its world's own voice, gated PER TOY like the artifact's
+     reply (a shared timestamp would let one world's toy mute another's
+     across an rm-instant world hop). */
+  const toyLast = { consult: -9, drill: -9, storm: -9 };
+  let lastBeacon = -99;   /* clears the 9.2s beacon gate even at ctx birth */
+  const toyGate = (k) => {
+    if (!ready()) return false;
+    if (ctx.currentTime - toyLast[k] < 1) return false;
+    toyLast[k] = ctx.currentTime;
+    return true;
+  };
+  window.Orrery.events.addEventListener('consult', () => {  /* the dice-cascade: futures reshuffling */
+    if (!toyGate('consult')) return;
+    const v = ARR.archive, t = ctx.currentTime + 0.03;
+    [6, 4, 2, 1, 0].forEach((d, i) =>
+      note(v.root * Math.pow(2, v.scale[d] / 12) * 2 * (i === 2 ? 1.012 : 1),  /* one lands wrong */
+           t + i * 0.07, 0.055, 0.5, 'triangle', bus, 0.5, 0.3));
+  });
+  window.Orrery.events.addEventListener('drill', () => {    /* boatswain call; the squads answer */
+    if (!toyGate('drill')) return;
+    const v = ARR.drillyard, t = ctx.currentTime + 0.03;
+    note(v.root * 2, t, 0.07, 0.16, 'triangle', bus, 0.3, 0.22);
+    note(v.root * 2 * Math.pow(2, 5 / 12), t + 0.15, 0.07, 0.3, 'triangle', bus, 0.3, 0.22);
+    [7, 12, 7].forEach((s, i) =>
+      note(v.root * Math.pow(2, s / 12), t + 0.45 + i * 0.09, 0.045, 0.2, 'triangle', bus, 0.3, 0.22));
+    taiko(t + 0.45, 0.3);
+  });
+  window.Orrery.events.addEventListener('storm', () => {    /* the front called in early */
+    if (!toyGate('storm')) return;
+    const t = ctx.currentTime + 0.03;
+    groan(t);                                               /* reads as far thunder in this voicing */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(2200, t);
+    bp.frequency.exponentialRampToValueAtTime(240, t + 0.5); /* the gust sweeps DOWN into the wall */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    n.connect(bp); bp.connect(g); g.connect(bus);
+    n.start(t); n.stop(t + 0.6);
+    n.onended = () => g.disconnect();
+    taiko(t + 0.5, 0.5);
+  });
+  /* M4 — the five verbs. Each answers in its world's own ARR voice, gated
+     per key so one world's hammering can never mute another's reply. */
+  const verbLast = { worm: -9, boost: -9, trace: -9, ping: -9, shot: -9, invader: -9 };
+  const verbGate = (k, gap) => {
+    if (!ready()) return false;
+    if (ctx.currentTime - verbLast[k] < gap) return false;
+    verbLast[k] = ctx.currentTime;
+    return true;
+  };
+  window.Orrery.events.addEventListener('worm', () => {     /* the colossus: thumps, a sub swell, the hull-groan
+                                                               reads as its world-filling call in this voicing */
+    if (!verbGate('worm', 2.5)) return;
+    const v = ARR['dust-sea'], t = ctx.currentTime + 0.03;
+    taiko(t, 0.5);
+    note(v.root / 2, t + 0.1, 0.09, 4.2, 'sine', bus, 0.1, 0.3);
+    groan(t + 0.3);
+    taiko(t + 0.42, 0.3);
+    shaker(t + 0.55);
+    taiko(t + 1.1, 0.22);
+  });
+  window.Orrery.events.addEventListener('boost', () => {    /* throttle open: a fifth snapped up the octave */
+    if (!verbGate('boost', 0.35)) return;
+    const v = ARR.velocity, t = ctx.currentTime + 0.02;
+    note(v.root * 2, t, 0.07, 0.10, 'square', bus, 0.2, 0);
+    note(v.root * 2 * Math.pow(2, 7 / 12), t + 0.07, 0.07, 0.12, 'square', bus, 0.2, 0);
+    note(v.root * 4, t + 0.14, 0.08, 0.3, 'square', bus, 0.22, 0.08);
+  });
+  window.Orrery.events.addEventListener('trace', () => {    /* one white column: a pluck up the add9 */
+    if (!verbGate('trace', 0.15)) return;
+    const v = ARR.grid, t = ctx.currentTime + 0.02;
+    note(v.root * 4, t, 0.06, 0.5, 'triangle', bus, 0.55, 0.12);
+    note(v.root * 4 * Math.pow(2, v.scale[2] / 12), t + 0.09, 0.05, 0.6, 'triangle', bus, 0.55, 0.15);
+  });
+  window.Orrery.events.addEventListener('ping', () => {     /* your sonar: blip + echo; sometimes the deep replies */
+    if (!verbGate('ping', 0.4)) return;
+    const t = ctx.currentTime + 0.02;
+    ping(t, 0.06);
+    ping(t + 0.24, 0.024);
+    if (Math.random() < 0.3) deepCall(t + 1.4);
+  });
+  window.Orrery.events.addEventListener('shot', () => {     /* dry cabinet pew, straight from the speaker cone */
+    if (!verbGate('shot', 0.2)) return;
+    const v = ARR.arcadia, t = ctx.currentTime + 0.01;
+    note(v.root * 4, t, 0.05, 0.06, 'square', dry, 0, 0);
+    note(v.root * 3, t + 0.05, 0.045, 0.05, 'square', dry, 0, 0);
+  });
+  window.Orrery.events.addEventListener('invader', () => {  /* the hit: a falling 8-bit crunch */
+    if (!verbGate('invader', 0.2)) return;
+    const v = ARR.arcadia, t = ctx.currentTime + 0.02;
+    note(v.root * 2 * Math.pow(2, 7 / 12), t, 0.06, 0.08, 'square', dry, 0, 0);
+    note(v.root * 2 * Math.pow(2, 4 / 12), t + 0.05, 0.06, 0.08, 'square', dry, 0, 0);
+    note(v.root * 2, t + 0.10, 0.06, 0.10, 'square', dry, 0, 0);
+  });
+  window.Orrery.events.addEventListener('beacon', (e) => {  /* horns at the pyres' own cadence —
+                                                               the EVENT carries the chain's tempo,
+                                                               so sound and fire can never disagree */
+    if (!ready()) return;
+    const n = (e.detail && e.detail.n) || 7;
+    const stg = ((e.detail && e.detail.stagger) || 900) / 1000;
+    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 3.8) return;  /* the full chain, the Eye's swell included */
+    lastBeacon = ctx.currentTime;
+    muteHorns();                                            /* a re-strike silences any leftover run */
+    const v = ARR.beacons, t = ctx.currentTime + 0.05;
+    for (let i = 0; i < n; i++) {                           /* each horn wetter than the last */
+      const d = v.scale[i % v.scale.length] + 12 * Math.floor(i / v.scale.length);
+      hornGains.push(note(v.root * Math.pow(2, d / 12), t + i * stg, 0.06, 0.9, 'sawtooth', bus, 0.28, 0.25 + i * 0.06));
+    }
+    /* the answer from beyond the range is no horn at all: a low furnace
+       swell with a minor-second rub, landing on the beat the Eye opens */
+    const tAns = t + (n - 1) * stg + 1.3;
+    hornGains.push(note(v.root / 2, tAns, 0.06, 2.4, 'sawtooth', bus, 0.15, 0.7));
+    hornGains.push(note((v.root / 2) * Math.pow(2, 1 / 12), tAns + 0.05, 0.035, 2.2, 'sawtooth', bus, 0.15, 0.75));
   });
   window.Orrery.events.addEventListener('konami', () => {
     if (!ready()) return;
@@ -518,6 +699,16 @@ const Score = (() => {
     artifactAnswer(ctx.currentTime + 0.03);
   });
 
+  /* the survey is complete: the wrong note comes true from here on, and the
+     rite sounds it in full — a swelled, resolved answer over the fanfare */
+  window.Orrery.events.addEventListener('mastery', () => {
+    artifactTrue = true;
+    if (!ready()) return;
+    lastAnswer = ctx.currentTime;
+    artifactAnswer(ctx.currentTime + 0.1);
+    fanfare(ctx.currentTime + 0.7);
+  });
+
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */
   const cta = document.querySelector('.cta-btn');
   if (cta) cta.addEventListener('click', () => {
@@ -532,12 +723,12 @@ const Score = (() => {
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
-  /* localStorage, deliberately: under DEFAULT-ON, an opt-out that lasts one
-     tab is a hostile default — "off" must survive new tabs and return visits
-     (Smaug kill: the opt-out evaporated in sessionStorage) */
+  /* sessionStorage, by the founder's order: every fresh visit is DEFAULT-ON
+     again — the score ignites on the first activation-bearing gesture, and
+     an opt-out holds for the tab you turned it off in, no longer */
   const safeStore = {
-    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
   };
   async function turnOn() {
     if (!ctx) buildGraph();

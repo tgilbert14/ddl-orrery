@@ -20,13 +20,21 @@
    brightest FX moments (arwen A1 — computed, not eyeballed) */
 .world-card.glass { background: rgba(10, 15, 34, 0.72); }
 /* every landing gets a small lift of its own (legolas L5b) */
-html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ease-out) both; }
+/* no fill-mode: a `both` fill pinned opacity/transform forever, silently
+   overriding the card's sink (opacity) and tilt (transform) — the entrance
+   plays, then releases the properties back to the cascade */
+html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ease-out) backwards; }
 .w-eyebrow { color: var(--wa, var(--acc)); margin-bottom: 0.7rem; }
 .world-card h2 {
   font-size: var(--fs-h2); font-weight: 800; letter-spacing: -0.02em; line-height: 1.02;
   margin-bottom: 0.7rem;
 }
 .w-copy { font-size: var(--fs-sub); color: var(--ink); max-width: 30em; }
+/* the Artifact-facing lore line: quieter than copy, in the world's own voice,
+   always shown (designed end-state text, not live-motion narration). Full
+   brass, no opacity: it carries the through-narrative, so it stays ≥7:1
+   even over the brightest world FX bleeding through the plate. */
+.w-lore { margin-top: 0.7rem; color: var(--brass); max-width: 30em; }
 .w-note { margin-top: 0.9rem; color: var(--ink-dim); }
 .w-proof { margin-top: 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 .w-proof a { color: var(--wa, var(--acc)); font-weight: 600; }
@@ -47,6 +55,23 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
   transition: background 0.25s, color 0.25s, transform 0.45s var(--spring);
 }
 .w-toy:hover, .w-toy:focus-visible { background: rgba(var(--wa-rgb), 0.16); transform: translateY(-2px); }
+/* a toy whose effect is mid-run wears the state instead of eating the press;
+   hover/focus lifts go quiet, but the press frame itself still answers
+   (the :active rule is last so it wins the equal-specificity fight) */
+.w-toy.is-running { opacity: 0.45; cursor: default; }
+.w-toy.is-running:hover, .w-toy.is-running:focus-visible { background: transparent; transform: none; }
+.w-toy.is-running:active { transform: translateY(1px) scale(0.97); }
+
+/* M4 — the verb worlds: a whisper of what the hand can do. The hint only
+   exists where the verb does (animated JS path); brochure and rm never see
+   it, so it can never promise an interaction that is not wired. */
+.w-verb { display: none; }
+html.js:not(.rm) .w-verb { display: block; }
+html.js:not(.rm) [data-scene="dust-sea"],
+html.js:not(.rm) [data-scene="velocity"],
+html.js:not(.rm) [data-scene="grid"],
+html.js:not(.rm) [data-scene="abyssal"],
+html.js:not(.rm) [data-scene="arcadia"] { cursor: crosshair; }
 
 /* brochure mode: give each stacked world its ground so no-JS reads designed */
 .world { background: var(--wground, var(--night)); }
@@ -252,6 +277,11 @@ html:not(.js) [data-scene="grid"] .grid-static { display: block; }
    ============================================================ */
 [data-scene="arcadia"] { --wa: var(--w-arcadia-a); --wa-rgb: var(--w-arcadia-a-rgb); --wglow-rgb: var(--w-arcadia-glow-rgb); --wground: var(--w-arcadia-ground); }
 [data-scene="arcadia"] .fx-canvas { image-rendering: pixelated; }
+/* no-JS: the cabinet still shows its attract screen (rm keeps the canvas —
+   fx.arcadia.rm() paints the held pose; this covers the scriptless brochure) */
+.arc-static { display: none; }
+html:not(.js) [data-scene="arcadia"] .fx-canvas { display: none; }
+html:not(.js) [data-scene="arcadia"] .arc-static { display: block; }
 .arc-crt {
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background:
@@ -410,12 +440,18 @@ html:not(.js) [data-scene="stormwall"] .sw-static { display: block; }
 [data-scene="beacons"] .fx-canvas     { z-index: 1; }
 [data-scene="beacons"] .beacon-static { z-index: 2; }
 
+/* stormlight: a charcoal rack overhead, one furnace band low on the sky
+   where the fires and the far tower burn. The amber dusk is gone; this
+   range is watched. The canvas clouds and mist ride on top. */
 .beacon-sky {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 120% 46% at 50% 100%, rgba(var(--w-beacon-glow-rgb), 0.10), transparent 60%),
-    radial-gradient(ellipse 80% 34% at 26% 8%, rgba(var(--w-beacon-b-rgb), 0.06), transparent 60%),
-    linear-gradient(180deg, #060a1f 0%, var(--w-beacon-ground) 46%, #14224a 82%, #26305a 100%);
+    radial-gradient(ellipse 60% 34% at 88% 44%, rgba(255,110,44,0.13), transparent 62%),
+    radial-gradient(ellipse 50% 30% at 13% 42%, rgba(255,110,44,0.10), transparent 62%),
+    linear-gradient(180deg,
+      #050507 0%, #0c0b12 16%, #151220 30%,
+      #241a28 42%, #47262a 54%, #7c3a26 63%, #b05c2e 70%,
+      #33202a 80%, #150f1c 100%);
 }
 
 /* reduced-motion / no-JS: the range frozen mid-burn, all seven lit (Smaug kill 2) */

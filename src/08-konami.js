@@ -176,13 +176,18 @@
     let taps = 0, firstT = 0, idle = null;
     brand.addEventListener('click', (e) => {
       if (e.detail === 0) return;                       /* keyboard activation → let the link navigate normally */
+      /* a modified click means "new tab / window" — the browser owns it, and
+         it never counts toward the seven (re-navigating the CURRENT tab after
+         preventDefault destroyed the user's intent) */
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       e.preventDefault();                               /* pointer taps are held on-page so we can count them */
       const now = performance.now();
       if (taps === 0 || now - firstT > 4000) { taps = 0; firstT = now; }
       taps++;
       clearTimeout(idle);
       if (taps >= 7) { taps = 0; unlock(); return; }
-      idle = setTimeout(() => {                          /* a lone tap was a real click → honor the link (slight delay) */
+      idle = setTimeout(() => {                          /* a lone tap was a real click → honor the link (slight delay).
+                                                            480ms, not shorter: the rite's tap cadence must fit inside it */
         const lone = taps === 1; taps = 0;
         if (lone) { try { location.href = brand.href; } catch (_) {} }
       }, 480);

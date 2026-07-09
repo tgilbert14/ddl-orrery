@@ -1,5 +1,5 @@
 /* ============================================================
-   06-worlds.js — the eleven signatures. One effect per world, no seconds.
+   06-worlds.js — the seven signatures. One effect per world, no seconds.
    Each FX owns one canvas, pools its particles, joins the shared
    Ticker, and leaves a designed end-state when motion is off.
    Forged by six parallel effect-smiths of the MITHRIL guild, 2026-07-05.
@@ -9,6 +9,7 @@
 const WorldFX = (() => {
   const fx = {};
   let activeName = null, activeTask = null, activeCanvas = null, activeCtx = null, activeState = null;
+  let activeSurf = null, verbSec = null, verbDown = null, verbMove = null;
 
   function canvasFor(name) {
     const c = document.querySelector(`[data-canvas="${name}"]`);
@@ -29,7 +30,7 @@ const WorldFX = (() => {
     if (window.Orrery.reduced()) { fx[name].rm && fx[name].rm(); return; }
     const surf = canvasFor(name);
     if (!surf) return;
-    activeName = name; activeCanvas = surf.c; activeCtx = surf.g;
+    activeName = name; activeCanvas = surf.c; activeCtx = surf.g; activeSurf = surf;
     const state = fx[name].init(surf);
     activeState = state;
     activeTask = (dt, clock) => {
@@ -38,25 +39,66 @@ const WorldFX = (() => {
       return true;
     };
     window.Orrery.ticker.add(activeTask);
+    /* the verb: one pointer action per world. Listeners live on the SECTION
+       (the canvas is aria-hidden scenery), so a tap anywhere in the scene
+       lands — except on the chip's own links and buttons, which keep their
+       jobs. Never wired under reduced-motion: start() bailed above. */
+    if (fx[name].verb || fx[name].aim) {
+      const sec = surf.c.closest('section');
+      if (sec) {
+        verbSec = sec;
+        if (fx[name].verb) {
+          verbDown = (e) => {
+            if (activeName !== name || e.button > 0) return;
+            if (e.target.closest('a, button')) return;
+            const r = surf.c.getBoundingClientRect();
+            fx[name].verb(surf, state, e.clientX - r.left, e.clientY - r.top, window.Orrery.ticker.clock);
+          };
+          sec.addEventListener('pointerdown', verbDown);
+        }
+        if (fx[name].aim) {
+          let aimRect = null, aimRectAt = -1e9;    /* house idiom: never measure per event */
+          verbMove = (e) => {
+            if (activeName !== name) return;
+            const clk = window.Orrery.ticker.clock;
+            if (!aimRect || clk - aimRectAt > 500) { aimRect = surf.c.getBoundingClientRect(); aimRectAt = clk; }
+            fx[name].aim(surf, state, e.clientX - aimRect.left, e.clientY - aimRect.top, clk);
+          };
+          sec.addEventListener('pointermove', verbMove);
+        }
+      }
+    }
   }
   function stopAll() {
     if (activeTask) { window.Orrery.ticker.remove(activeTask); activeTask = null; }
     if (activeState) { activeState.cleanup && activeState.cleanup(); activeState = null; }  /* Smaug kill 7 */
     if (activeCtx && activeCanvas) activeCtx.clearRect(0, 0, activeCanvas.width, activeCanvas.height);
-    activeName = null;
+    if (verbSec) {
+      if (verbDown) verbSec.removeEventListener('pointerdown', verbDown);
+      if (verbMove) verbSec.removeEventListener('pointermove', verbMove);
+      verbSec = null; verbDown = null; verbMove = null;
+    }
+    activeName = null; activeSurf = null;
   }
+  const verbEvent = (kind) => window.Orrery.events.dispatchEvent(new CustomEvent(kind));
 
   /* ============================================================
-     DUST SEA: parallax dunes, wind-blown sand, and THE WORM
-     caps: 3 precomputed silhouettes · sand 78 · puffs 30 · worm <=13
+     DUST SEA: the amber sea — razor-lit crests over indigo lee faces,
+     wind-smoke off the dunes, spice glints, a walking caravan, and
+     THE WORM: a face-on colossus that rises where you strike.
+     caps: 3 precomputed ridges (+lit/lee Path2Ds) · sand 78 · puffs 30 ·
+           cascade 64 · wisps 6 · glints 16 · walkers 3 ·
+           3 prebaked sprites: maw, bloom, wisp (no per-frame gradients)
      ============================================================ */
+  const DW_RISE = 2000, DW_HOLD = 2800, DW_SINK = 2200,
+        DW_TOTAL = DW_RISE + DW_HOLD + DW_SINK;
   fx.dune = {
     init(s) {
       const rnd = (a, b) => a + Math.random() * (b - a);
       const STEP = 20, x0 = -80, x1 = s.w + 80;
       const N = Math.ceil((x1 - x0) / STEP) + 1;
-      const H = s.h;
-      function ridge(baseY, amp, fill, driftA, driftS, phase) {
+      const H = s.h, W = s.w, g0 = s.g;
+      function ridge(baseY, amp, driftA, driftS, phase) {
         const xs = new Float32Array(N), ys = new Float32Array(N);
         const w1 = rnd(150, 230), w2 = rnd(70, 110), w3 = rnd(34, 52);
         const p1 = rnd(0, 7), p2 = rnd(0, 7), p3 = rnd(0, 7);
@@ -65,70 +107,214 @@ const WorldFX = (() => {
           const x = x0 + i * STEP; xs[i] = x;
           ys[i] = baseY + Math.sin(x / w1 + p1) * amp + Math.sin(x / w2 + p2) * a2 + Math.sin(x / w3 + p3) * a3;
         }
-        return { xs, ys, fill, driftA, driftS, phase, baseY, x0: x0, step: STEP };
+        return { xs, ys, driftA, driftS, phase, baseY, amp, x0, step: STEP };
       }
       const ridges = [
-        ridge(H * 0.50, 18, 'rgba(74,42,66,1)', 8, 0.000030, 0.0),
-        ridge(H * 0.61, 30, 'rgba(43,24,55,1)', 16, 0.000045, 2.1),
-        ridge(H * 0.73, 46, 'rgba(20,11,32,1)', 28, 0.000062, 4.3),
+        ridge(H * 0.50, 18, 8, 0.000030, 0.0),
+        ridge(H * 0.61, 30, 16, 0.000045, 2.1),
+        ridge(H * 0.73, 46, 28, 0.000062, 4.3),
       ];
+      /* the two-tone sea: every dune wears amber where it faces the suns
+         and cold indigo where it falls away — the crest line between them
+         is the razor the whole scene rides on */
+      const TONES = [
+        { hi: 'rgba(214,140,82,1)', mid: 'rgba(120,60,50,1)', lo: 'rgba(54,30,52,1)', crest: 'rgba(255,200,124,0.55)', lee: 'rgba(40,30,68,0.40)' },
+        { hi: 'rgba(194,116,60,1)', mid: 'rgba(94,42,36,1)',  lo: 'rgba(38,20,40,1)', crest: 'rgba(255,190,110,0.42)', lee: 'rgba(34,24,60,0.48)' },
+        { hi: 'rgba(148,80,38,1)',  mid: 'rgba(58,26,22,1)',  lo: 'rgba(20,11,22,1)', crest: 'rgba(255,178,96,0.30)',  lee: 'rgba(26,18,48,0.55)' },
+      ];
+      for (let k = 0; k < 3; k++) {
+        const r = ridges[k], t = TONES[k];
+        const gr = g0.createLinearGradient(0, r.baseY - r.amp * 1.9, 0, H);
+        gr.addColorStop(0, t.hi); gr.addColorStop(0.42, t.mid); gr.addColorStop(1, t.lo);
+        r.grad = gr; r.crest = t.crest; r.leeFill = t.lee;
+        r.lit = dunePaths(r, -1);              /* sun-side crest polylines */
+        r.lee = dunePaths(r, +1);              /* lee-side shadow bands */
+      }
+      /* the maw, baked once: rings of radial bristles around a black throat,
+         a pale baleen fringe at the rim (drawn face-on, film-poster style) */
+      const MS = 256, mo = document.createElement('canvas'); mo.width = mo.height = MS;
+      const mg = mo.getContext('2d');
+      const cx = MS / 2, cy = MS / 2;
+      let grd = mg.createRadialGradient(cx, cy, MS * 0.05, cx, cy, MS * 0.5);
+      grd.addColorStop(0, '#120805'); grd.addColorStop(0.45, '#301608');
+      grd.addColorStop(0.8, '#582c14'); grd.addColorStop(1, '#4a2410');
+      mg.fillStyle = grd; mg.beginPath(); mg.arc(cx, cy, MS * 0.5, 0, 7); mg.fill();
+      for (let ring = 0; ring < 3; ring++) {
+        const r0 = MS * (0.17 + ring * 0.105), r1 = MS * (0.30 + ring * 0.105);
+        const nB = 130 + ring * 40;
+        for (let b = 0; b < nB; b++) {
+          const a = (b / nB) * Math.PI * 2 + ring * 0.05 + Math.random() * 0.03;
+          const rr0 = r0 * (0.92 + Math.random() * 0.16), rr1 = r1 * (0.94 + Math.random() * 0.12);
+          mg.strokeStyle = `rgba(${110 + ring * 26},${60 + ring * 18},${32 + ring * 9},${0.30 + Math.random() * 0.32})`;
+          mg.lineWidth = 0.8 + Math.random() * 0.9;
+          mg.beginPath();
+          mg.moveTo(cx + Math.cos(a) * rr0, cy + Math.sin(a) * rr0);
+          mg.lineTo(cx + Math.cos(a + 0.02) * rr1, cy + Math.sin(a + 0.02) * rr1);
+          mg.stroke();
+        }
+      }
+      grd = mg.createRadialGradient(cx, cy, 0, cx, cy, MS * 0.20);
+      grd.addColorStop(0, 'rgba(0,0,0,1)'); grd.addColorStop(0.7, 'rgba(10,4,2,0.9)'); grd.addColorStop(1, 'rgba(20,9,5,0)');
+      mg.fillStyle = grd; mg.beginPath(); mg.arc(cx, cy, MS * 0.20, 0, 7); mg.fill();
+      for (let b = 0; b < 100; b++) {
+        const a = (b / 100) * Math.PI * 2 + Math.random() * 0.02;
+        mg.strokeStyle = `rgba(196,138,86,${0.15 + Math.random() * 0.2})`;
+        mg.lineWidth = 1 + Math.random();
+        mg.beginPath();
+        mg.moveTo(cx + Math.cos(a) * MS * 0.46, cy + Math.sin(a) * MS * 0.46);
+        mg.lineTo(cx + Math.cos(a) * MS * (0.478 + Math.random() * 0.012), cy + Math.sin(a) * MS * (0.478 + Math.random() * 0.012));
+        mg.stroke();
+      }
+      /* one low sun on it: shade the lower-left so the face turns */
+      grd = mg.createLinearGradient(0, MS, MS * 0.7, MS * 0.2);
+      grd.addColorStop(0, 'rgba(8,3,2,0.42)'); grd.addColorStop(0.55, 'rgba(8,3,2,0)');
+      mg.fillStyle = grd; mg.beginPath(); mg.arc(cx, cy, MS * 0.5, 0, 7); mg.fill();
+      /* the body column's light, baked once (lighter up where the suns sit) */
+      const bg = g0.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, '#5f3018'); bg.addColorStop(0.5, '#43200f'); bg.addColorStop(1, '#2a1208');
+      /* warm dust bloom + one sand wisp, baked once */
+      const gs = 64, oc = document.createElement('canvas'); oc.width = oc.height = gs;
+      const og = oc.getContext('2d');
+      const gr2 = og.createRadialGradient(gs / 2, gs / 2, 0, gs / 2, gs / 2, gs / 2);
+      gr2.addColorStop(0, 'rgba(255,196,130,0.7)');
+      gr2.addColorStop(0.5, 'rgba(228,140,80,0.30)');
+      gr2.addColorStop(1, 'rgba(200,110,60,0)');
+      og.fillStyle = gr2; og.beginPath(); og.arc(gs / 2, gs / 2, gs / 2, 0, 7); og.fill();
+      const fc = document.createElement('canvas'); fc.width = 160; fc.height = 48;
+      const fg2 = fc.getContext('2d');
+      fg2.setTransform(1, 0, 0, 0.3, 0, 0);
+      const wgr = fg2.createRadialGradient(80, 80, 4, 80, 80, 78);
+      wgr.addColorStop(0, 'rgba(232,190,140,0.5)');
+      wgr.addColorStop(0.6, 'rgba(214,160,110,0.22)');
+      wgr.addColorStop(1, 'rgba(200,140,90,0)');
+      fg2.fillStyle = wgr; fg2.beginPath(); fg2.arc(80, 80, 78, 0, 7); fg2.fill();
+      /* wind-smoke off the crests: 6 wisps that respawn on high points */
+      const wisps = [];
+      for (let i = 0; i < 6; i++) wisps.push(duneWisp({ ri: 1 + (i % 2) }, ridges));
+      /* the caravan: three tiny figures walking the mid crest, west into the wind */
+      const walkers = [];
+      for (let i = 0; i < 3; i++) walkers.push({ x: W * (0.3 + i * 0.045 + Math.random() * 0.015), v: -(0.008 + Math.random() * 0.003) });
+      /* spice in the air: 16 pooled glints */
+      const glints = new Array(16);
+      for (let i = 0; i < glints.length; i++) glints[i] = { on: false, x: 0, y: 0, t0: 0, max: 1, r: 1 };
       const sand = new Array(78);
       for (let i = 0; i < sand.length; i++) sand[i] = {
-        x: Math.random() * s.w, y: rnd(H * 0.30, H * 0.86),
+        x: Math.random() * W, y: rnd(H * 0.30, H * 0.86),
         vx: -(0.18 + Math.random() * 0.16), len: 8 + Math.random() * 20, seed: rnd(0, 7),
       };
       const puffs = new Array(30);
       for (let i = 0; i < puffs.length; i++) puffs[i] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, r: 0 };
-      const worm = { on: false, t0: 0, dur: 6000, nSeg: 11, dir: 1, xA: 0, span: 560, baseY: 0, archH: 130, puffAcc: 0, bursted: false };
-      return { ridges, sand, puffs, worm, next: null };
+      /* the cascade: sand pouring off the risen body, 64 pooled streaks */
+      const casc = new Array(64);
+      for (let i = 0; i < casc.length; i++) casc[i] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1 };
+      const worm = { on: false, t0: 0, x: 0, headR: 0, topY: 0, floorY: 0, seed: 0, burst: false, cascAcc: 0 };
+      return { ridges, sand, puffs, casc, wisps, walkers, glints, worm,
+               maw: mo, bloom: oc, wispS: fc, bodyGrad: bg, next: null, glintAcc: 0 };
     },
     frame(s, st, dt, clock) {
       const g = s.g, W = s.w, H = s.h;
       g.clearRect(0, 0, W, H);
       if (st.next === null) st.next = clock + 9000 + Math.random() * 8000;
 
-      drawRidge(g, st.ridges[0], H, clock);
-      drawRidge(g, st.ridges[1], H, clock);
-
       const wm = st.worm;
-      if (!wm.on && clock >= st.next) {
-        const fr = st.ridges[2];
-        const bx = W * (0.28 + Math.random() * 0.44);
-        const idx = Math.min(fr.xs.length - 1, Math.max(0, Math.round((bx - fr.x0) / fr.step)));
-        wm.on = true; wm.t0 = clock; wm.dur = 6000;
-        wm.nSeg = 9 + (Math.random() * 5 | 0);
-        wm.dir = Math.random() < 0.5 ? 1 : -1;
-        wm.span = 460 + Math.random() * 220;
-        wm.xA = bx - wm.dir * wm.span * 0.5;
-        wm.baseY = fr.ys[idx] + 54;
-        wm.archH = 122 + Math.random() * 46;
-        wm.puffAcc = 0; wm.bursted = false;
-      }
+      if (!wm.on && clock >= st.next)
+        duneRise(s, st, clock, W * (0.25 + Math.random() * 0.5));
+
+      /* emergence envelope + the ground answering it */
+      let u = 0, tW = 0;
       if (wm.on) {
-        const p = (clock - wm.t0) / wm.dur;
-        if (p >= 1) {
-          wm.on = false;
-          st.next = clock + 26000 + Math.random() * 18000;
-        } else {
-          g.fillStyle = 'rgba(11,6,19,0.96)';
-          for (let k = wm.nSeg - 1; k >= 0; k--) {
-            const sk = p - k * 0.045;
-            if (sk < 0 || sk > 1) continue;
-            const x = wm.xA + wm.dir * wm.span * sk;
-            const y = wm.baseY - wm.archH * Math.sin(Math.PI * sk);
-            const rr = 10 + 20 * (1 - k / wm.nSeg);
-            g.beginPath(); g.arc(x, y, rr, 0, 7); g.fill();
+        tW = clock - wm.t0;
+        if (tW >= DW_TOTAL) { wm.on = false; st.next = clock + 26000 + Math.random() * 18000; }
+        else if (tW < DW_RISE) { const k = tW / DW_RISE; u = 1 - Math.pow(1 - k, 3); }
+        else if (tW < DW_RISE + DW_HOLD) u = 1;
+        else { const k = (tW - DW_RISE - DW_HOLD) / DW_SINK; u = 1 - k * k; }
+      }
+      const rumble = wm.on ? u * (tW < DW_RISE ? 1 : tW < DW_RISE + DW_HOLD ? 0.45 : 0.25) : 0;
+      g.save();
+      if (rumble > 0.02) g.translate(Math.sin(clock * 0.11) * 2.4 * rumble, Math.cos(clock * 0.13) * 1.7 * rumble);
+
+      const gust = 0.55 + 0.45 * Math.sin(clock * 0.00028);
+
+      drawDune(g, st.ridges[0], H, clock);
+      duneWisps(g, st, 0, dt, clock, gust, W);
+      drawDune(g, st.ridges[1], H, clock);
+      duneWisps(g, st, 1, dt, clock, gust, W);
+
+      /* the caravan pauses when the ground speaks */
+      g.fillStyle = 'rgba(16,9,14,0.88)';
+      const r1 = st.ridges[1], d1 = r1.driftA * Math.sin(clock * r1.driftS + r1.phase);
+      for (const wk of st.walkers) {
+        if (!wm.on) { wk.x += wk.v * dt; if (wk.x < -20) wk.x = W + 20; }
+        const fi = Math.min(r1.xs.length - 2, Math.max(0, (wk.x - r1.x0) / r1.step));
+        const i0 = fi | 0, ft = fi - i0;
+        const wy = r1.ys[i0] + (r1.ys[i0 + 1] - r1.ys[i0]) * ft;
+        g.fillRect(wk.x + d1 - 1, wy - 5.4, 2, 4.6);
+        g.beginPath(); g.arc(wk.x + d1, wy - 6.2, 1, 0, 7); g.fill();
+      }
+
+      if (wm.on && u > 0.01) {
+        const R = wm.headR;
+        const hx = wm.x + Math.sin(clock * 0.0009 + wm.seed) * 10 * u;
+        const hy = wm.floorY - (wm.floorY - wm.topY) * u;
+        if (!wm.burst && u > 0.06) { wm.burst = true; for (let b = 0; b < 12; b++) spawnPuff(st, wm.x, wm.floorY - 20, 2.2); }
+        /* the backlit dust the colossus hauls up with it */
+        const bw = R * 8;
+        g.globalAlpha = (0.45 + 0.10 * Math.sin(clock * 0.004)) * u;
+        g.drawImage(st.bloom, hx - bw / 2, hy - bw * 0.34, bw, bw);
+        g.globalAlpha = 0.55 * u;
+        g.drawImage(st.bloom, hx - R * 8, wm.floorY - R * 2.2, R * 16, R * 4.4);
+        g.globalAlpha = 1;
+        /* the body: a tower with ring segments, leaning with its own sway */
+        g.fillStyle = st.bodyGrad;
+        g.beginPath();
+        g.moveTo(hx - R * 1.02, wm.floorY + 40);
+        g.quadraticCurveTo(hx - R * 1.14, hy + R * 0.35, hx - R * 0.80, hy - R * 0.05);
+        g.lineTo(hx + R * 0.80, hy - R * 0.05);
+        g.quadraticCurveTo(hx + R * 1.14, hy + R * 0.35, hx + R * 1.02, wm.floorY + 40);
+        g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(18,8,4,0.4)'; g.lineWidth = 2;
+        for (let yy = hy + R * 1.05; yy < wm.floorY; yy += R * 0.46) {
+          const tt2 = (yy - hy) / Math.max(1, wm.floorY - hy);
+          g.beginPath(); g.ellipse(hx, yy, R * (0.82 + 0.2 * tt2), R * 0.13, 0, 0, Math.PI); g.stroke();
+        }
+        g.strokeStyle = 'rgba(255,176,96,0.10)'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(hx - R * 0.98, hy + R * 0.6); g.quadraticCurveTo(hx - R * 1.06, (hy + wm.floorY) / 2, hx - R * 1.0, wm.floorY); g.stroke();
+        /* the maw, face-on, breathing a slow tilt */
+        const lean = Math.sin(clock * 0.0011 + wm.seed) * 0.07 * u;
+        g.save(); g.translate(hx, hy); g.rotate(lean);
+        g.drawImage(st.maw, -R, -R, R * 2, R * 2);
+        g.restore();
+        /* sand pouring off the risen body */
+        if (tW < DW_RISE + DW_HOLD && u > 0.15) {
+          wm.cascAcc += dt;
+          while (wm.cascAcc > 40) {
+            wm.cascAcc -= 40;
+            for (let n2 = 0; n2 < 3; n2++) {
+              let c = null; for (const q of st.casc) if (!q.on) { c = q; break; }
+              if (!c) break;
+              const side = Math.random() < 0.5 ? -1 : 1, off = 0.35 + Math.random() * 0.62;
+              c.on = true;
+              c.x = hx + side * R * off;
+              c.y = hy + R * Math.sqrt(Math.max(0, 1 - off * off)) * 0.9;
+              c.vx = side * (0.01 + Math.random() * 0.02); c.vy = 0.10 + Math.random() * 0.10;
+              c.life = 0; c.max = 900 + Math.random() * 700;
+            }
           }
-          const hp = Math.min(p, 1);
-          const headX = wm.xA + wm.dir * wm.span * hp;
-          const headY = wm.baseY - wm.archH * Math.sin(Math.PI * hp);
-          if (!wm.bursted && p > 0.24) { wm.bursted = true; for (let b = 0; b < 10; b++) spawnPuff(st, headX, headY, 1.4); }
-          wm.puffAcc += dt;
-          if (wm.puffAcc > 95 && p > 0.15 && p < 0.9) { wm.puffAcc = 0; spawnPuff(st, headX, headY, 1.0); }
         }
       }
+      g.fillStyle = 'rgba(226,172,112,0.5)';
+      for (const c of st.casc) {
+        if (!c.on) continue;
+        c.life += dt; const k = c.life / c.max;
+        c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 0.00022 * dt;
+        if (k >= 1 || c.y > wm.floorY + 30) { c.on = false; continue; }
+        g.globalAlpha = 0.7 * (1 - k);
+        g.fillRect(c.x, c.y, 1.6, 6 + 5 * k);
+      }
+      g.globalAlpha = 1;
 
-      drawRidge(g, st.ridges[2], H, clock);            /* front dune occludes the submerged body */
+      drawDune(g, st.ridges[2], H, clock);          /* the front dune keeps the base submerged */
+      duneWisps(g, st, 2, dt, clock, gust, W);
 
       for (const pf of st.puffs) {
         if (!pf.on) continue;
@@ -140,7 +326,33 @@ const WorldFX = (() => {
         g.beginPath(); g.arc(pf.x, pf.y, pf.r * (0.6 + k * 1.6), 0, 7); g.fill();
       }
 
-      const gust = 0.55 + 0.45 * Math.sin(clock * 0.00028);
+      /* spice on the wind: brief gold glints, thicker while the worm is up */
+      st.glintAcc += dt;
+      const glintGap = wm.on ? 120 : 320;
+      if (st.glintAcc > glintGap) {
+        st.glintAcc = 0;
+        for (const q of st.glints) if (!q.on) {
+          q.on = true; q.t0 = clock; q.max = 700 + Math.random() * 900;
+          q.r = 0.7 + Math.random() * 0.9;
+          if (wm.on && Math.random() < 0.6) {
+            q.x = wm.x + (Math.random() - 0.5) * wm.headR * 5;
+            q.y = wm.topY + Math.random() * (wm.floorY - wm.topY);
+          } else {
+            q.x = Math.random() * W; q.y = H * (0.12 + Math.random() * 0.55);
+          }
+          break;
+        }
+      }
+      g.fillStyle = 'rgba(255,216,140,1)';
+      for (const q of st.glints) {
+        if (!q.on) continue;
+        const k = (clock - q.t0) / q.max;
+        if (k >= 1) { q.on = false; continue; }
+        g.globalAlpha = Math.sin(Math.PI * k) * 0.8;
+        g.fillRect(q.x, q.y, q.r, q.r);
+      }
+      g.globalAlpha = 1;
+
       g.strokeStyle = `rgba(255,209,150,${0.05 + 0.09 * gust})`;
       g.lineWidth = 1; g.beginPath();
       for (const q of st.sand) {
@@ -150,15 +362,95 @@ const WorldFX = (() => {
         g.moveTo(q.x, q.y); g.lineTo(q.x + q.len * (0.6 + gust), q.y + 0.6);
       }
       g.stroke();
+      g.restore();
+    },
+    /* M4 verb: strike the sand and the colossus rises where you struck */
+    verb(s, st, x, y, clock) {
+      if (st.worm.on) return;                       /* one worm; the desert sets the pace */
+      duneRise(s, st, clock, x);
+      verbEvent('worm');
     },
   };
-  function drawRidge(g, r, H, clock) {
+  function duneRise(s, st, clock, bx) {
+    const wm = st.worm, fr = st.ridges[2], W = s.w, H = s.h;
+    wm.on = true; wm.t0 = clock; wm.seed = Math.random() * 7;
+    wm.headR = Math.min(W * 0.13, 150) * (0.9 + Math.random() * 0.25);
+    wm.x = Math.max(wm.headR * 1.2, Math.min(W - wm.headR * 1.2, bx));
+    const idx = Math.min(fr.xs.length - 1, Math.max(0, Math.round((wm.x - fr.x0) / fr.step)));
+    wm.floorY = fr.ys[idx] + 40;                    /* it clears the front dune, base still hidden */
+    /* the tower stays in proportion to its own head on every screen */
+    wm.topY = Math.max(H * 0.20 + Math.random() * H * 0.05, wm.floorY - wm.headR * 4.8);
+    wm.burst = false; wm.cascAcc = 0;
+  }
+  /* one dune: gradient body, indigo lee bands, then the lit crest razor */
+  function drawDune(g, r, H, clock) {
     const d = r.driftA * Math.sin(clock * r.driftS + r.phase);
     const xs = r.xs, ys = r.ys, n = xs.length;
-    g.fillStyle = r.fill;
+    g.fillStyle = r.grad;
     g.beginPath(); g.moveTo(xs[0] + d, H + 2);
     for (let i = 0; i < n; i++) g.lineTo(xs[i] + d, ys[i]);
     g.lineTo(xs[n - 1] + d, H + 2); g.closePath(); g.fill();
+    g.save(); g.translate(d, 0);
+    g.fillStyle = r.leeFill; g.fill(r.lee);
+    g.strokeStyle = r.crest; g.lineWidth = 1.6; g.lineJoin = 'round';
+    g.stroke(r.lit);
+    g.restore();
+  }
+  /* crest runs split by slope: ascending faces catch the suns (polylines),
+     descending faces fall into shadow (bands). Built once per ridge. */
+  function dunePaths(r, side) {
+    const xs = r.xs, ys = r.ys, n = xs.length;
+    const p = new Path2D();
+    const depth = r.amp * 1.1;
+    let i = 0;
+    while (i < n - 1) {
+      const asc = ys[i + 1] < ys[i];
+      if ((side < 0) !== asc) { i++; continue; }
+      let j = i;
+      while (j < n - 1 && ((ys[j + 1] < ys[j]) === asc)) j++;
+      if (side > 0 && j - i < 2) { i = j; continue; }   /* one-segment runs make spikes, not shade */
+      p.moveTo(xs[i], ys[i]);
+      for (let k = i + 1; k <= j; k++) p.lineTo(xs[k], ys[k]);
+      if (side > 0) {
+        /* a wedge, not a slab: the shade swells mid-slope and pinches out
+           at both ends so it reads as the dune's own lee face */
+        const len = j - i;
+        for (let k = j; k >= i; k--) {
+          const tt = len ? (k - i) / len : 0;
+          p.lineTo(xs[k], ys[k] + depth * Math.pow(Math.sin(Math.PI * tt), 0.7));
+        }
+        p.closePath();
+      }
+      i = j;
+    }
+    return p;
+  }
+  function duneWisp(w, ridges) {
+    const r = ridges[w.ri];
+    /* respawn on a high crest point: sample a few, keep the highest */
+    let gi = (Math.random() * r.xs.length) | 0;
+    for (let t = 0; t < 4; t++) { const c = (Math.random() * r.xs.length) | 0; if (r.ys[c] < r.ys[gi]) gi = c; }
+    w.x = r.xs[gi]; w.y = r.ys[gi] - 2;
+    w.w = 90 + Math.random() * 130;
+    w.a = 0.10 + Math.random() * 0.08;
+    w.v = -(0.012 + Math.random() * 0.014);
+    w.life = 0; w.max = 3600 + Math.random() * 2800;
+    w.seed = Math.random() * 7;
+    return w;
+  }
+  function duneWisps(g, st, band, dt, clock, gust, W) {
+    for (const w of st.wisps) {
+      if (w.ri !== band) continue;
+      w.life += dt;
+      const k = w.life / w.max;
+      if (k >= 1 || w.x < -w.w) { duneWisp(w, st.ridges); continue; }
+      w.x += w.v * (0.5 + gust) * dt;
+      w.y -= 0.004 * dt;
+      const mh = w.w * 0.3;
+      g.globalAlpha = w.a * Math.sin(Math.PI * Math.min(1, k)) * (0.7 + 0.3 * gust);
+      g.drawImage(st.wispS, w.x - w.w / 2, w.y - mh / 2, w.w, mh);
+    }
+    g.globalAlpha = 1;
   }
   function spawnPuff(st, x, y, scale) {
     for (const pf of st.puffs) {
@@ -213,14 +505,14 @@ const WorldFX = (() => {
       hx: path.px[0], hy: path.py[0],
     };
   }
-  function vDrawTrail(g, r) {
+  function vDrawTrail(g, r, hot) {
     if (r.tn < 2) return;
     const start = (r.thead - r.tn + 1 + V_CAP * 2) % V_CAP, BANDS = 6;
-    g.lineWidth = 2.4; g.lineJoin = 'round'; g.lineCap = 'round';
+    g.lineWidth = hot ? 3.4 : 2.4; g.lineJoin = 'round'; g.lineCap = 'round';
     for (let b = 0; b < BANDS; b++) {
       const k0 = Math.floor(b * (r.tn - 1) / BANDS), k1 = Math.floor((b + 1) * (r.tn - 1) / BANDS);
       if (k1 <= k0) continue;
-      g.strokeStyle = `rgba(${r.col},${0.85 * Math.pow((b + 1) / BANDS, 1.5)})`;
+      g.strokeStyle = `rgba(${r.col},${(hot ? 1 : 0.85) * Math.pow((b + 1) / BANDS, 1.5)})`;
       g.beginPath();
       let pen = false;
       for (let k = k0; k <= k1; k++) {
@@ -242,6 +534,7 @@ const WorldFX = (() => {
         ],
         pulse: { on: false, x: 0, t0: 0 },
         pulseNext: 4000 + Math.random() * 4000,
+        boostUntil: 0, lastBoost: -9e9,
       };
     },
     frame(s, st, dt, clock) {
@@ -269,9 +562,10 @@ const WorldFX = (() => {
         }
       }
 
+      const hot = clock < st.boostUntil;               /* M4: throttle open */
       for (let ri = 0; ri < st.riders.length; ri++) {
         const r = st.riders[ri], pa = r.path;
-        let rem = r.speed * dt;
+        let rem = r.speed * (hot ? 2 : 1) * dt;
         while (rem > 0) {
           const need = pa.seg[r.si] * (1 - r.p);
           if (rem >= need) {
@@ -291,10 +585,10 @@ const WorldFX = (() => {
           r.brkNext = 0;
           if (r.tn < V_CAP) r.tn++;
         }
-        vDrawTrail(g, r);
+        vDrawTrail(g, r, hot);
       }
 
-      g.shadowBlur = 12;
+      g.shadowBlur = hot ? 20 : 12;
       for (let ri = 0; ri < st.riders.length; ri++) {
         const r = st.riders[ri];
         g.shadowColor = `rgba(${r.col},0.9)`;
@@ -312,6 +606,13 @@ const WorldFX = (() => {
       skyline && skyline.querySelectorAll('.bar').forEach((b, i) => {
         b.style.setProperty('--h', (0.3 + ((i * 37) % 50) / 100).toFixed(2));
       });
+    },
+    /* M4 verb: open the throttle — both riders double for ~800ms, trails burn hotter */
+    verb(s, st, x, y, clock) {
+      if (clock - st.lastBoost < 250) return;       /* one event per press, not per jitter */
+      st.lastBoost = clock;
+      st.boostUntil = clock + 800;
+      verbEvent('boost');
     },
   };
 
@@ -378,6 +679,16 @@ const WorldFX = (() => {
       g.fillStyle = G_TRACE;
       for (let i = 0; i < n; i++) { const c = C[i]; if (c.stepped && clock < c.traceUntil) g.fillText(c.ch, c.x, c.y); }
     },
+    /* M4 verb: tap a column and the white trace ignites THERE — the same
+       paint the auto-trace uses, so the two can never drift apart */
+    verb(s, st, x, y, clock) {
+      const C = st.C, g = s.g;
+      const c = C[Math.max(0, Math.min(C.length - 1, (x / (s.w / C.length)) | 0))];
+      c.traceUntil = clock + 520;
+      g.fillStyle = G_TRACE;
+      for (let yy = -st.rowH; yy < s.h + st.rowH; yy += st.rowH) g.fillText(GRID_GA[(Math.random() * GRID_N) | 0], c.x, yy);
+      verbEvent('trace');
+    },
   };
 
   /* ============================================================
@@ -411,7 +722,9 @@ const WorldFX = (() => {
         grad.addColorStop(1, 'rgba(191,255,233,0)');
         SHAFTS.push({ path, grad, phase: Math.random() * 7, rate: 1400 + Math.random() * 800 });
       }
-      return { J, SNOW, SHAFTS, levOn: false, levStart: 0, nextLev: -1, levDir: 1, levY: 0 };
+      const RINGS = [];                                  /* M4: 3 pooled sonar rings */
+      for (let i = 0; i < 3; i++) RINGS.push({ on: false, x: 0, y: 0, t0: 0 });
+      return { J, SNOW, SHAFTS, RINGS, levOn: false, levStart: 0, nextLev: -1, levDir: 1, levY: 0 };
     },
     frame(s, st, dt, clock) {
       const g = s.g;
@@ -474,8 +787,14 @@ const WorldFX = (() => {
       g.strokeStyle = 'rgba(143,123,255,0.55)';
       g.lineWidth = 1.1;
       for (const j of st.J) {
-        const c = 0.5 + 0.5 * Math.sin(clock / j.pp + j.seed);
-        const thrust = Math.max(0, Math.cos(clock / j.pp + j.seed));
+        /* the ping's wake: a decaying kick pulses the bell and bends the
+           drift toward where the hand called (M4) */
+        if (j.kick > 0.02) {
+          j.x += (j.kx - j.x) * Math.min(1, dt / 900) * j.kick * 0.5;
+          j.kick *= Math.pow(0.999, dt);
+        }
+        const c = Math.min(1, 0.5 + 0.5 * Math.sin(clock / j.pp + j.seed) + j.kick * 0.6);
+        const thrust = Math.max(0, Math.cos(clock / j.pp + j.seed)) + j.kick * 0.5;
         j.y -= j.v * dt * (0.55 + 0.9 * thrust);
         j.x += Math.sin(clock / 2400 + j.seed * 2) * 0.008 * dt;
         if (j.y < -j.r * 3.6) reJelly(s, j);
@@ -505,7 +824,33 @@ const WorldFX = (() => {
         g.arc(j.x, j.y + j.re * 0.08, j.re * 0.66, Math.PI * 1.12, Math.PI * 1.88);
         g.stroke();
       }
+
+      g.lineWidth = 1.6;                                  /* M4: the sonar rings ride on top */
+      g.strokeStyle = 'rgba(191,255,233,1)';
+      for (const q of st.RINGS) {
+        if (!q.on) continue;
+        const k = (clock - q.t0) / 1500;
+        if (k >= 1) { q.on = false; continue; }
+        const rr = 12 + 150 * k;
+        g.globalAlpha = 0.5 * (1 - k) * dim;
+        g.beginPath(); g.arc(q.x, q.y, rr, 0, 7); g.stroke();
+        g.globalAlpha = 0.25 * (1 - k) * dim;
+        g.beginPath(); g.arc(q.x, q.y, rr * 0.62, 0, 7); g.stroke();
+      }
       g.globalAlpha = 1;
+    },
+    /* M4 verb: one sonar ping — a ring blooms at the tap, the jellies pulse
+       and lean toward it, and once in a while the deep answers back */
+    verb(s, st, x, y, clock) {
+      let q = null, oldest = null;
+      for (const r of st.RINGS) {
+        if (!r.on) { q = r; break; }
+        if (!oldest || r.t0 < oldest.t0) oldest = r;
+      }
+      q = q || oldest;
+      q.on = true; q.x = x; q.y = y; q.t0 = clock;
+      for (const j of st.J) { j.kick = 1; j.kx = x; }
+      verbEvent('ping');
     },
   };
   function drawBell(g, j, dim) {
@@ -520,7 +865,7 @@ const WorldFX = (() => {
   function newJelly(s, scatter) {
     const r = 9 + Math.random() * 15;
     return {
-      r, re: r, c: 0,
+      r, re: r, c: 0, kick: 0, kx: 0,
       x: s.w * (0.08 + Math.random() * 0.84),
       y: scatter ? Math.random() * s.h : s.h + r * 3 + Math.random() * s.h * 0.2,
       v: 0.010 + Math.random() * 0.012,
@@ -534,6 +879,7 @@ const WorldFX = (() => {
     j.x = s.w * (0.08 + Math.random() * 0.84);
     j.y = s.h + j.r * 3 + Math.random() * s.h * 0.2;
     j.seed = Math.random() * 9;
+    j.kick = 0;                                     /* a fresh riser owes the old ping nothing */
   }
 
   /* ============================================================
@@ -603,8 +949,9 @@ const WorldFX = (() => {
         topStart: 128, resetY: Math.floor(h * 0.60 / 4) * 4, canMove: rightBound > leftBound,
         stepTick: -1, stars, inv,
         shipX: w / 2 - 16, shipTargetX: w / 2 - 16, shipY: Math.floor((h - 76) / 4) * 4,
-        shot: { active: false, x: 0, y: 0 }, shotTarget: -1, nextShot: -1,
+        shot: { active: false, x: 0, y: 0 }, nextShot: -1,
         expl: { active: false, x: 0, y: 0, start: 0 },
+        aimHold: -9e9, coolUntil: -9e9, playerShot: false,
       };
     },
     frame(s, st, dt, clock) {
@@ -630,34 +977,39 @@ const WorldFX = (() => {
 
       for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
 
+      /* the ship: chases the player's aim while a hand is on the stick;
+         only wanders on its own once the hand has been gone a while (M4) */
       const shipMin = 16, shipMax = w - SPR - 16;
       st.shipX += (st.shipTargetX - st.shipX) * (1 - Math.exp(-dt / 620));
-      if (Math.abs(st.shipTargetX - st.shipX) < 4)
+      if (Math.abs(st.shipTargetX - st.shipX) < 4 && clock - st.aimHold > 4000)
         st.shipTargetX = shipMin + Math.random() * (shipMax - shipMin);
 
+      /* attract mode: the cabinet plays itself only while nobody is at it */
       if (st.nextShot < 0) st.nextShot = clock + 3000 + Math.random() * 3000;
       if (clock > st.nextShot && !st.shot.active && !st.expl.active) {
-        let pick = -1, seen = 0;
-        for (let i = 0; i < st.N; i++) if (!st.inv[i].dead) { seen++; if (Math.random() < 1 / seen) pick = i; }
-        if (pick >= 0) {
-          st.shotTarget = pick; st.shot.active = true;
-          st.shot.x = Math.floor(st.shipX / 4) * 4 + 12;
-          st.shot.y = st.shipY - 8;
-        }
+        if (clock - st.aimHold > 6000) { st.playerShot = false; arcFire(st); }
         st.nextShot = clock + 8000 + Math.random() * 6000;
       }
 
+      /* the shot flies STRAIGHT (M4 killed the homing steer): a hit is a
+         hit against whichever live invader the shot actually crosses */
       if (st.shot.active) {
-        const ti = st.shotTarget, tIv = st.inv[ti];
-        st.shot.y -= 0.32 * dt;
-        const invCenterX = st.gx + ti * st.CELL + 16, invCenterY = st.gy + 16;
-        st.shot.x += (invCenterX - st.shot.x) * (1 - Math.exp(-dt / 500));
-        if (!tIv || tIv.dead) st.shot.active = false;
-        else if (st.shot.y <= invCenterY) {
-          st.expl.active = true; st.expl.x = invCenterX; st.expl.y = st.gy + 16; st.expl.start = clock;
-          tIv.dead = true; tIv.respawnAt = clock + 3000;
-          st.shot.active = false;
-        } else if (st.shot.y < 8) st.shot.active = false;
+        st.shot.y -= 0.38 * dt;
+        const rowY = st.gy + 16, sx = st.shot.x + 2;
+        if (st.shot.y <= rowY + 14 && st.shot.y > rowY - 14) {
+          for (let i = 0; i < st.N; i++) {
+            if (st.inv[i].dead) continue;
+            const cx = st.gx + i * st.CELL + 16;
+            if (Math.abs(sx - cx) < 18) {
+              st.expl.active = true; st.expl.x = cx; st.expl.y = rowY; st.expl.start = clock;
+              st.inv[i].dead = true; st.inv[i].respawnAt = clock + 3000;
+              st.shot.active = false;
+              if (st.playerShot) verbEvent('invader');
+              break;
+            }
+          }
+        }
+        if (st.shot.active && st.shot.y < 8) st.shot.active = false;
       }
 
       g.clearRect(0, 0, w, h);
@@ -681,6 +1033,20 @@ const WorldFX = (() => {
         else { g.fillStyle = '#ff4757'; const fr = EXPL[f]; for (let k = 0; k < fr.length; k++) g.fillRect(st.expl.x + fr[k][0] * 4, st.expl.y + fr[k][1] * 4, 4, 4); }
       }
     },
+    /* M4 verbs: the pointer is the stick, the tap is the fire button */
+    aim(s, st, x, y, clock) {
+      st.aimHold = clock;
+      st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
+    },
+    verb(s, st, x, y, clock) {
+      st.aimHold = clock;
+      st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
+      if (st.shot.active || clock < st.coolUntil) return;   /* 1 pooled shot, 600ms cooldown */
+      st.coolUntil = clock + 600;
+      st.playerShot = true;
+      arcFire(st);
+      verbEvent('shot');
+    },
     rm() {
       const c = document.querySelector('[data-canvas="arcadia"]');
       if (!c || !c.parentElement) return;
@@ -691,6 +1057,11 @@ const WorldFX = (() => {
       arcStatic(g, r.width, r.height);
     },
   };
+  function arcFire(st) {
+    st.shot.active = true;
+    st.shot.x = Math.floor(st.shipX / 4) * 4 + 12;
+    st.shot.y = st.shipY - 8;
+  }
 
   /* ============================================================
      AURORA: dancing lights over the frozen lattice (ribbons behind the crystal)
@@ -799,17 +1170,31 @@ const WorldFX = (() => {
   /* ============================================================
      UNCHARTED: the survey drafts where you look
      ============================================================ */
+  /* one painter serves the live frame AND the rm pose (a drifted copy is a
+     differently-styled world nobody notices): litAt(c, r) supplies the charge */
+  function draftPaint(g, cols, rows, litAt) {
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const v = litAt(c, r);
+      if (v <= 0.02) continue;
+      const x = c * 56, y = r * 56;
+      g.strokeStyle = `rgba(100,213,245,${v * 0.5})`;
+      g.lineWidth = 1;
+      g.strokeRect(x + 3, y + 3, 50, 50);
+      if (v > 0.65) {
+        g.strokeStyle = `rgba(100,213,245,${(v - 0.65) * 0.9})`;
+        g.beginPath();
+        g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
+        g.stroke();
+      }
+    }
+  }
   fx.draft = {
     init(s) {
       const cols = Math.ceil(s.w / 56), rows = Math.ceil(s.h / 56);
       const lit = new Float32Array(cols * rows);
       const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
-      const move = (e) => {
-        /* canvas-local coordinates: the grid math below indexes THIS surface,
-           so a scrolled or offset stage must not skew the survey off-cursor */
-        const r = s.c.getBoundingClientRect();
-        st.px = e.clientX - r.left; st.py = e.clientY - r.top;
-      };
+      st.litAt = (c, r) => st.lit[c + r * st.cols];     /* bound once: zero per-frame alloc */
+      const move = (e) => { st.px = e.clientX; st.py = e.clientY; };
       s.c.parentElement.parentElement.addEventListener('pointermove', move, { passive: true });
       st.cleanup = () => s.c.parentElement.parentElement.removeEventListener('pointermove', move);
       return st;
@@ -829,24 +1214,11 @@ const WorldFX = (() => {
         }
       }
       s.g.clearRect(0, 0, s.w, s.h);
-      for (let r = 0; r < st.rows; r++) for (let c = 0; c < st.cols; c++) {
-        const v = st.lit[c + r * st.cols];
-        if (v <= 0.02) continue;
-        const x = c * 56, y = r * 56;
-        s.g.strokeStyle = `rgba(100,213,245,${v * 0.5})`;
-        s.g.lineWidth = 1;
-        s.g.strokeRect(x + 3, y + 3, 50, 50);
-        if (v > 0.65) {
-          s.g.strokeStyle = `rgba(100,213,245,${(v - 0.65) * 0.9})`;
-          s.g.beginPath();
-          s.g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
-          s.g.stroke();
-        }
-      }
+      draftPaint(s.g, st.cols, st.rows, st.litAt);
     },
-    rm() {
-      /* the survey, held: a swath already drafted along a gentle diagonal —
-         the world stays deliberately unfinished, but never unstarted */
+    rm() {                                     /* designed static pose: a survey abandoned mid-draft —
+                                                  a diagonal swath of charted cells, densest where the
+                                                  pen last worked (archive idiom; was a blank canvas) */
       const c = document.querySelector('[data-canvas="draft"]');
       if (!c || !c.parentElement) return;
       const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -854,21 +1226,11 @@ const WorldFX = (() => {
       c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
       const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
       const cols = Math.ceil(r.width / 56), rows = Math.ceil(r.height / 56);
-      for (let ri = 0; ri < rows; ri++) for (let ci = 0; ci < cols; ci++) {
-        const d = Math.abs(ri / rows - (0.32 + (ci / cols) * 0.3));
-        const v = Math.max(0, 1 - d * 5.5) * (0.55 + 0.45 * Math.sin(ci * 3.1 + ri * 1.7));
-        if (v <= 0.08) continue;
-        const x = ci * 56, y = ri * 56;
-        g.strokeStyle = `rgba(100,213,245,${(v * 0.5).toFixed(3)})`;
-        g.lineWidth = 1;
-        g.strokeRect(x + 3, y + 3, 50, 50);
-        if (v > 0.65) {
-          g.strokeStyle = `rgba(100,213,245,${((v - 0.65) * 0.9).toFixed(3)})`;
-          g.beginPath();
-          g.arc(x + 28, y + 28, 12 + ((ci * 7 + ri * 13) % 9), 0.4, 2.6);
-          g.stroke();
-        }
-      }
+      g.clearRect(0, 0, r.width, r.height);
+      draftPaint(g, cols, rows, (ci, ri) => {
+        const u = ci / cols, w2 = ri / rows;
+        return Math.max(0, 1 - Math.abs(u + w2 - 1.1) * 2.4) * (0.35 + ((ci * 7 + ri * 13) % 5) * 0.16);
+      });
     },
   };
 
@@ -1351,6 +1713,9 @@ const WorldFX = (() => {
       if (dyLive) {                                    /* live arena: the next drill starts now */
         dySetForm(dyLive, (dyLive.form + 1) & 3);
         dyLive.nextForm = window.Orrery.ticker.clock + 8500;
+        const now = window.Orrery.ticker.clock;        /* the squads snap-acknowledge the order —
+                                                          the timer's automatic cycle never does this */
+        for (let i = 0; i < 21; i++) dyLive.L[i].flash = now + 400;
       } else if (window.Orrery.reduced()) {            /* rm: swap the held pose, one repaint, no motion */
         dyRmForm = (dyRmForm + 1) & 3;
         fx.drillyard.rm();
@@ -1377,7 +1742,7 @@ const WorldFX = (() => {
     const x = c.getContext('2d');
     const g = x.createRadialGradient(128, 128, 8, 128, 128, 128);
     g.addColorStop(0, 'rgba(226,236,255,0.85)');
-    g.addColorStop(0.3, 'rgba(185,169,255,0.42)');
+    g.addColorStop(0.3, 'rgba(201,182,255,0.42)');
     g.addColorStop(0.7, 'rgba(150,140,235,0.12)');
     g.addColorStop(1, 'rgba(150,140,235,0)');
     x.fillStyle = g; x.fillRect(0, 0, 256, 256);
@@ -1486,7 +1851,7 @@ const WorldFX = (() => {
           g.lineTo(tx, hY); g.lineTo(tx, -6);
           g.closePath(); g.fill();
           if (L === 0) {                               /* pale light rides the leading face */
-            g.strokeStyle = 'rgba(185,169,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
+            g.strokeStyle = 'rgba(201,182,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
             g.lineWidth = 2;
             g.beginPath();
             g.moveTo(E[0], -6);
@@ -1595,11 +1960,16 @@ const WorldFX = (() => {
 
   /* ============================================================
      THE BEACONS: alpine dusk range + a 7-pyre signal chain
-     caps: 5 precomputed ridges · embers 96 · smoke 26 · stars <=44 ·
-           1 prebaked glow sprite (no per-frame gradients)
+     caps: 5 precomputed ridges + snow Path2Ds · embers 96 · smoke 26 ·
+           ash 8 · stars <=90 · mist 18 · clouds 8 · 1 fell shadow ·
+           prebaked sprites: glow, moon, mist, cloud, eye
+           (no per-frame gradients)
      ============================================================ */
   const BCN_N = 7, BCN_STAGGER = 900, BCN_RISE = 260, BCN_HOLD = 3200,
-        BCN_SETTLE = 2600, BCN_GAP = 22000, BCN_EMBER = 0.14;
+        BCN_SETTLE = 2600, BCN_GAP = 45000, BCN_EMBER = 0.14,
+        BCN_RUN = (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;   /* one full signal run */
+  /* GAP 45s, not 22s (council ruling 10): manual kindling is the primary
+     path — idle spectacle must never preempt the player's version of it */
   let beaconTrigger = null;   /* the active FX sets this; the toy button calls it */
 
   function bcnRun(st, clock) { st.sig.on = true; st.sig.t0 = clock; for (let i = 0; i < BCN_N; i++) st.burst[i] = 0; }
@@ -1612,12 +1982,36 @@ const WorldFX = (() => {
       e.life = 0; e.max = 650 + Math.random() * 750; e.r = (0.7 + Math.random() * 1.3) * sc;
     }
   }
-  function bcnSmoke(st, x, y, sc) {
+  function bcnSmoke(st, x, y, sc, warm) {
     let m = null; for (const q of st.smoke) if (!q.on) { m = q; break; }
     if (!m) return;
     m.on = true; m.x = x + (Math.random() - 0.5) * 6 * sc; m.y = y - 4 * sc;
     m.vy = -(0.012 + Math.random() * 0.014); m.life = 0; m.max = 3200 + Math.random() * 2600;
     m.seed = Math.random() * 7; m.sway = 6 + Math.random() * 10; m.sc = sc;
+    m.warm = warm || 0;
+  }
+  /* snow caps as one Path2D per ridge: a band that hugs the crest wherever
+     the ridge climbs above its snowline, tapering out where it dips below.
+     Built once in init; drawn each frame under the ridge's own drift. */
+  function bcnSnowPath(r) {
+    const capY = r.baseY - r.amp * 0.62, depth = Math.max(3, r.amp * 0.10);
+    const xs = r.xs, ys = r.ys, n = xs.length;
+    const p = new Path2D();
+    let i = 0;
+    while (i < n) {
+      if (ys[i] >= capY) { i++; continue; }
+      let j = i;
+      while (j < n && ys[j] < capY) j++;
+      const x0 = i > 0 ? xs[i - 1] + (xs[i] - xs[i - 1]) * ((capY - ys[i - 1]) / (ys[i] - ys[i - 1])) : xs[0];
+      const x1 = j < n ? xs[j - 1] + (xs[j] - xs[j - 1]) * ((capY - ys[j - 1]) / (ys[j] - ys[j - 1])) : xs[n - 1];
+      p.moveTo(x0, capY);
+      for (let k = i; k < j; k++) p.lineTo(xs[k], ys[k]);
+      p.lineTo(x1, capY);
+      for (let k = j - 1; k >= i; k--) p.lineTo(xs[k], Math.min(capY, ys[k] + depth));
+      p.closePath();
+      i = j;
+    }
+    return p;
   }
   function bcnPyre(g, x, y, sc, it, clock, i) {
     const bw = 11 * sc, bh = 7 * sc;                    /* the dark wood stack (always drawn) */
@@ -1665,15 +2059,23 @@ const WorldFX = (() => {
           const env = 0.5 + 0.5 * Math.sin(x / wE + pE);     /* vary peak height across the range */
           ys[i] = baseY - amp * ridged * (0.45 + 0.7 * env);
         }
-        return { xs, ys, fill, driftA, driftS, phase: rnd(0, 7) };
+        return { xs, ys, fill, driftA, driftS, phase: rnd(0, 7), baseY, amp };
       }
+      /* Mordor dusk: ash-grey charcoal silhouettes under a stormlit rack */
       const ridges = [
-        ridge(H * 0.40, 54,  'rgba(42,58,100,1)', 8,  0.000026),   /* farthest, lightest dusk blue */
-        ridge(H * 0.50, 72,  'rgba(31,44,82,1)',  13, 0.000036),
-        ridge(H * 0.61, 92,  'rgba(21,32,64,1)',  19, 0.000048),
-        ridge(H * 0.73, 112, 'rgba(13,22,46,1)',  26, 0.000060),
-        ridge(H * 0.85, 130, 'rgba(8,14,32,1)',   34, 0.000072),   /* nearest apron (no pyres) */
+        ridge(H * 0.40, 54,  'rgba(62,50,72,1)', 8,  0.000026),    /* farthest, stormlight grey */
+        ridge(H * 0.50, 72,  'rgba(46,37,56,1)', 13, 0.000036),
+        ridge(H * 0.61, 92,  'rgba(32,26,42,1)', 19, 0.000048),
+        ridge(H * 0.73, 112, 'rgba(19,16,28,1)', 26, 0.000060),
+        ridge(H * 0.85, 130, 'rgba(9,8,15,1)',   34, 0.000072),    /* nearest apron (no pyres) */
       ];
+      /* snow caps gone cold under the storm; the far ones keep one ember kiss */
+      const SNOWC = ['rgba(192,162,168,0.68)', 'rgba(160,142,162,0.58)',
+                     'rgba(122,110,138,0.52)', 'rgba(86,80,108,0.45)', 'rgba(56,54,78,0.40)'];
+      for (let k = 0; k < ridges.length; k++) {
+        ridges[k].snow = bcnSnowPath(ridges[k]);
+        ridges[k].snowFill = SNOWC[k];
+      }
       const defs = [[0.09, 1], [0.22, 3], [0.35, 2], [0.50, 3], [0.64, 2], [0.78, 3], [0.91, 1]];
       const pyres = defs.map(([xf, r]) => {                        /* left->right = the chain order */
         const gi = Math.max(0, Math.min(Nr - 1, Math.round((xf * W - x0) / STEP)));
@@ -1689,30 +2091,195 @@ const WorldFX = (() => {
       const embers = new Array(96);
       for (let i = 0; i < embers.length; i++) embers[i] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, r: 1 };
       const smoke = new Array(26);
-      for (let i = 0; i < smoke.length; i++) smoke[i] = { on: false, x: 0, y: 0, vy: 0, life: 0, max: 1, seed: 0, sway: 0, sc: 1 };
-      const stars = [], sn = Math.round(Math.min(44, W / 26));
-      for (let i = 0; i < sn; i++) stars.push({ x: rnd(0, W), y: rnd(H * 0.04, H * 0.42), r: rnd(0.6, 1.6), tw: rnd(0, 7) });
+      for (let i = 0; i < smoke.length; i++) smoke[i] = { on: false, x: 0, y: 0, vy: 0, life: 0, max: 1, seed: 0, sway: 0, sc: 1, warm: 0 };
+      const stars = [], sn = Math.round(Math.min(90, W / 13));
+      for (let i = 0; i < sn; i++) stars.push({ x: rnd(0, W), y: rnd(H * 0.02, H * 0.40), r: rnd(0.5, 1.8), tw: rnd(0, 7) });
+      /* the moon, baked once: halo + disc + a few maria */
+      const mn = 112, mc = document.createElement('canvas'); mc.width = mc.height = mn;
+      const mg = mc.getContext('2d');
+      let mgr = mg.createRadialGradient(56, 56, 10, 56, 56, 56);
+      mgr.addColorStop(0, 'rgba(210,220,255,0.30)');
+      mgr.addColorStop(0.5, 'rgba(190,200,250,0.10)');
+      mgr.addColorStop(1, 'rgba(190,200,250,0)');
+      mg.fillStyle = mgr; mg.fillRect(0, 0, mn, mn);
+      mgr = mg.createRadialGradient(50, 50, 4, 56, 56, 22);
+      mgr.addColorStop(0, 'rgba(240,244,255,1)');
+      mgr.addColorStop(0.8, 'rgba(206,214,242,1)');
+      mgr.addColorStop(1, 'rgba(178,188,226,1)');
+      mg.fillStyle = mgr; mg.beginPath(); mg.arc(56, 56, 22, 0, 7); mg.fill();
+      mg.fillStyle = 'rgba(150,160,205,0.5)';
+      mg.beginPath(); mg.arc(50, 52, 6.5, 0, 7); mg.fill();
+      mg.beginPath(); mg.arc(62, 62, 4.5, 0, 7); mg.fill();
+      mg.beginPath(); mg.arc(58, 45, 3, 0, 7); mg.fill();
+      /* one soft mist blob, baked once; the valley sea is many of these */
+      const fc = document.createElement('canvas'); fc.width = 160; fc.height = 48;
+      const fg = fc.getContext('2d');
+      fg.setTransform(1, 0, 0, 0.3, 0, 0);
+      const fgr = fg.createRadialGradient(80, 80, 4, 80, 80, 78);
+      fgr.addColorStop(0, 'rgba(168,160,205,0.5)');
+      fgr.addColorStop(0.55, 'rgba(150,142,190,0.24)');
+      fgr.addColorStop(1, 'rgba(140,132,180,0)');
+      fg.fillStyle = fgr; fg.beginPath(); fg.arc(80, 80, 78, 0, 7); fg.fill();
+      const mist = [];
+      for (let k = 0; k < ridges.length - 1; k++) {
+        const y0 = ridges[k].baseY, y1 = ridges[k + 1].baseY;
+        const nM = k === ridges.length - 2 ? 6 : 4;      /* the near valley holds the cloud-sea */
+        for (let i = 0; i < nM; i++) mist.push({
+          band: k, x: Math.random() * W,
+          y: y0 + (y1 - y0) * rnd(0.10, 0.42),
+          w: rnd(180, 420) * (1 + k * 0.18),
+          a: (0.16 + 0.05 * k) * rnd(0.7, 1.3),
+          v: rnd(0.006, 0.016) * (Math.random() < 0.5 ? -1 : 1),
+          seed: rnd(0, 7),
+        });
+      }
+      /* THE LOTR RETHEME (the owner's pin brief): storm clouds the fires
+         underlight, Mount Doom smoldering in the west, two river-kings in
+         the mist gorge, a fell shadow across the moon — and past the last
+         ridge, the black tower. The oldest fire on the range does not need
+         lighting: when the 7th pyre catches, the Eye opens. */
+      /* one dark storm cloud, baked once */
+      const cc = document.createElement('canvas'); cc.width = 200; cc.height = 64;
+      const cg = cc.getContext('2d');
+      cg.setTransform(1, 0, 0, 0.32, 0, 0);
+      const cgr = cg.createRadialGradient(100, 100, 6, 100, 100, 96);
+      cgr.addColorStop(0, 'rgba(15,12,20,0.85)');
+      cgr.addColorStop(0.6, 'rgba(17,14,24,0.5)');
+      cgr.addColorStop(1, 'rgba(19,15,26,0)');
+      cg.fillStyle = cgr; cg.beginPath(); cg.arc(100, 100, 96, 0, 7); cg.fill();
+      const clouds = [];
+      for (let i = 0; i < 8; i++) clouds.push({
+        x: Math.random() * W, y: H * rnd(0.03, 0.26),
+        w: rnd(280, 640), v: rnd(0.004, 0.011) * (Math.random() < 0.7 ? 1 : -1),
+        a: rnd(0.5, 0.95), seed: rnd(0, 7),
+      });
+      /* the Eye, baked once as a flame ring (its slit roves live, per frame) */
+      const ec = document.createElement('canvas'); ec.width = ec.height = 96;
+      const eg = ec.getContext('2d');
+      const egr = eg.createRadialGradient(48, 48, 6, 48, 48, 48);
+      egr.addColorStop(0, 'rgba(255,238,180,0.9)');
+      egr.addColorStop(0.34, 'rgba(255,170,60,0.95)');
+      egr.addColorStop(0.62, 'rgba(214,80,20,0.5)');
+      egr.addColorStop(1, 'rgba(160,40,10,0)');
+      eg.fillStyle = egr;
+      eg.save(); eg.translate(48, 48); eg.scale(1, 0.62);
+      eg.beginPath(); eg.arc(0, 0, 46, 0, 7); eg.restore(); eg.fill();
+      /* the black tower, one Path2D: jagged taper up into two crown horns */
+      const gA = Math.max(0, Math.min(Nr - 1, Math.round((W * 0.885 - x0) / STEP)));
+      const towX = W * 0.885, towBase = Math.min(ridges[0].ys[gA], ridges[1].ys[gA]) + 26;
+      const eyeY = H * 0.145, tw2 = Math.max(18, Math.min(30, W * 0.024));
+      const th = towBase - (eyeY + tw2 * 0.45);
+      const tower = new Path2D();
+      tower.moveTo(towX - tw2 * 1.8, towBase);
+      tower.lineTo(towX - tw2 * 1.0, towBase - th * 0.30);
+      tower.lineTo(towX - tw2 * 1.25, towBase - th * 0.34);
+      tower.lineTo(towX - tw2 * 0.7, towBase - th * 0.62);
+      tower.lineTo(towX - tw2 * 0.85, towBase - th * 0.66);
+      tower.lineTo(towX - tw2 * 0.62, eyeY + tw2 * 0.5);
+      tower.lineTo(towX - tw2 * 0.85, eyeY - tw2 * 0.5);
+      tower.lineTo(towX - tw2 * 0.45, eyeY - tw2 * 1.35);
+      tower.lineTo(towX - tw2 * 0.28, eyeY + tw2 * 0.15);
+      tower.lineTo(towX - tw2 * 0.16, eyeY + tw2 * 0.45);
+      tower.lineTo(towX + tw2 * 0.16, eyeY + tw2 * 0.45);
+      tower.lineTo(towX + tw2 * 0.28, eyeY + tw2 * 0.15);
+      tower.lineTo(towX + tw2 * 0.45, eyeY - tw2 * 1.35);
+      tower.lineTo(towX + tw2 * 0.85, eyeY - tw2 * 0.5);
+      tower.lineTo(towX + tw2 * 0.62, eyeY + tw2 * 0.5);
+      tower.lineTo(towX + tw2 * 0.85, towBase - th * 0.66);
+      tower.lineTo(towX + tw2 * 0.7, towBase - th * 0.62);
+      tower.lineTo(towX + tw2 * 1.25, towBase - th * 0.34);
+      tower.lineTo(towX + tw2 * 1.0, towBase - th * 0.30);
+      tower.lineTo(towX + tw2 * 1.8, towBase);
+      tower.closePath();
+      /* Mount Doom in the west + its lava threads */
+      const doomX = W * 0.135, doomY = H * 0.265, doomW = W * 0.16;
+      const doom = new Path2D();
+      doom.moveTo(doomX - doomW, H * 0.44);
+      doom.lineTo(doomX - doomW * 0.16, doomY);
+      doom.lineTo(doomX - doomW * 0.05, doomY + 6);
+      doom.lineTo(doomX + doomW * 0.07, doomY + 2);
+      doom.lineTo(doomX + doomW * 0.18, doomY + 10);
+      doom.lineTo(doomX + doomW, H * 0.44);
+      doom.closePath();
+      const lava = new Path2D();
+      lava.moveTo(doomX - doomW * 0.04, doomY + 6);
+      lava.quadraticCurveTo(doomX - doomW * 0.07, doomY + 34, doomX - doomW * 0.10, H * 0.40 - 10);
+      lava.moveTo(doomX + doomW * 0.05, doomY + 4);
+      lava.quadraticCurveTo(doomX + doomW * 0.10, doomY + 36, doomX + doomW * 0.14, H * 0.40 - 6);
+      const ashes = new Array(8);
+      for (let i = 0; i < ashes.length; i++) ashes[i] = { on: false, x: 0, y: 0, vy: 0, life: 0, max: 1, sc: 1, seed: 0 };
+      /* the river-kings: two colossi flanking the gorge in mist band 1 */
+      function king(bx, by, sc, m) {
+        /* an A-line robe, one slim arm held out, a neck notch, a crown:
+           enough grammar to read as a figure at 100px in the mist */
+        const p = new Path2D();
+        const X = (x) => bx + x * sc * m, Y = (y) => by - y * sc;
+        p.moveTo(X(-14), Y(0));
+        p.lineTo(X(-9), Y(14));                                  /* robe hem tapers up */
+        p.lineTo(X(-9), Y(40));
+        p.lineTo(X(-20), Y(40)); p.lineTo(X(-20), Y(44.5));      /* the slim out-held arm */
+        p.lineTo(X(-8), Y(44));
+        p.lineTo(X(-7), Y(50));                                  /* shoulder */
+        p.lineTo(X(-3.5), Y(53));                                /* neck */
+        p.lineTo(X(-4.5), Y(58));
+        p.lineTo(X(-5), Y(63)); p.lineTo(X(-2), Y(59));          /* crown spikes */
+        p.lineTo(X(0), Y(64)); p.lineTo(X(2), Y(59)); p.lineTo(X(5), Y(63));
+        p.lineTo(X(4.5), Y(58)); p.lineTo(X(3.5), Y(53));
+        p.lineTo(X(7), Y(50));                                   /* far shoulder */
+        p.lineTo(X(9), Y(38));
+        p.lineTo(X(9), Y(14)); p.lineTo(X(14), Y(0));
+        p.closePath();
+        return p;
+      }
+      const kSc = H * 0.0028 * Math.min(1, W / 640);   /* portrait phones: smaller kings, same gorge */
+      const kingL = king(W * 0.45, H * 0.575, kSc, -1);
+      const kingR = king(W * 0.578, H * 0.595, kSc * 0.92, 1);   /* staggered: brothers, not gateposts */
       const st = {
-        ridges, pyres, glow: oc, embers, smoke, stars,
+        ridges, pyres, glow: oc, embers, smoke, stars, moon: mc, mistS: fc, mist,
+        moonX: W * 0.20, moonY: H * 0.15,
+        clouds, cloudS: cc, eyeS: ec, tower, tw2, eyeX: towX, eyeY,
+        doom, lava, doomX, doomY, ashes, ashAcc: 0,
+        kingL, kingR, fell: { on: false, next: 0, t0: 0, dir: 1, sp: 0.09, y0: 0, ph: 0 },
+        fire: 0.1,
+        ans: 0,
         inten: new Float32Array(BCN_N), rdrift: new Float32Array(ridges.length),
         sig: { on: false, t0: 0 }, burst: new Uint8Array(BCN_N),
-        next: null, trigger: false, lastEnd: -99999, calm: 1,
+        next: null, lastEnd: -99999, calm: 1, btnOn: false,
         emberAcc: 0, smokeAcc: 0, gust: 0, gustNext: 0,
       };
-      st.cleanup = () => { beaconTrigger = null; };               /* Smaug kill 7: drop the toy hook */
-      beaconTrigger = () => { st.trigger = true; };
+      st.cleanup = () => {                                        /* Smaug kill 7: drop the toy hook */
+        beaconTrigger = null;
+        if (beaconToy) { beaconToy.classList.remove('is-running'); beaconToy.removeAttribute('aria-disabled'); }
+      };
+      beaconTrigger = () => {                                     /* one guard, one place: starts the
+                                                                     run now, or reports it is busy */
+        const clock = window.Orrery.ticker.clock;
+        if (st.sig.on || clock - st.lastEnd <= 800) return false;
+        bcnRun(st, clock);
+        return true;
+      };
       return st;
     },
     frame(s, st, dt, clock) {
       const g = s.g, W = s.w, H = s.h;
       g.clearRect(0, 0, W, H);
-      if (st.next === null) st.next = clock + 4200;
+      if (st.next === null) st.next = clock + 14000;   /* the player gets first strike at the flint */
 
-      /* the signal run: auto on a ~22s cadence, or the toy fires it now (no stacking) */
-      if (st.trigger) { st.trigger = false; if (!st.sig.on && clock - st.lastEnd > 800) bcnRun(st, clock); }
+      /* the signal run: auto on a slow cadence (the toy starts its own via beaconTrigger) */
       if (!st.sig.on && clock >= st.next) bcnRun(st, clock);
+      /* the button wears the run state — the FX owns it on the shared clock,
+         so auto-runs and frozen hidden tabs stay truthful (no wall timers).
+         The 800ms post-run cooldown counts as busy: no press is ever eaten
+         by a state the button isn't showing. */
+      const busy = st.sig.on || clock - st.lastEnd <= 800;
+      if (beaconToy && st.btnOn !== busy) {
+        st.btnOn = busy;
+        beaconToy.classList.toggle('is-running', busy);
+        if (busy) beaconToy.setAttribute('aria-disabled', 'true');
+        else beaconToy.removeAttribute('aria-disabled');
+      }
       if (st.sig.on) {
-        const runEnd = st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;
+        const runEnd = st.sig.t0 + BCN_RUN;
         if (clock >= runEnd) { st.sig.on = false; st.lastEnd = clock; st.next = st.sig.t0 + BCN_GAP + Math.random() * 4000; }
       }
 
@@ -1738,29 +2305,155 @@ const WorldFX = (() => {
       st.gust *= Math.pow(0.9995, dt);
       const wind = 0.25 + 0.18 * Math.sin(clock * 0.0003) + st.gust * 0.5;
 
-      for (const sp of st.stars) {                               /* stars behind the range */
+      for (const sp of st.stars) {                               /* a few stars through the storm rack */
         const tw = 0.55 + 0.45 * Math.sin(clock * 0.0016 + sp.tw);
-        g.fillStyle = `rgba(223,233,255,${(0.25 + 0.6 * tw) * st.calm})`;
+        g.fillStyle = `rgba(223,233,255,${(0.25 + 0.6 * tw) * st.calm * 0.6})`;
         g.beginPath(); g.arc(sp.x, sp.y, sp.r, 0, 7); g.fill();
       }
+      g.globalAlpha = 0.72 + 0.08 * Math.sin(clock * 0.0006);    /* the moon, storm-veiled */
+      g.drawImage(st.moon, st.moonX - 56, st.moonY - 56);
+      g.globalAlpha = 1;
 
-      for (let k = 0; k < st.ridges.length; k++) {               /* ridges far->near, pyres planted on each */
+      /* Mount Doom smolders in the west; its ash climbs across the moon */
+      const dflick = 0.6 + 0.4 * Math.abs(Math.sin(clock * 0.0021 + 2) * Math.sin(clock * 0.0006));
+      g.fillStyle = 'rgba(24,17,26,1)';
+      g.fill(st.doom);
+      const dw = 90 * (0.8 + 0.3 * dflick);
+      g.globalAlpha = 0.26 + 0.16 * dflick;
+      g.drawImage(st.glow, st.doomX - dw / 2, st.doomY - dw * 0.42, dw, dw * 0.8);
+      g.globalAlpha = 1;
+      g.strokeStyle = `rgba(255,120,44,${0.30 + 0.28 * dflick})`;
+      g.lineWidth = 1.6;
+      g.stroke(st.lava);
+      st.ashAcc += dt;
+      if (st.ashAcc > 520) { st.ashAcc = 0;
+        for (const a2 of st.ashes) if (!a2.on) {
+          a2.on = true; a2.x = st.doomX; a2.y = st.doomY + 4;
+          a2.vy = -(0.010 + Math.random() * 0.010);
+          a2.life = 0; a2.max = 5200 + Math.random() * 3600;
+          a2.sc = 0.8 + Math.random() * 1.3; a2.seed = Math.random() * 7;
+          break;
+        }
+      }
+      g.fillStyle = 'rgba(30,22,30,1)';
+      for (const a2 of st.ashes) {
+        if (!a2.on) continue;
+        a2.life += dt; const k2 = a2.life / a2.max;
+        if (k2 >= 1) { a2.on = false; continue; }
+        a2.y += a2.vy * dt;
+        a2.x += (0.006 + wind * 0.004) * dt;
+        g.globalAlpha = (k2 < 0.15 ? k2 / 0.15 : 1 - (k2 - 0.15) / 0.85) * 0.16;
+        g.beginPath(); g.arc(a2.x, a2.y, (5 + 16 * k2) * a2.sc, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
+
+      /* the black tower past the range (its Eye answers in the additive pass) */
+      g.fillStyle = 'rgba(9,7,13,0.96)';
+      g.fill(st.tower);
+
+      /* the Eye's envelope: past the 7th fire, something far off opens.
+         The oldest fire on the range does not need lighting. */
+      let ansT = 0;
+      if (st.sig.on) {
+        const ag = clock - (st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + 1300);
+        if (ag > 0) ansT = Math.min(1, ag / 900);
+        if (clock > settleStart) ansT *= Math.max(0, 1 - (clock - settleStart) / BCN_SETTLE);
+      }
+      st.ans += (ansT - st.ans) * Math.min(1, dt / 380);
+
+      /* the storm rack: dark bellies that catch the fire when the chain runs
+         (eased, so run start/end never pops the whole sky in one frame) */
+      st.fire += (Math.min(1, (st.sig.on ? 0.55 : 0.10) + st.ans * 0.5) - st.fire) * Math.min(1, dt / 600);
+      const fireLvl = st.fire;
+      for (const cl of st.clouds) {
+        cl.x += cl.v * (0.5 + wind * 0.5) * dt;
+        const hw2 = cl.w / 2, ch2 = cl.w * 0.32;
+        if (cl.x > W + hw2) cl.x = -hw2; else if (cl.x < -hw2) cl.x = W + hw2;
+        g.globalAlpha = cl.a * (0.75 + 0.25 * Math.sin(clock * 0.0003 + cl.seed));
+        g.drawImage(st.cloudS, cl.x - hw2, cl.y - ch2 / 2, cl.w, ch2);
+        g.globalAlpha = (0.04 + 0.22 * fireLvl) * cl.a;
+        g.drawImage(st.glow, cl.x - hw2 * 0.7, cl.y + ch2 * 0.08, cl.w * 0.7, ch2 * 0.5);
+      }
+      g.globalAlpha = 1;
+
+      /* a fell shadow crosses, now and then */
+      const fb2 = st.fell;
+      if (fb2.next === 0) fb2.next = clock + 8000 + Math.random() * 8000;
+      if (!fb2.on && clock >= fb2.next) {
+        fb2.on = true; fb2.t0 = clock;
+        fb2.dir = Math.random() < 0.5 ? 1 : -1;
+        fb2.sp = 0.075 + Math.random() * 0.035;
+        fb2.y0 = H * (0.10 + Math.random() * 0.12);
+        fb2.ph = Math.random() * 7;
+      }
+      if (fb2.on) {
+        const age = clock - fb2.t0;
+        const bx2 = fb2.dir > 0 ? -40 + fb2.sp * age : W + 40 - fb2.sp * age;
+        if (bx2 < -60 || bx2 > W + 60) { fb2.on = false; fb2.next = clock + 24000 + Math.random() * 22000; }
+        else {
+          const by2 = fb2.y0 + Math.sin(age * 0.0012 + fb2.ph) * 12;
+          const flap = Math.sin(age * 0.013);
+          g.fillStyle = 'rgba(10,8,14,0.92)';
+          g.beginPath();                                          /* body, head, tail */
+          g.moveTo(bx2 - 11 * fb2.dir, by2 + 1);
+          g.quadraticCurveTo(bx2, by2 - 2.5, bx2 + 11 * fb2.dir, by2 - 1.5);
+          g.lineTo(bx2 + 16 * fb2.dir, by2 + 0.5);
+          g.quadraticCurveTo(bx2, by2 + 3, bx2 - 11 * fb2.dir, by2 + 1);
+          g.fill();
+          g.beginPath();                                          /* the wings, mid-flap */
+          g.moveTo(bx2 - 2 * fb2.dir, by2 - 1);
+          g.quadraticCurveTo(bx2 - 10 * fb2.dir, by2 - 8 - 12 * flap, bx2 - 22 * fb2.dir, by2 - 3 - 18 * flap);
+          g.quadraticCurveTo(bx2 - 11 * fb2.dir, by2 - 12 * flap * 0.3, bx2 - 2 * fb2.dir, by2 + 1.5);
+          g.moveTo(bx2 + 3 * fb2.dir, by2 - 1);
+          g.quadraticCurveTo(bx2 + 10 * fb2.dir, by2 - 8 - 12 * flap, bx2 + 20 * fb2.dir, by2 - 3 - 18 * flap);
+          g.quadraticCurveTo(bx2 + 12 * fb2.dir, by2 - 12 * flap * 0.3, bx2 + 3 * fb2.dir, by2 + 1.5);
+          g.fill();
+        }
+      }
+
+      for (let k = 0; k < st.ridges.length; k++) {               /* ridges far->near: rock, snow, pyres, valley mist */
         const r = st.ridges[k], d = st.rdrift[k], xs = r.xs, ys = r.ys, n = xs.length;
         g.fillStyle = r.fill;
         g.beginPath(); g.moveTo(xs[0] + d, H + 2);
         for (let i2 = 0; i2 < n; i2++) g.lineTo(xs[i2] + d, ys[i2]);
         g.lineTo(xs[n - 1] + d, H + 2); g.closePath(); g.fill();
+        g.save(); g.translate(d, 0);
+        g.fillStyle = r.snowFill; g.fill(r.snow);                /* the caps catch the last light */
+        g.restore();
         for (let i = 0; i < BCN_N; i++) { const p = st.pyres[i]; if (p.ridge === k) bcnPyre(g, p.baseX + d, p.y, p.scale, st.inten[i], clock, i); }
+        if (k === 1) {                                           /* the river-kings stand in the gorge */
+          g.fillStyle = 'rgba(62,56,80,0.92)';
+          g.fill(st.kingL);
+          g.fill(st.kingR);
+        }
+        for (const m of st.mist) {                               /* the mist sea in this ridge's valley */
+          if (m.band !== k) continue;
+          m.x += m.v * (0.6 + wind) * dt;
+          const hw = m.w / 2, mh = m.w * 0.3;
+          if (m.x > W + hw) m.x = -hw; else if (m.x < -hw) m.x = W + hw;
+          g.globalAlpha = m.a * (0.8 + 0.2 * Math.sin(clock * 0.0004 + m.seed));
+          g.drawImage(st.mistS, m.x - hw, m.y - mh / 2, m.w, mh);
+        }
+        g.globalAlpha = 1;
       }
 
       g.globalCompositeOperation = 'lighter';                    /* additive: slope-glow + bloom + embers */
       for (let i = 0; i < BCN_N; i++) {
         const it = st.inten[i]; if (it <= 0.03) continue;
         const p = st.pyres[i], x = p.baseX + st.rdrift[p.ridge], y = p.y, sc = p.scale;
-        const sw = (150 + 120 * it) * sc, sh = (60 + 26 * it) * sc;   /* the light on the slope */
-        g.globalAlpha = 0.08 + 0.30 * it; g.drawImage(st.glow, x - sw / 2, y - sh * 0.35, sw, sh);
-        const bw = (46 + 96 * it) * sc;                              /* the pyre bloom */
-        g.globalAlpha = 0.14 + 0.55 * it; g.drawImage(st.glow, x - bw / 2, y - bw * 0.62, bw, bw);
+        const sw = (170 + 150 * it) * sc, sh = (64 + 34 * it) * sc;   /* the light rim-lighting the slope */
+        g.globalAlpha = 0.08 + 0.32 * it; g.drawImage(st.glow, x - sw / 2, y - sh * 0.35, sw, sh);
+        const bw = (52 + 120 * it) * sc;                             /* the pyre bloom */
+        g.globalAlpha = 0.16 + 0.58 * it; g.drawImage(st.glow, x - bw / 2, y - bw * 0.62, bw, bw);
+      }
+      {                                                          /* the Eye: an ember asleep, a furnace awake */
+        const ei = Math.max(st.ans, 0.06);                       /* it never fully sleeps */
+        const er = st.tw2 * (0.85 + 0.55 * st.ans);
+        const bw2 = er * (3.5 + 3 * st.ans);
+        g.globalAlpha = 0.30 * ei + 0.45 * st.ans;
+        g.drawImage(st.glow, st.eyeX - bw2 / 2, st.eyeY - bw2 / 2, bw2, bw2);
+        g.globalAlpha = Math.min(1, 0.22 + st.ans * 1.1);
+        g.drawImage(st.eyeS, st.eyeX - er, st.eyeY - er, er * 2, er * 2);
       }
       for (const e of st.embers) {
         if (!e.on) continue;
@@ -1771,40 +2464,73 @@ const WorldFX = (() => {
         g.beginPath(); g.arc(e.x, e.y, e.r * (0.5 + 0.6 * (1 - k)), 0, 7); g.fill();
       }
       g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      if (st.ans > 0.15) {                                       /* the slit roves: it is LOOKING */
+        const er = st.tw2 * (0.85 + 0.55 * st.ans);
+        const sx2 = st.eyeX + Math.sin(clock * 0.00045) * er * 0.34;
+        g.globalAlpha = st.ans;
+        g.fillStyle = 'rgba(6,3,6,0.88)';
+        g.beginPath(); g.ellipse(sx2, st.eyeY, er * 0.16, er * 0.5, 0, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      }
 
       st.emberAcc += dt;                                          /* sparks off the lit pyres */
       if (st.emberAcc > 110) { st.emberAcc = 0;
         for (let i = 0; i < BCN_N; i++) if (st.inten[i] > 0.5 && Math.random() < 0.5) { const p = st.pyres[i]; bcnEmber(st, p.baseX + st.rdrift[p.ridge], p.y, 1, p.scale); }
       }
 
-      st.smokeAcc += dt;                                          /* smoke off ember-state pyres */
+      st.smokeAcc += dt;                                          /* smoke off the pyres */
       if (st.smokeAcc > 300) { st.smokeAcc = 0;
         let pick = -1, seen = 0;
         for (let i = 0; i < BCN_N; i++) if (st.inten[i] < 0.3) { seen++; if (Math.random() < 1 / seen) pick = i; }
-        if (pick >= 0) { const p = st.pyres[pick]; bcnSmoke(st, p.baseX + st.rdrift[p.ridge], p.y, p.scale); }
+        if (pick >= 0) { const p = st.pyres[pick]; bcnSmoke(st, p.baseX + st.rdrift[p.ridge], p.y, p.scale, 0); }
+        if (st.sig.on) {                                          /* underlit smoke off the burning ones */
+          let lp = -1; seen = 0;
+          for (let i = 0; i < BCN_N; i++) if (st.inten[i] > 0.6) { seen++; if (Math.random() < 1 / seen) lp = i; }
+          if (lp >= 0) { const p = st.pyres[lp]; bcnSmoke(st, p.baseX + st.rdrift[p.ridge], p.y - 8 * p.scale, p.scale, 1); }
+        }
       }
       for (const m of st.smoke) {
         if (!m.on) continue;
         m.life += dt; const k = m.life / m.max; if (k >= 1) { m.on = false; continue; }
         m.y += m.vy * dt;
         const sway = Math.sin(clock * 0.0011 + m.seed) * m.sway + wind * 6 * k;
-        g.globalAlpha = (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) / 0.8) * 0.10;
-        g.fillStyle = 'rgba(150,162,190,1)';
+        g.globalAlpha = (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) / 0.8) * (m.warm ? 0.16 : 0.10);
+        g.fillStyle = m.warm ? 'rgba(255,168,110,1)' : 'rgba(150,162,190,1)';
         g.beginPath(); g.arc(m.x + sway, m.y, (2 + 7 * k) * m.sc, 0, 7); g.fill();
       }
       g.globalAlpha = 1;
     },
     rm() { /* intentional no-op: the frozen mid-burn pose is the .beacon-static SVG (see 03-worlds.css) */ },
   };
-  /* the toy: light the chain now. Cooldown lives in bcnRun's guard (no stacked runs). */
+  /* the toy: light the chain now. The FX owns the run + the button's busy
+     state; the score's horns take their cadence FROM the event so the two
+     files can never disagree about the chain's tempo. */
   const beaconToy = document.getElementById('light-beacons');
+  const beaconEvent = () => window.Orrery.events.dispatchEvent(
+    new CustomEvent('beacon', { detail: { n: BCN_N, stagger: BCN_STAGGER } }));
   if (beaconToy) beaconToy.addEventListener('click', () => {
     if (window.Orrery.reduced()) {
       /* rm answer: a one-shot flare of the static SVG pyres (user-initiated) */
       const sec = document.getElementById('world-beacons');
       if (sec) { sec.classList.remove('is-signaled'); void sec.offsetWidth; sec.classList.add('is-signaled'); }
-    } else if (beaconTrigger) beaconTrigger();
-    window.Orrery.events.dispatchEvent(new CustomEvent('beacon'));
+      beaconEvent();
+      return;
+    }
+    /* no live FX hook (init failed?) → the horns still answer the press */
+    if (!beaconTrigger || beaconTrigger()) beaconEvent();
+  });
+
+  /* M4: the verb buttons — the keyboard's path to the same delight the
+     pointer gets by striking the scene itself. Each pokes its world's verb
+     at center stage. They only render where the verb is wired (.w-verb is
+     JS+motion gated), so the chip never promises what a press can't do. */
+  document.querySelectorAll('.w-verb .w-toy').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!activeName || !activeSurf || !activeState) return;
+      const d = fx[activeName];
+      if (d && d.verb)
+        d.verb(activeSurf, activeState, activeSurf.w * 0.5, activeSurf.h * 0.55, window.Orrery.ticker.clock);
+    });
   });
 
   return { start, stopAll };

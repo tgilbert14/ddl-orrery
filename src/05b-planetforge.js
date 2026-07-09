@@ -10,7 +10,9 @@
 
 const PlanetForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 512, TEX_H = 256;          /* 2:1 -> drawn width is always 4r */
+  /* 2:1 -> drawn width is always 4r. Halved on phones (M2): no planet there
+     is ever drawn past ~68px, and the bake is per-pixel fBm on the main thread */
+  let TEX_W = 512, TEX_H = 256;
   const RIM_S = 176, RIM_PR = 60;          /* rim sprite canvas / planet radius baked in it */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = r * RIM_DRAW */
   const docEl = document.documentElement;
@@ -680,11 +682,49 @@ const PlanetForge = (() => {
 
   /* ---------- API ---------- */
   return {
-    init(worlds) {
+    /* staged bake (M2): the boot used to run ~12M synchronous noise evals at
+       the exact brochure→app flip. Now the shared sprites bake at once and
+       the eleven worlds land one per idle slice — draw() no-ops for a world
+       still in the oven, and progress() lets the sky materialize it. */
+    init(worlds, onReady) {
       if (inited) return;
       inited = true;
+      /* hover:none keeps half-res to true touch devices: a 680px desktop
+         window maximized later must not live with a mushy upscale all
+         session (rotated phones stay sharp — short viewports cap R low) */
+      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 256; TEX_H = 128; }
       buildShared();
-      for (const w of worlds) P[w.slug] = buildWorld(w);
+      const queue = worlds.slice();
+      /* the timeout matters: the ambient rAF loop never leaves true idle
+         time, so an unbounded requestIdleCallback would starve forever */
+      const later = window.requestIdleCallback
+        ? (f) => requestIdleCallback(f, { timeout: 90 })
+        : (f) => setTimeout(f, 16);
+      const bakeNext = () => {
+        const w = queue.shift();
+        if (!w) return;
+        if (!P[w.slug]) {
+          P[w.slug] = buildWorld(w);
+          P[w.slug].born = performance.now();
+          if (onReady) onReady(w.slug);
+        }
+        later(bakeNext);
+      };
+      later(bakeNext);
+    },
+    /* 0 = not baked yet · (0,1] = materializing → settled.
+       Never returns exactly 0 for a BAKED world (coarse timers would read
+       "same-millisecond" as "still in the oven"), and under reduced motion
+       a baked world is simply THERE — no half-materialized ghosts with no
+       animation loop to finish them. */
+    progress(slug) {
+      const p = P[slug];
+      if (!p) return 0;
+      if (!p.born) return 1;
+      if (docEl.classList.contains('rm')) { p.born = 0; return 1; }
+      const k = (performance.now() - p.born) / 500;
+      if (k >= 1) { p.born = 0; return 1; }
+      return Math.max(k, 0.002);
     },
     draw(ctx2, slug, x, y, r, clockMs, opts) {
       if (!inited || r <= 0) return;
@@ -700,3 +740,6 @@ const PlanetForge = (() => {
     },
   };
 })();
+/* the engine guards its calls with `window.PlanetForge` (mirrors SphereForge/
+   WorldFX): expose it, or the medallions and phone minis silently no-op */
+window.PlanetForge = PlanetForge;

@@ -132,9 +132,11 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
   html.js .planet-anchor:hover .pa-label,
   html.js .planet-anchor:focus-visible .pa-label { opacity: 1; }
-  /* neighbors alternate label sides (odd above, even below): two worlds
-     passing close on the ring can no longer stack their nameplates */
-  html.js .planet-anchor:nth-child(odd) .pa-label {
+  /* label side is set per frame from live orbital depth (05-core writes
+     .pl-above on far-side worlds): far names ride above, near names below,
+     so two worlds passing close never stack their nameplates. The old
+     nth-child parity assumed a fixed adjacency the periods destroy. */
+  html.js .planet-anchor.pl-above .pa-label {
     top: auto; bottom: calc(100% + 0.2rem);
   }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
@@ -151,10 +153,43 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
 }
 
-/* mobile app-mode: the star-chart column (big targets, tells intact) */
+/* mobile app-mode: the pocket orrery (M2) — the Artifact seats in a real
+   stage under the plaque, and the star-chart column begins below its limb */
+.hub-stage { display: none; }
 @media (max-width: 700px) {
-  html.js .orbits { position: relative; z-index: 20; }
+  html.js .hub-stage { display: block; width: 100%; height: clamp(150px, 36svh, 340px); flex: none; }
+  html.js .orbits { position: relative; z-index: 20; margin-top: 0; }
   html.js .planet-anchor { min-height: 64px; }
+  /* each row's dot wears its baked PlanetForge portrait (05-core paintMini) */
+  html.js .pa-dot.pa-mini {
+    background-size: 100% 100%;
+    box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35);
+  }
+}
+
+/* the completion rite (M3): when the survey is accepted, the whole ring
+   pulses gold once. On desktop the canvas draws the planets and .pa-dot is
+   invisible, so the pulse rides the .pa-ring; on phone/brochure it rides
+   the .pa-dot. Compositor-only, user-earned; rm holds a designed glow. */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .planet-anchor.pa-rite .pa-dot { animation: pa-rite-dot 2.4s var(--ease-out) 1; }
+  html:not(.rm) .planet-anchor.pa-rite .pa-ring { animation: pa-rite-ring 2.4s var(--ease-out) 1; }
+}
+@keyframes pa-rite-dot {
+  0%   { box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35); }
+  22%  { box-shadow: 0 0 44px 6px rgba(255, 205, 90, 0.85); }
+  100% { box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35); }
+}
+@keyframes pa-rite-ring {
+  0%, 100% { border-color: rgba(var(--pa-rgb, var(--acc-rgb)), 0); box-shadow: none; }
+  22%      { border-color: rgba(255, 205, 90, 0.95); box-shadow: 0 0 30px 4px rgba(255, 205, 90, 0.55); }
+}
+html.rm .planet-anchor.pa-rite .pa-dot { box-shadow: 0 0 30px 3px rgba(255, 205, 90, 0.6); }
+/* rm desktop: .pa-dot is opacity:0 there (the canvas draws the planets), so
+   the held glow must ride the ring or the earned climax vanishes */
+html.rm .planet-anchor.pa-rite .pa-ring {
+  border-color: rgba(255, 205, 90, 0.8);
+  box-shadow: 0 0 22px 3px rgba(255, 205, 90, 0.4);
 }
 
 /* ---------- pre-boot / no-JS planet drift (negative-delay ensemble, §2.7) ---------- */

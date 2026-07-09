@@ -32,20 +32,30 @@
     <!-- ============ THE HUB ============ -->
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
-        <h1 class="hub-h1">Eleven worlds. One clock.<br>One artifact, holding the center.</h1>
+        <!-- no hard <br>: text-wrap:balance sets the monument lockup at every
+             width; a forced break went ragged under the bigger engraved face -->
+        <h1 class="hub-h1">Eleven worlds. One clock. One dead ship, holding the center.</h1>
+        <p class="hub-sub">Eleven hand-built worlds orbit a derelict. Go and see.</p>
+        <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
       </div>
+
+      <!-- the pocket orrery's stage (M2): on phones this spacer holds open
+           the scroll flow where the sky canvas seats the Artifact, so the
+           world list begins below the limb. Display:none everywhere else. -->
+      <div class="hub-stage" aria-hidden="true"></div>
 
       <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
            sphere; this button is its keyboard/AT presence and the ripple trigger.
            JS positions both over the sphere center via --ax / --ay. -->
-      <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
+      <button id="artifact-hit" type="button" aria-label="Object 0. A derelict ship. Activate to sound it."></button>
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
+        <p class="sr-only">Eleven world links follow. Enter travels to a world; Escape returns to orbit.</p>
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>Dust Sea</b><em>two suns, and something beneath</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Dust Sea</b><em>the sand remembers a rhythm</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
         <a class="planet-anchor" data-world="velocity" href="#world-velocity" style="--i:1">
           <span class="pa-ring" aria-hidden="true"></span>
@@ -106,22 +116,39 @@
         <svg class="dust-scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
           <defs>
             <linearGradient id="dust-sky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#241430"/>
-              <stop offset="0.42" stop-color="#5b2440"/>
-              <stop offset="0.72" stop-color="#c4503a"/>
-              <stop offset="1" stop-color="#ffb25e"/>
+              <stop offset="0" stop-color="#1c100c"/>
+              <stop offset="0.34" stop-color="#4a2416"/>
+              <stop offset="0.62" stop-color="#9c4f24"/>
+              <stop offset="0.82" stop-color="#d98e3e"/>
+              <stop offset="1" stop-color="#f2c06a"/>
             </linearGradient>
             <radialGradient id="dust-sun-a" cx="0.5" cy="0.5" r="0.5">
-              <stop offset="0" stop-color="#ffe9c6"/><stop offset="0.6" stop-color="#ffd9a0"/><stop offset="1" stop-color="#ffb25e"/>
+              <stop offset="0" stop-color="#ffefd2"/><stop offset="0.55" stop-color="#ffd9a0"/><stop offset="1" stop-color="#eda75c"/>
             </radialGradient>
           </defs>
           <rect width="1200" height="640" fill="url(#dust-sky)"/>
-          <circle cx="452" cy="452" r="98" fill="url(#dust-sun-a)" opacity="0.95"/>
-          <circle cx="742" cy="516" r="46" fill="#d85f3c" opacity="0.9"/>
-          <path d="M0,520 L0,486 L150,486 L190,462 L470,462 L500,486 L1200,498 L1200,520 Z" fill="#3a2140" opacity="0.72"/>
+          <ellipse cx="600" cy="470" rx="720" ry="95" fill="rgba(240,170,86,0.16)"/>
+          <circle cx="452" cy="322" r="98" fill="url(#dust-sun-a)" opacity="0.9"/>
+          <circle cx="704" cy="368" r="46" fill="#d85f3c" opacity="0.85"/>
+          <path d="M0,520 L0,486 L150,486 L190,462 L470,462 L500,486 L1200,498 L1200,520 Z" fill="#46241a" opacity="0.7"/>
           <g class="ds-static">
-            <path d="M0,640 L0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494 L1200,640 Z" fill="#2b1837"/>
-            <path d="M0,640 L0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566 L1200,640 Z" fill="#140b20"/>
+            <path d="M0,640 L0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494 L1200,640 Z" fill="#46231d"/>
+            <path d="M0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494" fill="none" stroke="rgba(240,168,90,0.5)" stroke-width="2.5"/>
+            <rect x="302" y="497" width="2.4" height="6" fill="#140a10"/>
+            <rect x="318" y="499" width="2.4" height="6" fill="#140a10"/>
+            <!-- the colossus, frozen mid-rise: face-on maw over the front dune -->
+            <path d="M688,600 Q676,430 700,352 L820,352 Q844,430 832,600 Z" fill="#301710"/>
+            <circle cx="760" cy="352" r="66" fill="#3c1d0e"/>
+            <circle cx="760" cy="352" r="54" fill="#5a2a10"/>
+            <circle cx="760" cy="352" r="38" fill="#2c1308"/>
+            <circle cx="760" cy="352" r="17" fill="#0c0503"/>
+            <g stroke="#7a4220" stroke-width="1.6" opacity="0.7">
+              <path d="M760,300 L760,316"/><path d="M760,388 L760,404"/><path d="M708,352 L724,352"/><path d="M796,352 L812,352"/>
+              <path d="M723,315 L734,326"/><path d="M786,378 L797,389"/><path d="M797,315 L786,326"/><path d="M734,378 L723,389"/>
+            </g>
+            <ellipse cx="760" cy="560" rx="150" ry="26" fill="rgba(240,170,90,0.20)"/>
+            <path d="M0,640 L0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566 L1200,640 Z" fill="#190d15"/>
+            <path d="M0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566" fill="none" stroke="rgba(210,130,62,0.4)" stroke-width="2.5"/>
           </g>
         </svg>
         <canvas class="fx-canvas" data-canvas="dune"></canvas>
@@ -130,6 +157,10 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 01 &middot; Desert giant</p>
         <h2 id="h-dust">Dust Sea</h2>
+        <p class="w-copy">Two suns down. Something vast keeps the rhythm beneath.</p>
+        <p class="w-lore microlabel">The thing under the dunes is not the oldest thing here.</p>
+        <p class="w-note w-note--live microlabel">The dunes are not as empty as they look.</p>
+        <p class="w-note w-verb"><button class="w-toy" type="button">Strike the sand</button></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -155,6 +186,10 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 02 &middot; Neon metropolis</p>
         <h2 id="h-velocity">Velocity</h2>
+        <p class="w-copy">The sun never sets here. It loops. The city never blinks.</p>
+        <p class="w-lore microlabel">Every lap the city runs, it runs around a center that does not move.</p>
+        <p class="w-note w-note--live microlabel">The skyline re-renders on the orrery clock while you watch.</p>
+        <p class="w-note w-verb"><button class="w-toy" type="button">Full throttle</button></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -170,6 +205,10 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 03 &middot; Cyberspace</p>
         <h2 id="h-grid">The Grid</h2>
+        <p class="w-copy">The rain is code. It always was.</p>
+        <p class="w-lore microlabel">Some glyphs spell a designation the rain never finishes: 0.</p>
+        <p class="w-note w-note--live microlabel">Watch for the white trace. It knows where it is going.</p>
+        <p class="w-note w-verb"><button class="w-toy" type="button">Trace a column</button></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -226,6 +265,10 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 04 &middot; Hadal zone</p>
         <h2 id="h-abyssal">Abyssal</h2>
+        <p class="w-copy">Ten thousand meters down, the lights are alive.</p>
+        <p class="w-lore microlabel">The sonar down here answers a ping nobody sent.</p>
+        <p class="w-note w-note--live microlabel">Sometimes the dark gets bigger. Watch.</p>
+        <p class="w-note w-verb"><button class="w-toy" type="button">One ping only</button></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -234,12 +277,56 @@
     <section id="world-arcadia" class="scene world" data-scene="arcadia" data-fx="arcadia" aria-labelledby="h-arcadia">
       <div class="world-fx" aria-hidden="true">
         <canvas class="fx-canvas" data-canvas="arcadia"></canvas>
+        <!-- the same attract screen, frozen: shown only when JS is absent
+             (rm is painted by the canvas). Shapes are the engine's own
+             INVADER_A / PLAYER bitmaps at the 4px grid. -->
+        <svg class="arc-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <g id="arc-inv">
+              <rect x="12" y="0" width="8" height="4"/>
+              <rect x="8" y="4" width="16" height="4"/>
+              <rect x="4" y="8" width="24" height="4"/>
+              <rect x="0" y="12" width="8" height="4"/><rect x="12" y="12" width="8" height="4"/><rect x="24" y="12" width="8" height="4"/>
+              <rect x="0" y="16" width="32" height="4"/>
+              <rect x="8" y="20" width="4" height="4"/><rect x="20" y="20" width="4" height="4"/>
+              <rect x="4" y="24" width="4" height="4"/><rect x="12" y="24" width="8" height="4"/><rect x="24" y="24" width="4" height="4"/>
+              <rect x="0" y="28" width="4" height="4"/><rect x="8" y="28" width="4" height="4"/><rect x="20" y="28" width="4" height="4"/><rect x="28" y="28" width="4" height="4"/>
+            </g>
+          </defs>
+          <g fill="rgba(230,240,255,0.7)">
+            <rect x="96" y="60" width="4" height="4"/><rect x="288" y="132" width="4" height="4"/>
+            <rect x="472" y="48" width="4" height="4"/><rect x="668" y="104" width="4" height="4"/>
+            <rect x="852" y="64" width="4" height="4"/><rect x="1024" y="140" width="4" height="4"/>
+            <rect x="1132" y="76" width="4" height="4"/><rect x="196" y="300" width="4" height="4"/>
+            <rect x="560" y="356" width="4" height="4"/><rect x="944" y="320" width="4" height="4"/>
+            <rect x="376" y="440" width="4" height="4"/><rect x="1076" y="420" width="4" height="4"/>
+          </g>
+          <g fill="#7dff5a">
+            <use href="#arc-inv" x="296" y="152"/><use href="#arc-inv" x="360" y="152"/>
+            <use href="#arc-inv" x="424" y="152"/><use href="#arc-inv" x="488" y="152"/>
+            <use href="#arc-inv" x="552" y="152"/><use href="#arc-inv" x="616" y="152"/>
+            <use href="#arc-inv" x="680" y="152"/><use href="#arc-inv" x="744" y="152"/>
+            <use href="#arc-inv" x="808" y="152"/><use href="#arc-inv" x="872" y="152"/>
+          </g>
+          <rect x="598" y="472" width="4" height="12" fill="#e6f0ff"/>
+          <g fill="#ffd23f">
+            <rect x="596" y="564" width="8" height="8"/>
+            <rect x="592" y="572" width="16" height="4"/>
+            <rect x="588" y="576" width="24" height="4"/>
+            <rect x="584" y="580" width="32" height="12"/>
+            <rect x="584" y="592" width="12" height="4"/><rect x="604" y="592" width="12" height="4"/>
+          </g>
+        </svg>
         <div class="arc-crt"></div>
       </div>
       <div class="world-card glass">
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 05 &middot; Cabinet world</p>
         <h2 id="h-arcadia">Arcadia</h2>
+        <p class="w-copy">Insert coin. The high score is still yours to lose.</p>
+        <p class="w-lore microlabel">There is a high score older than the cabinet. Object 0 set it.</p>
+        <p class="w-note w-note--live microlabel">The defenders march. The little ship holds the line, forever.</p>
+        <p class="w-note w-verb"><button class="w-toy" type="button">Fire</button></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -282,7 +369,10 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 06 &middot; Frozen world</p>
         <h2 id="h-aurora">Aurora</h2>
-        <p class="w-note"><button class="w-toy" id="run-query" type="button">Send a pulse</button></p>
+        <p class="w-copy">The sky rehearses its colors over the ice.</p>
+        <p class="w-lore microlabel">The lights rehearse for something at the center they will not name.</p>
+        <p class="w-note"><button class="w-toy" id="run-query" type="button">Send a pulse</button>
+          <span class="microlabel">light the constellation</span></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -297,9 +387,13 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 07 &middot; Awaiting designation</p>
         <h2 id="h-uncharted">Uncharted</h2>
+        <p class="w-copy">Every fleet needs a next world. This one is waiting for a name.</p>
+        <p class="w-lore microlabel">Every chart drawn here leaves one object unmeasured, dead center.</p>
+        <p class="w-note w-note--live microlabel">The survey drafts wherever you look.</p>
         <p class="w-cta">
           <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Name it with us</a>
         </p>
+        <p class="w-proof microlabel">Desert Data Labs builds worlds like these around real data. A first conversation is free.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -348,7 +442,11 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 08 &middot; Predictive archive</p>
         <h2 id="h-archive">The Archive</h2>
-        <p class="w-note"><button class="w-toy" id="consult-archive" type="button">Consult the archive</button></p>
+        <p class="w-copy">Ten thousand years of records, read forward. The brightest branch is the one worth planning for.</p>
+        <p class="w-lore microlabel">Every fan the archive grows bends around one object it cannot weigh.</p>
+        <p class="w-note w-note--live microlabel">The fans branch and weight, then every few seconds collapse to the single lit path.</p>
+        <p class="w-note"><button class="w-toy" id="consult-archive" type="button">Consult the archive</button>
+          <span class="microlabel">re-roll the futures</span></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -389,7 +487,11 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 09 &middot; Training arena</p>
         <h2 id="h-drillyard">The Drillyard</h2>
-        <p class="w-note"><button class="w-toy" id="call-drill" type="button">Call a drill</button></p>
+        <p class="w-copy">Zero gravity. Three squads. The floor is wherever they agree it is.</p>
+        <p class="w-lore microlabel">Down is a choice everywhere in this arena but one: the center keeps its own.</p>
+        <p class="w-note w-note--live microlabel">When the arena turns, down moves. The drills continue.</p>
+        <p class="w-note"><button class="w-toy" id="call-drill" type="button">Call a drill</button>
+          <span class="microlabel">cycle the next formation</span></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -410,8 +512,8 @@
             </linearGradient>
             <radialGradient id="sw-flashg" cx="0.5" cy="0.5" r="0.5">
               <stop offset="0" stop-color="#e2ecff" stop-opacity="0.5"/>
-              <stop offset="0.45" stop-color="#b9a9ff" stop-opacity="0.2"/>
-              <stop offset="1" stop-color="#b9a9ff" stop-opacity="0"/>
+              <stop offset="0.45" stop-color="#c9b6ff" stop-opacity="0.2"/>
+              <stop offset="1" stop-color="#c9b6ff" stop-opacity="0"/>
             </radialGradient>
           </defs>
           <rect width="1200" height="640" fill="url(#sw-skyg)"/>
@@ -421,7 +523,7 @@
           <path d="M1200,0 L840,0 L862,60 L836,124 L866,188 L842,252 L872,316 L848,380 L876,444 L854,512 L1200,512 Z" fill="#111322"/>
           <ellipse cx="960" cy="170" rx="150" ry="120" fill="url(#sw-flashg)"/>
           <ellipse cx="1090" cy="340" rx="110" ry="88" fill="url(#sw-flashg)" opacity="0.7"/>
-          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(185,169,255,0.3)" stroke-width="2"/>
+          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(201,182,255,0.3)" stroke-width="2"/>
           <!-- the plain -->
           <rect y="512" width="1200" height="128" fill="#17142a"/>
           <path d="M0,640 L0,584 C220,568 480,596 720,580 C920,568 1080,590 1200,578 L1200,640 Z" fill="#0d0b18"/>
@@ -458,7 +560,10 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 10 &middot; Tempest plain</p>
         <h2 id="h-stormwall">Stormwall</h2>
-        <p class="w-note"><button class="w-toy" id="brace-wall" type="button">Brace for the wall</button></p>
+        <p class="w-copy">The weather here is a wall. The light knows before you do.</p>
+        <p class="w-lore microlabel">The light runs ahead of the storm — and behind whatever the center already knew.</p>
+        <p class="w-note"><button class="w-toy" id="brace-wall" type="button">Brace for the wall</button>
+          <span class="microlabel">call the front in early</span></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -481,12 +586,40 @@
             <circle cx="120" cy="80" r="1.4"/><circle cx="300" cy="130" r="1.1"/><circle cx="470" cy="70" r="1.5"/>
             <circle cx="640" cy="120" r="1.1"/><circle cx="820" cy="78" r="1.4"/><circle cx="980" cy="128" r="1.2"/>
             <circle cx="1120" cy="86" r="1.3"/><circle cx="210" cy="188" r="1"/><circle cx="720" cy="196" r="1"/>
+            <circle cx="60" cy="160" r="1"/><circle cx="400" cy="150" r="1.2"/><circle cx="560" cy="52" r="1"/>
+            <circle cx="900" cy="170" r="1"/><circle cx="1050" cy="46" r="1.2"/><circle cx="170" cy="40" r="1.1"/>
           </g>
-          <polygon points="0,300 120,258 200,290 300,250 390,286 500,246 600,284 710,252 820,288 930,258 1040,290 1150,262 1200,286 1200,640 0,640" fill="rgba(42,58,100,1)"/>
-          <polygon points="0,340 110,300 210,332 320,292 430,330 540,296 650,334 770,300 880,336 990,304 1100,338 1200,312 1200,640 0,640" fill="rgba(31,44,82,1)"/>
-          <polygon points="0,392 130,352 240,388 360,344 470,384 590,350 700,388 820,352 940,390 1060,356 1170,392 1200,384 1200,640 0,640" fill="rgba(21,32,64,1)"/>
-          <polygon points="0,452 140,414 260,450 380,408 500,448 620,414 740,452 860,418 980,454 1100,420 1200,450 1200,640 0,640" fill="rgba(13,22,46,1)"/>
-          <polygon points="0,520 160,486 300,522 440,484 580,520 720,488 860,522 1000,490 1140,522 1200,506 1200,640 0,640" fill="rgba(8,14,32,1)"/>
+          <circle cx="240" cy="96" r="40" fill="rgba(190,200,250,0.09)"/>
+          <circle cx="240" cy="96" r="22" fill="#b9c1de"/>
+          <circle cx="234" cy="92" r="6.5" fill="rgba(150,160,205,0.5)"/>
+          <circle cx="246" cy="102" r="4.5" fill="rgba(150,160,205,0.5)"/>
+          <!-- Mount Doom in the west; the black tower past the eastern line -->
+          <path d="M0,320 L92,236 L106,244 L118,232 L130,240 L250,320 Z" fill="#181119"/>
+          <circle cx="112" cy="236" r="18" fill="rgba(255,130,50,0.30)"/>
+          <path d="M110,240 Q104,266 108,292 M118,238 Q128,268 132,290" stroke="rgba(255,120,44,0.5)" stroke-width="2" fill="none"/>
+          <path d="M1130,300 L1150,258 L1144,256 L1160,208 L1154,206 L1166,160 L1160,150 L1150,128 L1158,96 L1168,124 L1172,118 L1180,118 L1184,124 L1194,96 L1202,128 L1192,150 L1186,160 L1198,206 L1192,208 L1208,256 L1202,258 L1222,300 Z" fill="#0a0810"/>
+          <circle cx="1176" cy="122" r="24" fill="rgba(255,120,40,0.20)"/>
+          <ellipse cx="1176" cy="122" rx="10" ry="6.5" fill="rgba(255,170,60,0.75)"/>
+          <ellipse cx="1176" cy="122" rx="2.6" ry="5.2" fill="#140a08"/>
+          <polygon points="0,300 120,258 200,290 300,250 390,286 500,246 600,284 710,252 820,288 930,258 1040,290 1150,262 1200,286 1200,640 0,640" fill="rgba(62,50,72,1)"/>
+          <path d="M0,300 L120,258 L200,290 L300,250 L390,286 L500,246 L600,284 L710,252 L820,288 L930,258 L1040,290 L1150,262 L1200,286" fill="none" stroke="rgba(192,162,168,0.5)" stroke-width="4" stroke-linejoin="round"/>
+          <polygon points="0,340 110,300 210,332 320,292 430,330 540,296 650,334 770,300 880,336 990,304 1100,338 1200,312 1200,640 0,640" fill="rgba(46,37,56,1)"/>
+          <path d="M0,340 L110,300 L210,332 L320,292 L430,330 L540,296 L650,334 L770,300 L880,336 L990,304 L1100,338 L1200,312" fill="none" stroke="rgba(160,142,162,0.42)" stroke-width="4" stroke-linejoin="round"/>
+          <polygon points="0,392 130,352 240,388 360,344 470,384 590,350 700,388 820,352 940,390 1060,356 1170,392 1200,384 1200,640 0,640" fill="rgba(32,26,42,1)"/>
+          <path d="M0,392 L130,352 L240,388 L360,344 L470,384 L590,350 L700,388 L820,352 L940,390 L1060,356 L1170,392 L1200,384" fill="none" stroke="rgba(122,110,138,0.34)" stroke-width="3" stroke-linejoin="round"/>
+          <!-- the river-kings, mist-wrapped in the gorge -->
+          <g fill="rgba(74,68,92,0.9)">
+            <path d="M534,436 L538,414 L546,410 L544,358 L572,358 L572,342 L546,344 L548,330 L540,322 L542,306 L536,314 L534,304 L532,314 L526,306 L528,322 L520,330 L522,344 L520,410 L528,414 L532,436 Z"/>
+            <path d="M666,436 L662,414 L654,410 L656,358 L628,358 L628,342 L654,344 L652,330 L660,322 L658,306 L664,314 L666,304 L668,314 L674,306 L672,322 L680,330 L678,344 L680,410 L672,414 L668,436 Z"/>
+          </g>
+          <polygon points="0,452 140,414 260,450 380,408 500,448 620,414 740,452 860,418 980,454 1100,420 1200,450 1200,640 0,640" fill="rgba(19,16,28,1)"/>
+          <polygon points="0,520 160,486 300,522 440,484 580,520 720,488 860,522 1000,490 1140,522 1200,506 1200,640 0,640" fill="rgba(9,8,15,1)"/>
+          <ellipse cx="180" cy="358" rx="150" ry="16" fill="rgba(150,142,190,0.16)"/>
+          <ellipse cx="620" cy="420" rx="210" ry="18" fill="rgba(150,142,190,0.18)"/>
+          <ellipse cx="1010" cy="470" rx="180" ry="17" fill="rgba(150,142,190,0.20)"/>
+          <ellipse cx="380" cy="560" rx="260" ry="22" fill="rgba(150,142,190,0.22)"/>
+          <ellipse cx="900" cy="575" rx="240" ry="20" fill="rgba(150,142,190,0.22)"/>
+
           <g class="beacon-pyres">
             <g transform="translate(150,300) scale(0.86)"><ellipse cx="0" cy="-6" rx="34" ry="20" fill="url(#bcn-glow)"/><path d="M-6,4 Q-4,-16 0,-28 Q4,-16 6,4 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-14" r="2.4" fill="rgba(255,246,210,0.95)"/><path d="M0,-28 q-8,-24 2,-52" stroke="rgba(150,162,190,0.14)" stroke-width="5" fill="none"/></g>
             <g transform="translate(330,344) scale(1.02)"><ellipse cx="0" cy="-7" rx="40" ry="23" fill="url(#bcn-glow)"/><path d="M-7,5 Q-4,-18 0,-32 Q4,-18 7,5 Z" fill="rgba(255,150,50,0.9)"/><circle cx="0" cy="-16" r="2.7" fill="rgba(255,246,210,0.95)"/><path d="M0,-32 q9,-26 -2,-58" stroke="rgba(150,162,190,0.14)" stroke-width="6" fill="none"/></g>
@@ -502,7 +635,11 @@
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 11 &middot; Watch-fire range</p>
         <h2 id="h-beacons">The Beacons</h2>
-        <p class="w-note"><button class="w-toy" id="light-beacons" type="button">Light the beacons</button></p>
+        <p class="w-copy">One pyre catches at dusk, and the next answers down the range, faster than any rider could carry the word.</p>
+        <p class="w-lore microlabel">The oldest fire on the range does not need lighting.</p>
+        <p class="w-note"><button class="w-toy" id="light-beacons" type="button">Light the beacons</button>
+          <span class="microlabel">run the signal down the range</span></p>
+        <p class="w-proof microlabel">Nobody rides all night to find out.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -511,7 +648,7 @@
 
   <footer class="hud hud-bottom">
     <span>Hand-built by <a href="https://desertdatalabs.com/" rel="noopener">Desert Data Labs</a>
-      &middot; no frameworks &middot; eleven worlds, one artifact &middot;
+      &middot; no frameworks &middot; eleven worlds, one derelict &middot;
       <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
 
     <!-- THE GRAND TOUR: autopilot readout + control. Both hidden without JS
@@ -535,6 +672,9 @@
         <span class="survey-count">0/0</span>
       </span>
     </div>
+    <!-- the survey's voice for AT: progress + the completion rite are spoken
+         here (the visual log is role=img and the hint is decorative) -->
+    <span id="survey-live" class="sr-only" aria-live="polite"></span>
   </footer>
 
   <div class="porthole" aria-hidden="true"></div>
