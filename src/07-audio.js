@@ -522,6 +522,28 @@ const Score = (() => {
     note(v.root * Math.pow(2, v.scale[m0.d % v.scale.length] / 12) * 2, at + gapN * 2, 0.045, 0.4, L.wave, dest, L.dly, L.wet);
   });
 
+  /* the sortie: the shuttle undocks — a soft latch-click and a rising hiss
+     ~760ms before the warp's riser takes over */
+  let lastSortie = -9;
+  window.Orrery.events.addEventListener('sortie', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastSortie < 0.6) return;
+    lastSortie = ctx.currentTime;
+    const t = ctx.currentTime + 0.02;
+    note(880, t, 0.03, 0.04, 'square', dry, 0, 0);       /* the latch */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(2400, t + 0.6);
+    const gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t);
+    gn.gain.exponentialRampToValueAtTime(0.05, t + 0.3);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    n.connect(bp); bp.connect(gn); gn.connect(bus);
+    n.start(t); n.stop(t + 0.75);
+    n.onended = () => gn.disconnect();
+  });
+
   /* the warp: riser swells into the whoosh, which blooms in the hall */
   window.Orrery.events.addEventListener('warp', () => {
     if (!ready()) return;

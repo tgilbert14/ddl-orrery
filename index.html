@@ -1701,8 +1701,8 @@ html.approaching #artifact-hit { pointer-events: none; }
       <div class="hub-copy">
         <!-- no hard <br>: text-wrap:balance sets the monument lockup at every
              width; a forced break went ragged under the bigger engraved face -->
-        <h1 class="hub-h1">Eleven worlds. One clock. One artifact, holding the center.</h1>
-        <p class="hub-sub">Eleven hand-built worlds orbit something older. Go and see.</p>
+        <h1 class="hub-h1">Eleven worlds. One clock. One dead ship, holding the center.</h1>
+        <p class="hub-sub">Eleven hand-built worlds orbit a derelict. Go and see.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
       </div>
 
@@ -1714,7 +1714,7 @@ html.approaching #artifact-hit { pointer-events: none; }
       <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
            sphere; this button is its keyboard/AT presence and the ripple trigger.
            JS positions both over the sphere center via --ax / --ay. -->
-      <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
+      <button id="artifact-hit" type="button" aria-label="Object 0. A derelict ship. Activate to sound it."></button>
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
@@ -2315,7 +2315,7 @@ html.approaching #artifact-hit { pointer-events: none; }
 
   <footer class="hud hud-bottom">
     <span>Hand-built by <a href="https://desertdatalabs.com/" rel="noopener">Desert Data Labs</a>
-      &middot; no frameworks &middot; eleven worlds, one artifact &middot;
+      &middot; no frameworks &middot; eleven worlds, one derelict &middot;
       <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
 
     <!-- THE GRAND TOUR: autopilot readout + control. Both hidden without JS
@@ -2826,7 +2826,8 @@ function drawSky(dt, clockMs) {
         a.style.setProperty('--psize', Math.round(w.size * 1.5 * p.sc) + 'px');
         /* a far-side world crossing the Artifact's face is OCCLUDED: its name
            must nearly vanish too, not float legible across the gold */
-        const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r + 50;
+        const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r * 1.35 + 30
+        && p.y > ART.cy - ART.r * 0.45;                /* the hull is wide but LOW: open sky stays bright */
         a.style.setProperty('--pdim', (occluded ? 0.12 : dim).toFixed(2));
         /* the DOM mirrors the canvas z-sort: a world occluded BEHIND the
            Artifact must not own the clicks on the sphere's face (its anchor
@@ -3325,22 +3326,28 @@ function travel(slug, fromBeat) {
 
   if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
 
-  /* the phone departure beat (M2): the orrery acknowledges the choice —
-     the sphere considers the world and a sonar ring answers — THEN the
-     warp fires. 300ms of anticipation instead of an unceremonious cut. */
-  if (!fromBeat && !desktop() && window.SphereForge && Scenes.current === 'hub'
-      && ART.cy > 0                                    /* only while the sphere is on stage */
+  /* the departure (M2, rebuilt for the Derelict): on desktop the SHUTTLE
+     undocks and flies to the chosen world — the warp fires on arrival. On
+     the phone the pocket orrery keeps its 300ms beat: the bridge considers
+     the world and the sonar answers. Either way, a second tap RE-AIMS. */
+  if (!fromBeat && window.SphereForge && Scenes.current === 'hub'
+      && (desktop() || ART.cy > 0)                     /* pocket beat only while on stage */
       && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
-    beatSlug = slug;                                   /* a second tap RE-AIMS the pending beat */
+    const wi = WORLDS.indexOf(w);
+    const flight = desktop() && SphereForge.sortie
+      && SphereForge.sortie(() => planetPos(wi, Ticker.clock), 760);
+    const ms = flight ? 760 : 300;
+    beatSlug = slug;
     SphereForge.setSkin(slug);
-    SphereForge.ping();
+    if (!flight) SphereForge.ping();
+    else Orrery.events.dispatchEvent(new CustomEvent('sortie'));
     if (!skyTask) Orrery.startAmbient();
     clearTimeout(beatTimer);
     beatTimer = setTimeout(() => {
       beatTimer = null;
       const s = beatSlug; beatSlug = null;
       travel(s, true);
-    }, 300);
+    }, ms);
     return;
   }
 
@@ -4274,39 +4281,29 @@ window.PlanetForge = PlanetForge;
 
 
 /* ============================================================
-   05c-sphereforge.js — SphereForge: the Artifact.
-   A huge flawless liquid-gold sphere. It does not rotate: the
-   surface FLOWS. A horizontally seamless gold texture is baked
-   DOUBLED (1024px) so a scrolling slice is always ONE drawImage
-   with no wrap seam; 24 fixed slices each take a per-frame sine
-   x-nudge — the molten-skin illusion. Everything else is prebaked
-   sprites. Zero external assets. No text in canvas. All original.
-   Per-frame cost: 24 slice blits + <=16 sprite blits (shading,
-   glosses, wanderer, 9-spot constellation) + <=4 ring strokes;
-   zero allocations, zero gradient creation.
+   05c-sphereforge.js — the Derelict: Object 0.
+   The center of the orrery is no longer a sphere. It is a vast
+   dead ship, engraved brass over near-black hull, holding the
+   middle of the clockwork. The module keeps the SphereForge name
+   and API (draw / drawSonar / ripple / ping / setSkin / reveal /
+   drawShadowPass) so every engine call site stands unchanged —
+   and adds the SHUTTLE: your vessel, docked on the wreck, that
+   flies to whichever world you choose (sortie / recall).
+   Everything is baked once at init; the per-frame cost is one
+   hull blit + a handful of light sprites + the shuttle.
+   The score was always ahead of this pivot: the hub arrangement
+   has been "the derelict hold" — hull groans, heartbeat, sonar —
+   since v3. The picture finally agrees with the sound.
    ============================================================ */
 'use strict';
 
 const SphereForge = (() => {
   const TAU = Math.PI * 2;
-  let TEX_W = 768, TEX_H = 288;            /* gen size; baked doubled to 1536 —
-                                              near-1:1 texel:pixel at hub R, so the
-                                              hammered grain stays CRISP (metal, not cloud).
-                                              Halved on phones (M2): R caps ~150 there and
-                                              the bake is 4 fBm fields per pixel */
-  const NS = 24;                           /* fixed slice count */
-  const RIM_S = 224, RIM_PR = 80;          /* rim sprite canvas / baked radius */
-  const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = R * 2.8 */
   const RIPPLE_MS = 1800, SONAR_MS = 3500;
-  const SCROLL_SPD = 1 / 72000;            /* base drift: one full loop ~72s */
-  const FLOW_SPD = 1 / 47000;              /* flow layer: faster, opposite */
-  const SIG2 = 0.13 * 0.13;                /* ripple gaussian width (frac of R)^2 */
-  const BRASS = 'rgba(201,163,92,1)';      /* --brass */
-  const CREAM = 'rgba(239,228,200,1)';     /* --cream */
-  const GOLD_BRIGHT = 'rgba(255,240,210,1)';
+  const BRASS = 'rgba(201,163,92,1)';
+  const CREAM = 'rgba(239,228,200,1)';
   const docEl = document.documentElement;
 
-  /* ---------- deterministic randomness (PlanetForge's generators) ---------- */
   function seedOf(str) {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -4320,319 +4317,175 @@ const SphereForge = (() => {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  function makeFbm(rnd, baseX, baseY, octaves) {
-    const layers = []; let amp = 1, total = 0, fx = baseX, fy = baseY;
-    for (let o = 0; o < octaves; o++) {
-      const g = new Float32Array(fx * fy);
-      for (let i = 0; i < g.length; i++) g[i] = rnd();
-      layers.push({ g, fx, fy, amp });
-      total += amp; amp *= 0.5; fx *= 2; fy = Math.min(fy * 2, 160);
-    }
-    return (u, v) => {                     /* u wraps (seamless x), v clamps */
-      let s = 0;
-      for (let L = 0; L < layers.length; L++) {
-        const ly = layers[L];
-        let x = (u * ly.fx) % ly.fx; if (x < 0) x += ly.fx;
-        let y = v * (ly.fy - 1); if (y < 0) y = 0; else if (y > ly.fy - 1.0001) y = ly.fy - 1.0001;
-        const x0 = x | 0, y0 = y | 0;
-        const x1 = (x0 + 1) % ly.fx, y1 = Math.min(y0 + 1, ly.fy - 1);
-        let tx = x - x0, ty = y - y0;
-        tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
-        const a = ly.g[y0 * ly.fx + x0], b = ly.g[y0 * ly.fx + x1];
-        const c = ly.g[y1 * ly.fx + x0], d = ly.g[y1 * ly.fx + x1];
-        s += ly.amp * (a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty);
-      }
-      return s / total;
-    };
-  }
-  function hex(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
-  function makeLut(stops) {
-    const out = new Uint8Array(768); let si = 0;
-    for (let i = 0; i < 256; i++) {
-      const t = i / 255;
-      while (si < stops.length - 2 && t > stops[si + 1][0]) si++;
-      const a = hex(stops[si][1]), b = hex(stops[si + 1][1]);
-      const span = Math.max(1e-6, stops[si + 1][0] - stops[si][0]);
-      let f = (t - stops[si][0]) / span; if (f < 0) f = 0; else if (f > 1) f = 1;
-      out[i * 3] = a[0] + (b[0] - a[0]) * f;
-      out[i * 3 + 1] = a[1] + (b[1] - a[1]) * f;
-      out[i * 3 + 2] = a[2] + (b[2] - a[2]) * f;
-    }
-    return out;
-  }
   function cv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-  function doubled(src) {                  /* bake the seamless wrap INTO the canvas */
-    const d = cv(src.width * 2, src.height), g = d.getContext('2d');
-    g.drawImage(src, 0, 0); g.drawImage(src, src.width, 0);
-    return d;
+
+  /* ---------- hull-local geometry (bake space: 880x320, spine y=170) ---------- */
+  const HL = 880, HH = 320, SPAN = 760;    /* drawn length = R*2.6 → scale = R*2.6/SPAN */
+  /* eleven window clusters, stern->bow: one kindles per surveyed world */
+  const LIGHTS = [
+    [128, 152], [178, 158], [238, 150], [305, 98], [352, 146], [420, 150],
+    [482, 156], [545, 150], [608, 152], [672, 148], [726, 150],
+  ];
+  const HEART = [313, 96];                 /* the one window that never went dark */
+  const BEACON = [313, 46];                /* masthead nav light */
+  const BRIDGE = [716, 146];               /* the bow display that considers a world */
+  const DOCK = [402, 108];                 /* the shuttle's cradle on the spine */
+  const ENGINES = [[92, 150], [88, 170], [92, 190]];
+
+  let hullSpr = null, glowSpr = null, shadowSpr = null, shuttleSpr = null;
+  let inited = false, frozenT = 60000;
+
+  function buildGlow() {
+    const c = cv(48, 48), g = c.getContext('2d');
+    const gr = g.createRadialGradient(24, 24, 1, 24, 24, 24);
+    gr.addColorStop(0, 'rgba(255,214,140,0.9)');
+    gr.addColorStop(0.4, 'rgba(255,190,110,0.35)');
+    gr.addColorStop(1, 'rgba(255,180,100,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(24, 24, 24, 0, TAU); g.fill();
+    return c;
   }
-
-  /* ---------- prebaked assets ---------- */
-  let baseTex = null, flowTex = null;
-  let limbSpr = null, glossTL = null, glossBR = null, wanderSpr = null;
-  let pulseSpr = null, rimSpr = null, shadowSpr = null, hotSpr = null;
-  const hots = [];                         /* the specular constellation (seeded at init) */
-  let su = 0.5, frozenT = 60000;           /* the seeded reduced-motion pose */
-  let inited = false;
-
-  function buildBase(rnd) {
-    const c = cv(TEX_W, TEX_H), t = c.getContext('2d');
-    const fb = makeFbm(rnd, 6, 4, 4), warp = makeFbm(rnd, 3, 2, 3);
-    const mid = makeFbm(rnd, 14, 8, 3);      /* mottling between the big forms */
-    const micro = makeFbm(rnd, 84, 32, 2);   /* the hammered-foil grain (reference match) */
-    /* deep-contrast gold LUT: near-black amber pools up to near-white blooms */
-    const L = makeLut([[0, '#2a1a05'], [0.32, '#7d5511'], [0.6, '#d3a02a'], [0.84, '#ffdd75'], [1, '#fffbe8']]);
-    const img = t.createImageData(TEX_W, TEX_H); const d = img.data; let i = 0;
-    for (let yy = 0; yy < TEX_H; yy++) {
-      const v = yy / TEX_H;
-      for (let xx = 0; xx < TEX_W; xx++) {
-        const u = xx / TEX_W;
-        /* molten banding: horizontal bands bent by wrapped noise + a wrapped u-swell */
-        const band = 0.5 + 0.5 * Math.sin(v * 14.5 + warp(u, v) * 4.6 + Math.sin(u * TAU) * 0.9);
-        let n = fb(u, v) * 0.46 + band * 0.28 + mid(u, v) * 0.26;
-        n += (micro(u, v) - 0.5) * 0.26;     /* frosted micro-texture riding the flow */
-        n = (n - 0.5) * 1.7 + 0.47;          /* hard stretch, low lift: real dark pools */
-        if (n < 0) n = 0; else if (n > 1) n = 1;
-        const k3 = ((n * 255) | 0) * 3;
-        d[i++] = L[k3]; d[i++] = L[k3 + 1]; d[i++] = L[k3 + 2]; d[i++] = 255;
-      }
+  function hullPath(g) {
+    g.beginPath();
+    g.moveTo(72, 170);                     /* stern tip */
+    g.lineTo(108, 132); g.lineTo(178, 126);
+    g.lineTo(232, 118); g.lineTo(292, 122);            /* deck line, uneven */
+    g.lineTo(296, 124); g.lineTo(340, 120);
+    g.lineTo(430, 116); g.lineTo(452, 136);            /* the step */
+    g.lineTo(560, 142); g.lineTo(700, 150);
+    g.lineTo(806, 160); g.lineTo(838, 170);            /* the prow */
+    g.lineTo(802, 184); g.lineTo(700, 190);
+    g.lineTo(560, 196); g.lineTo(470, 204);
+    g.lineTo(300, 210); g.lineTo(180, 206);
+    g.lineTo(108, 204);
+    g.closePath();
+  }
+  function buildHull(rnd) {
+    const c = cv(HL, HH), g = c.getContext('2d');
+    /* rim light first: the silhouette glows faint brass (bake-time blur only) */
+    g.save();
+    g.shadowColor = 'rgba(201,163,92,0.85)'; g.shadowBlur = 16;
+    g.fillStyle = 'rgba(20,17,20,1)';
+    hullPath(g); g.fill();
+    g.restore();
+    /* superstructure: the tower + stepped blocks + the bow bridge */
+    g.fillStyle = 'rgba(24,20,23,1)';
+    g.fillRect(300, 78, 26, 46);           /* the tower */
+    g.fillRect(340, 98, 34, 24);
+    g.fillRect(382, 106, 26, 16);
+    g.fillRect(252, 104, 30, 18);
+    g.fillRect(694, 132, 40, 20);          /* bow bridge */
+    /* keel fin + a stern vane */
+    g.beginPath(); g.moveTo(430, 206); g.lineTo(458, 254); g.lineTo(498, 206); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(120, 132); g.lineTo(104, 96); g.lineTo(146, 128); g.closePath(); g.fill();
+    /* antenna mast + a snapped one (derelict) */
+    g.strokeStyle = 'rgba(140,116,74,0.9)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(313, 78); g.lineTo(313, 48); g.stroke();
+    g.beginPath(); g.moveTo(600, 142); g.lineTo(616, 118); g.stroke();
+    g.beginPath(); g.moveTo(616, 118); g.lineTo(624, 112); g.stroke();  /* bent tip */
+    /* engines: three cold nozzles */
+    g.fillStyle = 'rgba(10,8,10,1)';
+    for (const [ex, ey] of ENGINES) { g.beginPath(); g.arc(ex, ey, 8, 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(201,163,92,0.4)'; g.lineWidth = 1.4;
+    for (const [ex, ey] of ENGINES) { g.beginPath(); g.arc(ex, ey, 8, 0, TAU); g.stroke(); }
+    /* clip to the hull for surface detail */
+    g.save();
+    hullPath(g); g.clip();
+    /* deck sheen: one long soft brass gradient along the spine */
+    const sh = g.createLinearGradient(0, 120, 0, 214);
+    sh.addColorStop(0, 'rgba(201,163,92,0.20)');
+    sh.addColorStop(0.35, 'rgba(201,163,92,0.05)');
+    sh.addColorStop(1, 'rgba(0,0,0,0.35)');
+    g.fillStyle = sh; g.fillRect(60, 110, 790, 150);
+    /* seeded panel seams + patch plates + a few scars */
+    for (let x = 96; x < 830; x += 18 + rnd() * 26) {
+      g.strokeStyle = `rgba(201,163,92,${0.05 + rnd() * 0.09})`;
+      g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, 120); g.lineTo(x + (rnd() - 0.5) * 8, 212); g.stroke();
     }
-    t.putImageData(img, 0, 0);
-    return doubled(c);
-  }
-
-  function buildFlow(rnd) {
-    const w = 512, h = 128, c = cv(w, h), t = c.getContext('2d');
-    const fb = makeFbm(rnd, 9, 2, 3);      /* high x freq, low y: elongated streaks */
-    const img = t.createImageData(w, h); const d = img.data; let i = 0;
-    for (let yy = 0; yy < h; yy++) {
-      const v = yy / h;
-      for (let xx = 0; xx < w; xx++) {
-        const n = fb(xx / w, v);
-        let a = n > 0.58 ? (n - 0.58) * 3.2 : 0; if (a > 0.9) a = 0.9;
-        a *= a;                            /* sparse, sharp-shouldered highlights */
-        d[i++] = 255; d[i++] = 236; d[i++] = 190; d[i++] = (a * 255) | 0;
-      }
+    for (let i = 0; i < 9; i++) {
+      g.fillStyle = `rgba(201,163,92,${0.03 + rnd() * 0.05})`;
+      g.fillRect(120 + rnd() * 640, 128 + rnd() * 64, 18 + rnd() * 40, 8 + rnd() * 18);
     }
-    t.putImageData(img, 0, 0);
-    return doubled(c);
-  }
-
-  function buildSprites() {
-    const sz = 256;
-    /* limb darkening + baked wrap-light annulus (the edge where light bends) */
-    let c = cv(sz, sz), g = c.getContext('2d'), gr;
-    g.beginPath(); g.arc(128, 128, 128, 0, TAU); g.clip();
-    gr = g.createRadialGradient(96, 88, 30, 96, 88, 250);
-    gr.addColorStop(0, 'rgba(0,0,0,0)');
-    gr.addColorStop(0.5, 'rgba(30,16,4,0.07)');
-    gr.addColorStop(0.75, 'rgba(24,12,3,0.32)');
-    gr.addColorStop(0.92, 'rgba(18,9,2,0.6)');
-    gr.addColorStop(1, 'rgba(14,7,2,0.82)');
-    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
-    gr = g.createRadialGradient(128, 128, 112, 128, 128, 128);
-    gr.addColorStop(0, 'rgba(10,5,1,0)');
-    gr.addColorStop(1, 'rgba(10,5,1,0.5)');
-    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
-    gr = g.createRadialGradient(128, 128, 114, 128, 128, 127);
-    gr.addColorStop(0, 'rgba(255,240,210,0)');
-    gr.addColorStop(0.8, 'rgba(255,240,210,0.16)');
-    gr.addColorStop(1, 'rgba(255,244,220,0.34)');
-    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
-    limbSpr = c;
-
-    /* big soft top-left specular bloom */
-    c = cv(sz, sz); g = c.getContext('2d');
-    g.beginPath(); g.arc(128, 128, 128, 0, TAU); g.clip();
-    gr = g.createRadialGradient(88, 78, 4, 88, 78, 120);
-    gr.addColorStop(0, 'rgba(255,252,240,0.55)');
-    gr.addColorStop(0.25, 'rgba(255,244,214,0.28)');
-    gr.addColorStop(0.6, 'rgba(255,236,190,0.10)');
-    gr.addColorStop(1, 'rgba(255,236,190,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
-    glossTL = c;
-
-    /* lower-right counter-gloss: gold reflects its surroundings both ways */
-    c = cv(sz, sz); g = c.getContext('2d');
-    g.beginPath(); g.arc(128, 128, 128, 0, TAU); g.clip();
-    gr = g.createRadialGradient(178, 186, 4, 178, 186, 96);
-    gr.addColorStop(0, 'rgba(255,223,158,0.30)');
-    gr.addColorStop(0.5, 'rgba(255,214,150,0.12)');
-    gr.addColorStop(1, 'rgba(255,214,150,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
-    glossBR = c;
-
-    /* the wandering highlight (drawn at an animated offset, inside the clip) */
-    c = cv(160, 160); g = c.getContext('2d');
-    gr = g.createRadialGradient(80, 80, 2, 80, 80, 78);
-    gr.addColorStop(0, 'rgba(255,250,235,0.6)');
-    gr.addColorStop(0.35, 'rgba(255,240,205,0.22)');
-    gr.addColorStop(1, 'rgba(255,240,205,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 160, 160);
-    wanderSpr = c;
-
-    /* whole-face brightening pulse for the ripple */
-    c = cv(sz, sz); g = c.getContext('2d');
-    gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-    gr.addColorStop(0, 'rgba(255,240,208,0.5)');
-    gr.addColorStop(0.7, 'rgba(255,232,190,0.18)');
-    gr.addColorStop(1, 'rgba(255,232,190,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
-    pulseSpr = c;
-
-    /* warm gold rim glow: glow OFF the disc + a bright wrap ring (gen-time blur only) */
-    c = cv(RIM_S, RIM_S); g = c.getContext('2d');
-    const cx = RIM_S / 2;
-    gr = g.createRadialGradient(cx, cx, RIM_PR * 0.9, cx, cx, RIM_PR * 1.4);
-    gr.addColorStop(0, 'rgba(201,163,92,0.34)');
-    gr.addColorStop(0.35, 'rgba(201,163,92,0.16)');
-    gr.addColorStop(1, 'rgba(201,163,92,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, RIM_S, RIM_S);
+    g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {          /* old wounds */
+      const sx = 200 + rnd() * 480, sy = 140 + rnd() * 50;
+      g.beginPath(); g.moveTo(sx, sy);
+      g.lineTo(sx + 16 + rnd() * 26, sy + (rnd() - 0.5) * 18); g.stroke();
+    }
+    /* portholes: a long row, all dark. The living ones draw live. */
+    g.fillStyle = 'rgba(70,58,42,0.55)';
+    for (let x = 150; x < 780; x += 34 + rnd() * 10) {
+      g.beginPath(); g.arc(x, 166 + (rnd() - 0.5) * 6, 2.2, 0, TAU); g.fill();
+    }
+    g.restore();
+    /* one bite out of the silhouette: something hit it, long ago */
+    g.save();
     g.globalCompositeOperation = 'destination-out';
-    g.beginPath(); g.arc(cx, cx, RIM_PR * 0.97, 0, TAU); g.fill();
-    g.globalCompositeOperation = 'source-over';
-    g.strokeStyle = 'rgba(255,223,158,0.85)'; g.lineWidth = 1.6;
-    g.shadowColor = 'rgb(255,223,158)'; g.shadowBlur = 12;
-    g.beginPath(); g.arc(cx, cx, RIM_PR + 1, 0, TAU); g.stroke();
-    g.shadowBlur = 0;
-    rimSpr = c;
-
-    /* seat shadow: soft dark radial, stretched into an ellipse at draw time */
-    c = cv(128, 128); g = c.getContext('2d');
-    gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+    g.beginPath(); g.arc(520, 118, 14, 0, TAU); g.fill();
+    g.beginPath(); g.arc(640, 194, 10, 0, TAU); g.fill();
+    g.restore();
+    return c;
+  }
+  function buildShadow() {
+    const c = cv(128, 128), g = c.getContext('2d');
+    const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
     gr.addColorStop(0, 'rgba(2,8,7,0.85)');
     gr.addColorStop(0.55, 'rgba(2,8,7,0.4)');
     gr.addColorStop(1, 'rgba(2,8,7,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    shadowSpr = c;
-
-    /* one hotspot bloom: a BLOWN core like the reference's studio-light
-       reflections (drawn 9x at seeded positions; screen blend does the rest) */
-    c = cv(96, 96); g = c.getContext('2d');
-    gr = g.createRadialGradient(48, 48, 2, 48, 48, 46);
-    gr.addColorStop(0, 'rgba(255,254,246,1)');
-    gr.addColorStop(0.14, 'rgba(255,250,226,0.62)');
-    gr.addColorStop(0.4, 'rgba(255,240,190,0.18)');
-    gr.addColorStop(1, 'rgba(255,236,180,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 96, 96);
-    hotSpr = c;
+    return c;
+  }
+  function buildShuttle() {
+    const c = cv(44, 18), g = c.getContext('2d');
+    g.fillStyle = '#c9a35c';
+    g.beginPath();
+    g.moveTo(3, 9); g.lineTo(14, 4.5); g.lineTo(34, 6); g.lineTo(41, 9);
+    g.lineTo(34, 12); g.lineTo(14, 13.5); g.closePath(); g.fill();
+    g.fillStyle = '#efe4c8';
+    g.beginPath(); g.moveTo(30, 6.6); g.lineTo(37, 9); g.lineTo(30, 11.4); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(20,17,20,1)';
+    g.beginPath(); g.arc(28, 9, 2.2, 0, TAU); g.fill();   /* canopy */
+    g.fillRect(3, 7.4, 3, 3.2);                            /* the nozzle */
+    g.fillStyle = '#8a6f3e';
+    g.beginPath(); g.moveTo(12, 5); g.lineTo(8, 0); g.lineTo(16, 4); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(12, 13); g.lineTo(8, 18); g.lineTo(16, 14); g.closePath(); g.fill();
+    return c;
   }
 
-  /* ---------- the skin plates: real renders, lazy, crossfaded ----------
-     The Commission lifted the no-assets law: the Artifact now wears
-     hand-made renders as its faces. The procedural gold stays as the
-     instant-boot base (zero-request first paint) and the living light
-     (flow sheen, constellation, ripple, sonar) rides on top of both. */
-  const SKIN_SRC = {
-    orrery: 'assets/artifact/skin-orrery.webp',   /* the hub's face: it IS an orrery */
-    molten: 'assets/artifact/skin-molten.webp',
-    deco: 'assets/artifact/skin-deco.webp',
-    veins: 'assets/artifact/skin-veins.webp',
-    machine: 'assets/artifact/skin-machine.webp',
-    arcadia: 'assets/artifact/skin-arcadia.webp',
-    aurora: 'assets/artifact/skin-aurora.webp',
-    uncharted: 'assets/artifact/skin-uncharted.webp',
-    biomech: 'assets/artifact/skin-biomech.webp', /* what is underneath (the reveal) */
-  };
-  const SKIN_OF = {
-    hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine',
-    abyssal: 'veins', arcadia: 'arcadia', aurora: 'aurora', uncharted: 'uncharted',
-    /* the v6 worlds borrow the nearest face until their own renders land:
-       the Artifact must never go mute when a world is considered (M1) */
-    archive: 'uncharted', drillyard: 'machine', stormwall: 'veins', beacons: 'molten',
-  };
-  const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
-  const FADE_MS = 650;
-  const skins = {};                        /* key -> { img, ready } */
-  let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
-  let revealReq = 0, revealUntil = -1;
-
-  /* the renders are COMPOSED faces — a dial, a city, a lattice. v6 stripped
-     them into a scrolling equatorial band to fake rotation, and the band
-     shredded every composition into anonymous gold streaks (art-direction
-     kill, M2). The face is now drawn PINNED at SKIN_COVER, sliced with the
-     liquid warp so the metal still lives; rotation retires for skins (the
-     zero-request base gold beneath keeps its flow). */
-  const skinRec = (key) => {
-    const rec = skins[key];
-    return rec && rec.ready ? rec : null;
-  };
-  function loadSkin(k) {
-    if (skins[k] || !SKIN_SRC[k]) return;
-    const img = new Image();
-    const rec = { img, ready: false };
-    skins[k] = rec;
-    img.onload = () => {
-      rec.ready = true;
-      /* rm has no ambient loop: if a hover is still waiting on this face,
-         ask the engine for its one designed repaint — otherwise the swap
-         is silently lost until some unrelated redraw */
-      if (rm() && wantSkin === k && window.Orrery && window.Orrery.requestStatic) window.Orrery.requestStatic();
-    };
-    img.onerror = () => { delete skins[k]; };          /* a 404 must not wedge the want-latch */
-    img.src = SKIN_SRC[k];
-  }
-
-  /* ---------- runtime state (pooled; no per-frame allocation) ---------- */
+  /* ---------- runtime state (pooled) ---------- */
   let ripplePending = false, rippleT0 = -1, pending = 0;
   const rings = [{ on: false, born: 0 }, { on: false, born: 0 }, { on: false, born: 0 }];
   const rm = () => docEl.classList.contains('rm');
+  let revealReq = 0, revealUntil = -1;
+  let accR = 201, accG = 163, accB = 92, accPulse = -1e9, accPulseReq = false;
+  /* the shuttle: dock -> fly -> return -> dock. Sorties latch into draw()
+     (the ripplePending pattern) so the module never needs its own clock. */
+  const shu = {
+    mode: 'dock', t0: 0, sx: 0, sy: 0, get: null, dur: 760,
+    px: 0, py: 0, hd: 0, dockX: 0, dockY: 0,
+    trail: new Float32Array(48), tn: 0, th: -1, tacc: 0,
+  };
+  let sortieReq = null;
 
-  /* ---------- API ---------- */
+  function easeIO(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
+
   return {
     init() {
       if (inited) return;
       inited = true;
-      /* true-touch phone: half-res gold — R caps ~150 there, and this bake
-         sits on the critical brochure→app flip (M2 boot-cost pass).
-         hover:none, so a small desktop window never latches the mush. */
-      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 384; TEX_H = 144; }
-      const rnd = mulberry(seedOf('artifact'));
-      baseTex = buildBase(rnd);
-      flowTex = buildFlow(rnd);
-      buildSprites();
-      /* the constellation: 9 reflections pinned to the LIGHT, not the skin —
-         each breathes on its own clock; each rarely FLARES, like something
-         bright moving under the surface */
-      hots.length = 0;
-      for (let i = 0; i < 9; i++) {
-        const ha = rnd() * TAU, hr = Math.sqrt(rnd()) * 0.72;
-        hots.push({
-          x: Math.cos(ha) * hr, y: Math.sin(ha) * hr,
-          r: 0.16 + rnd() * 0.22,          /* bloom size, fraction of R */
-          ph: rnd() * TAU, rate: 0.0002 + rnd() * 0.0003,
-          fi: 18000 + rnd() * 26000,       /* flare interval */
-          fo: rnd() * 44000,               /* flare phase offset */
-        });
-      }
-      su = rnd();
-      frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
-      /* skins: the hub face loads first (it is the marquee). The rest arrive
-         on a lazy stagger ONLY where hover exists and data isn't precious —
-         a phone was eating every skin it could never hover (M2); there,
-         setSkin lazy-loads the one face a tap actually asks for */
-      loadSkin('orrery');
-      const eager = matchMedia('(hover: hover)').matches
-        && !(navigator.connection && navigator.connection.saveData);
-      if (eager) {
-        let di = 0;
-        for (const k in SKIN_SRC) {
-          if (k === 'orrery') continue;
-          setTimeout(() => loadSkin(k), 1400 + di++ * 650);
-        }
-      } else {
-        /* even on the lazy path, the reveal's face rides along late: its
-           2.6s window must never burn down waiting on a first fetch */
-        setTimeout(() => loadSkin('biomech'), 4000);
-      }
+      const rnd = mulberry(seedOf('object-0'));
+      glowSpr = buildGlow();
+      hullSpr = buildHull(rnd);
+      shadowSpr = buildShadow();
+      shuttleSpr = buildShuttle();
+      frozenT = 40000 + rnd() * 90000;
     },
 
     draw(g, x, y, R, clockMs, opts) {
       if (!inited || R <= 0) return;
       const reduced2 = !!(opts && opts.rm);
       const t = reduced2 ? frozenT : clockMs;
-      const D = R * 2, dw = R * 8, half = dw * 0.5;   /* wrap period = 4R */
-      const pad = R * 0.13;                /* covers max warp excursion */
+      const s = (R * 2.6) / SPAN;
 
       if (reduced2) { ripplePending = false; rippleT0 = -1; }
       else if (ripplePending) { rippleT0 = clockMs; ripplePending = false; }
@@ -4641,166 +4494,174 @@ const SphereForge = (() => {
         rp = (clockMs - rippleT0) / RIPPLE_MS;
         if (rp >= 1) { rippleT0 = -1; rp = -1; }
       }
-      const rippling = rp >= 0;
-      const env = rippling ? Math.sin(rp * Math.PI) : 0;
-      const ringR = rippling ? rp * R * 1.25 : 0;
+      const env = rp >= 0 ? Math.sin(rp * Math.PI) : 0;
 
-      const scroll = ((t * SCROLL_SPD) % 1) * half;
-      const fscroll = half - ((t * FLOW_SPD) % 1) * half;   /* opposite drift */
-      const A = R * 0.028;                 /* liquid warp amplitude, subtle */
-
-      /* skin state machine: latch wants into fades; latch the reveal */
+      /* survey state, read straight off the engine's own set (same bundle) */
+      const lit = (typeof surveyed !== 'undefined') ? surveyed.size : 0;
+      const total = (typeof WORLDS !== 'undefined') ? WORLDS.length : 11;
       if (revealReq) { revealUntil = clockMs + revealReq; revealReq = 0; }
-      const revealing = revealUntil > clockMs && skins.biomech && skins.biomech.ready;
-      if (wantSkin !== curSkin && !nxtSkin) {
-        const wr = skins[wantSkin];
-        if (wr && wr.ready) {
-          if (reduced2) { curSkin = wantSkin; }        /* rm: an instant, designed swap */
-          else { nxtSkin = wantSkin; fadeT0 = clockMs; }
-        }
-      }
-      if (nxtSkin) {
-        if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
-      }
-      const recCur = skinRec(revealing ? 'biomech' : curSkin);
-      const skinOn = !!recCur;
+      if (accPulseReq) { accPulse = clockMs; accPulseReq = false; }
+      const awake = lit >= total;
+      const ghost = revealUntil > clockMs;   /* the reveal: for a moment, all decks answer */
+      const wakeK = awake ? 1 : ghost ? Math.min(1, (revealUntil - clockMs) / 600) : 0;
+
+      /* attitude: a very slow drift; reduced motion holds the seeded pose */
+      const bob = reduced2 ? 0 : Math.sin(t * 0.00021) * R * 0.022;
+      const tilt = reduced2 ? 0.006 : Math.sin(t * 0.00013 + 1.2) * 0.016;
 
       g.save();
-      g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
+      g.translate(x, y + bob);
+      g.rotate(tilt);
+      g.scale(s, s);
 
-      if (skinOn) {
-        /* THE FACE, PINNED: the render's disc seats over the clip at
-           SKIN_COVER, sliced with the two-wave liquid warp so the metal
-           still breathes — the composition finally survives to the screen */
-        const A2 = R * 0.042;              /* morph amplitude, stronger than v5 */
-        const BS = 24;
-        const S = R * SKIN_COVER, sy0 = y - S / 2, sdh = S / BS;
-        const iw = recCur.img.naturalWidth || recCur.img.width;
-        const ih = recCur.img.naturalHeight || recCur.img.height;
-        const ish = ih / BS;
-        const recNxt = (!revealing && nxtSkin) ? skinRec(nxtSkin) : null;
-        const fp = recNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
-        for (let i = 0; i < BS; i++) {
-          let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
-                  + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
-          if (rippling) {                  /* the ripple surges the warp locally
-                                              (abs: BOTH hemispheres answer, like the base gold) */
-            const sd = Math.abs(sy0 + (i + 0.5) * sdh - y) - ringR;
-            off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
-                 * Math.sin(t * 0.012 + i * 1.3);
-          }
-          g.drawImage(recCur.img, 0, i * ish, iw, ish,
-            x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
-          if (recNxt && fp > 0) {
-            const iw2 = recNxt.img.naturalWidth || recNxt.img.width;
-            const ish2 = (recNxt.img.naturalHeight || recNxt.img.height) / BS;
-            g.globalAlpha = fp;
-            g.drawImage(recNxt.img, 0, i * ish2, iw2, ish2,
-              x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
-            g.globalAlpha = 1;
-          }
-        }
-        /* the liquid sheen keeps drifting over the pinned face: living light */
-        g.globalCompositeOperation = 'screen';
-        g.globalAlpha = reduced2 ? 0.09 : 0.08 + 0.03 * Math.sin(t * 0.0004);
-        g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
-        g.globalAlpha = 1;
-        g.globalCompositeOperation = 'source-over';
-      } else {
-        /* the molten surface: 24 slices, one seam-free blit each
-           (the zero-request base — first paint never waits on a skin byte) */
-        const sh = TEX_H / NS, dh = D / NS;
-        for (let i = 0; i < NS; i++) {
-          let off = A * Math.sin(t * 0.00093 + i * 0.53)
-                  + A * 0.6 * Math.sin(t * 0.00061 - i * 0.31 + 2.1);
-          if (rippling) {                  /* local amplitude surge near the ring */
-            const sd = Math.abs(y - R + (i + 0.5) * dh - y) - ringR;
-            off += A * 2.6 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
-                 * Math.sin(t * 0.012 + i * 1.3);
-          }
-          g.drawImage(baseTex, 0, i * sh, TEX_W * 2, sh,
-            x - R - pad - scroll + off, y - R + i * dh, dw, dh + 0.5);
-        }
-        /* flow layer: brighter streaks, screen blend, opposite scroll */
-        g.globalCompositeOperation = 'screen';
-        g.globalAlpha = reduced2 ? 0.14 : 0.13 + 0.05 * Math.sin(t * 0.0004);
-        g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
-        g.globalAlpha = 1;
-        g.globalCompositeOperation = 'source-over';
+      g.drawImage(hullSpr, -HL / 2 + (HL / 2 - (72 + 838) / 2), -170, HL, HH);
+      /* ^ recenters the hull span (72..838) on the origin */
+
+      const ox = HL / 2 - (72 + 838) / 2;  /* same offset for every local point */
+      const L = (lx) => lx + ox - HL / 2;
+      const Y = (ly) => ly - 170;
+
+      /* the running lights: one deck kindles per surveyed world */
+      for (let i = 0; i < LIGHTS.length; i++) {
+        const on = i < lit || wakeK > 0;
+        if (!on) continue;
+        const a = (i < lit ? 0.85 : 0) + (i < lit ? 0 : wakeK * 0.7);
+        const tw = 0.75 + 0.25 * Math.sin(t * 0.0011 + i * 1.9);
+        g.globalAlpha = a * tw;
+        g.fillStyle = CREAM;
+        g.fillRect(L(LIGHTS[i][0]) - 1.6, Y(LIGHTS[i][1]) - 1.6, 3.2, 3.2);
+        g.globalAlpha = a * tw * 0.6;
+        g.drawImage(glowSpr, L(LIGHTS[i][0]) - 11, Y(LIGHTS[i][1]) - 11, 22, 22);
       }
+      /* the heartbeat window: it never went dark. The audio's pulse, visible. */
+      const hb = 0.45 + 0.4 * Math.max(0, Math.sin(t * 0.0016));
+      g.globalAlpha = hb;
+      g.fillStyle = CREAM;
+      g.fillRect(L(HEART[0]) - 1.8, Y(HEART[1]) - 1.8, 3.6, 3.6);
+      g.globalAlpha = hb * 0.7;
+      g.drawImage(glowSpr, L(HEART[0]) - 13, Y(HEART[1]) - 13, 26, 26);
+      /* nav beacon: a slow amber blink at the masthead (steady when reduced) */
+      const bk = reduced2 ? 0.8 : ((t % 2400) < 200 ? 1 : 0.06);
+      g.globalAlpha = bk;
+      g.fillStyle = 'rgba(255,140,80,1)';
+      g.beginPath(); g.arc(L(BEACON[0]), Y(BEACON[1]), 2.4, 0, TAU); g.fill();
+      g.globalAlpha = bk * 0.7;
+      g.drawImage(glowSpr, L(BEACON[0]) - 12, Y(BEACON[1]) - 12, 24, 24);
+      /* the bridge display: wears the accent of the world being considered */
+      const bp = Math.max(0, 1 - (clockMs - accPulse) / 900);
+      g.globalAlpha = 0.5 + 0.5 * bp;
+      g.fillStyle = `rgba(${accR},${accG},${accB},1)`;
+      g.fillRect(L(BRIDGE[0]) - 2, Y(BRIDGE[1]) - 2, 4, 4);
+      g.globalAlpha = (0.35 + 0.65 * bp) * 0.8;
+      g.drawImage(glowSpr, L(BRIDGE[0]) - 13 - 6 * bp, Y(BRIDGE[1]) - 13 - 6 * bp, 26 + 12 * bp, 26 + 12 * bp);
+      /* engines: cold until the ship is awake (or the reveal ghosts them) */
+      if (wakeK > 0.02) {
+        const eb = wakeK * (0.5 + 0.3 * Math.sin(t * 0.003));
+        for (const [ex, ey] of ENGINES) {
+          g.globalAlpha = eb;
+          g.drawImage(glowSpr, L(ex) - 16, Y(ey) - 16, 32, 32);
+          g.globalAlpha = eb * 0.9;
+          g.fillStyle = 'rgba(255,220,160,1)';
+          g.beginPath(); g.arc(L(ex), Y(ey), 3, 0, TAU); g.fill();
+        }
+      }
+      g.globalAlpha = 1;
 
-      /* the ripple: a bright band sweeping outward + a soft face-lift */
-      if (rippling) {
+      /* remember the dock in SCREEN space for the shuttle */
+      const ca = Math.cos(tilt), sa = Math.sin(tilt);
+      const dlx = L(DOCK[0]) * s, dly = Y(DOCK[1]) * s;
+      g.restore();
+      shu.dockX = x + dlx * ca - dly * sa;
+      shu.dockY = y + bob + dlx * sa + dly * ca;
+
+      /* ---------- the shuttle ---------- */
+      if (sortieReq) {
+        const from = shu.mode === 'dock' ? { x: shu.dockX, y: shu.dockY } : { x: shu.px, y: shu.py };
+        shu.mode = 'fly'; shu.t0 = clockMs; shu.sx = from.x; shu.sy = from.y;
+        shu.get = sortieReq.get; shu.dur = sortieReq.ms;
+        shu.tn = 0; shu.th = -1;
+        sortieReq = null;
+      }
+      let sx2 = shu.dockX, sy2 = shu.dockY, flying = false;
+      if (shu.mode === 'fly' || shu.mode === 'return') {
+        const k = Math.min(1, (clockMs - shu.t0) / shu.dur);
+        const tgt = shu.mode === 'fly' ? (shu.get ? shu.get() : { x: shu.dockX, y: shu.dockY })
+                                       : { x: shu.dockX, y: shu.dockY };
+        const mx = (shu.sx + tgt.x) / 2, my = (shu.sy + tgt.y) / 2;
+        const ddx = tgt.x - shu.sx, ddy = tgt.y - shu.sy;
+        const dl = Math.hypot(ddx, ddy) || 1;
+        const side = ddx >= 0 ? -1 : 1;
+        const cxq = mx + (-ddy / dl) * dl * 0.16 * side;
+        const cyq = my + (ddx / dl) * dl * 0.16 * side;
+        const e = easeIO(k), ie = 1 - e;
+        sx2 = ie * ie * shu.sx + 2 * ie * e * cxq + e * e * tgt.x;
+        sy2 = ie * ie * shu.sy + 2 * ie * e * cyq + e * e * tgt.y;
+        flying = true;
+        if (k >= 1) {
+          if (shu.mode === 'fly') { shu.mode = 'return'; shu.t0 = clockMs; shu.sx = sx2; shu.sy = sy2; shu.dur = 900; }
+          else shu.mode = 'dock';
+        }
+      }
+      const nhd = Math.atan2(sy2 - shu.py, sx2 - shu.px);
+      if (flying && (shu.px !== sx2 || shu.py !== sy2)) shu.hd = nhd;
+      shu.px = sx2; shu.py = sy2;
+      /* trail: 24 pooled points, sampled every 26ms while moving */
+      if (flying && !reduced2) {
+        shu.tacc += 16;
+        if (shu.tacc >= 26) {
+          shu.tacc = 0;
+          shu.th = (shu.th + 1) % 24;
+          shu.trail[shu.th * 2] = sx2; shu.trail[shu.th * 2 + 1] = sy2;
+          if (shu.tn < 24) shu.tn++;
+        }
+        g.strokeStyle = 'rgba(255,214,140,1)';
+        const capWas = g.lineCap;
+        g.lineCap = 'round';
+        for (let i2 = 1; i2 < shu.tn; i2++) {
+          const a0 = (shu.th - i2 + 24 * 2) % 24, a1 = (shu.th - i2 + 1 + 24 * 2) % 24;
+          g.globalAlpha = (1 - i2 / shu.tn) * 0.4;
+          g.lineWidth = Math.max(0.8, 2.6 * (1 - i2 / shu.tn));
+          g.beginPath();
+          g.moveTo(shu.trail[a0 * 2], shu.trail[a0 * 2 + 1]);
+          g.lineTo(shu.trail[a1 * 2], shu.trail[a1 * 2 + 1]);
+          g.stroke();
+        }
+        g.globalAlpha = 1;
+        g.lineCap = capWas;                /* the shared sky context keeps its caps */
+      } else { shu.tn = 0; shu.th = -1; }
+      /* the shuttle itself (hidden mid-warp is impossible: hub stops drawing) */
+      const ss = Math.max(0.7, Math.min(1.3, R / 170));
+      g.save();
+      g.translate(sx2, sy2);
+      g.rotate(flying ? shu.hd : tilt);
+      g.scale(ss, ss);
+      if (flying) {                          /* the burn */
+        g.globalAlpha = 0.85;
+        g.drawImage(glowSpr, -30, -9, 18, 18);
+        g.globalAlpha = 1;
+      }
+      g.drawImage(shuttleSpr, -22, -9);
+      g.restore();
+
+      /* the ripple: the wreck's sensor ring answers a hard knock */
+      if (env > 0) {
+        const ringR = rp * R * 1.4;
         g.globalCompositeOperation = 'screen';
-        g.globalAlpha = env * 0.22;
-        g.drawImage(pulseSpr, x - R, y - R, D, D);
         g.globalAlpha = env * 0.4;
-        g.strokeStyle = GOLD_BRIGHT;
-        g.lineWidth = R * 0.045 > 1.5 ? R * 0.045 : 1.5;
+        g.strokeStyle = 'rgba(255,240,210,1)';
+        g.lineWidth = Math.max(1.5, R * 0.04);
         g.beginPath(); g.arc(x, y, ringR, 0, TAU); g.stroke();
         g.globalAlpha = env * 0.18;
-        g.lineWidth = R * 0.02 > 1 ? R * 0.02 : 1;
+        g.lineWidth = Math.max(1, R * 0.018);
         g.beginPath(); g.arc(x, y, ringR * 0.86, 0, TAU); g.stroke();
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
       }
-
-      /* shading + the two environment glosses */
-      g.drawImage(limbSpr, x - R, y - R, D, D);
-      g.drawImage(glossTL, x - R, y - R, D, D);
-      g.globalAlpha = 0.55;
-      g.drawImage(glossBR, x - R, y - R, D, D);
-      g.globalAlpha = 1;
-
-      /* the hotspot constellation: reflections stay pinned while the metal
-         flows beneath them; each breathes, and rarely one FLARES. Additive
-         blend so the cores genuinely BLOW OUT like over-exposed reflections */
-      g.globalCompositeOperation = 'lighter';
-      for (let hI = 0; hI < hots.length; hI++) {
-        const h = hots[hI];
-        /* over a rotating band our own lighting carries the show: the
-           constellation stays strong (the band stripped the baked limb) */
-        let ha2 = reduced2 ? 0.58 : 0.55 + 0.18 * Math.sin(t * h.rate + h.ph);
-        if (skinOn) ha2 *= 0.75;
-        let hs2 = h.r * R * 2;
-        if (!reduced2) {
-          const ft = (t + h.fo) % h.fi;
-          if (ft < 2400) {                 /* the flare: 2.4s, sinusoid in and out */
-            const fe = Math.sin((ft / 2400) * Math.PI);
-            ha2 += fe * 0.45; hs2 *= 1 + 0.3 * fe;
-          }
-        }
-        if (rippling) ha2 += env * 0.2;    /* a disturbance lights the whole constellation */
-        /* MUST clamp: canvas IGNORES globalAlpha > 1 (assignment silently
-           dropped, previous spot's alpha would leak into this one) */
-        g.globalAlpha = ha2 > 1 ? 1 : ha2;
-        g.drawImage(hotSpr, x + h.x * R - hs2 / 2, y + h.y * R - hs2 / 2, hs2, hs2);
-      }
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
-
-      /* the wandering specular: a slow lissajous orbit (parked when reduced) */
-      const wa = reduced2 ? su * TAU : t * 0.00016;
-      const wx = x + Math.cos(wa) * R * 0.42;
-      const wy = y + Math.sin(wa * 0.83 + 1.4) * R * 0.26;
-      const ws = R * 0.95;
-      g.globalCompositeOperation = 'screen';
-      g.globalAlpha = reduced2 ? 0.4 : 0.34 + 0.1 * Math.sin(t * 0.0005 + 1);
-      g.drawImage(wanderSpr, wx - ws / 2, wy - ws / 2, ws, ws);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
-      g.restore();
-
-      /* rim glow last, outside the clip */
-      const rs = R * RIM_DRAW;
-      g.globalAlpha = reduced2 ? 0.8 : 0.72 + 0.1 * Math.sin(t * 0.00035);
-      g.drawImage(rimSpr, x - rs / 2, y - rs / 2, rs, rs);
-      g.globalAlpha = 1;
     },
 
     drawSonar(g, x, y, R, clockMs) {
       if (!inited) return;
-      if (rm()) {                          /* one static faint ring suggests the pulse */
+      if (rm()) {
         pending = 0;
         for (let i = 0; i < 3; i++) rings[i].on = false;
         g.globalAlpha = 0.13;
@@ -4809,7 +4670,7 @@ const SphereForge = (() => {
         g.globalAlpha = 1;
         return;
       }
-      while (pending > 0) {                /* latch queued pings into free pool slots */
+      while (pending > 0) {
         pending--;
         let free = -1;
         for (let i = 0; i < 3; i++) if (!rings[i].on) { free = i; break; }
@@ -4820,13 +4681,13 @@ const SphereForge = (() => {
         const rg = rings[i]; if (!rg.on) continue;
         const p = (clockMs - rg.born) / SONAR_MS;
         if (p >= 1) { rg.on = false; continue; }
-        const rr = R * (1.05 + p * 2.15);  /* R*1.05 -> R*3.2 */
+        const rr = R * (1.05 + p * 2.15);
         const fade = (1 - p) * (1 - p);
         g.globalAlpha = fade * 0.5;
         g.strokeStyle = BRASS;
         g.lineWidth = 1.8 - p * 0.8;
         g.beginPath(); g.arc(x, y, rr, 0, TAU); g.stroke();
-        g.globalAlpha = fade * 0.22;       /* the fainter inner echo */
+        g.globalAlpha = fade * 0.22;
         g.strokeStyle = CREAM;
         g.lineWidth = 1;
         g.beginPath(); g.arc(x, y, rr * 0.9, 0, TAU); g.stroke();
@@ -4834,40 +4695,45 @@ const SphereForge = (() => {
       g.globalAlpha = 1;
     },
 
-    ripple() {                             /* surface disturbance + a sonar ring */
+    ripple() {                               /* a hard knock: sensor ring + sonar */
       if (rm()) return;
       ripplePending = true;
       pending = pending < 3 ? pending + 1 : 3;
     },
-    ping() {                               /* ring only: the sonar */
+    ping() {
       if (rm()) return;
       pending = pending < 3 ? pending + 1 : 3;
     },
 
-    /* the Artifact answers a hover: it wears the face of the world you are
-       considering (accepts a world slug or 'hub'; unmapped worlds keep the
-       hub face). Crossfaded in draw(); rm gets an instant designed swap. */
+    /* the bridge considers a world: its display takes the accent and pulses.
+       (Keeps the setSkin name so every hover/beat call site stands.) */
     setSkin(slug) {
-      wantSkin = SKIN_OF[slug] || 'orrery';
-      loadSkin(wantSkin);
+      const w = (typeof bySlug !== 'undefined') && bySlug[slug];
+      if (w && w.a) { accR = w.a[0]; accG = w.a[1]; accB = w.a[2]; }
+      else { accR = 201; accG = 163; accB = 92; }
+      accPulseReq = true;                   /* latched onto the draw clock next frame */
     },
-    /* the reveal: for a moment the plates part and you see what is
-       underneath. The caller times it; the ripple masks the swap. */
-    reveal(ms) {
-      loadSkin('biomech');
-      revealReq = ms || 2600;
+    /* the reveal: every deck answers for a moment — a ghost of the living ship */
+    reveal(ms) { revealReq = ms || 2600; },
+
+    /* your vessel departs: fly to a live target over ms, then hold course.
+       travel() owns the warp timer; this owns only the picture. */
+    sortie(getTarget, ms) {
+      if (rm()) return false;
+      sortieReq = { get: getTarget, ms: ms || 760 };
+      return true;
     },
 
-    drawShadowPass(g, x, y, R) {           /* seats the Artifact INTO the scene */
+    drawShadowPass(g, x, y, R) {
       if (!inited) return;
-      g.globalAlpha = 0.55;
-      g.drawImage(shadowSpr, x - R * 1.7, y - R * 0.55, R * 3.4, R * 1.7);
+      g.globalAlpha = 0.5;
+      g.drawImage(shadowSpr, x - R * 2.0, y - R * 0.4, R * 4.0, R * 1.5);
       g.globalAlpha = 1;
     },
   };
 })();
 /* the engine guards its calls with `window.SphereForge` (mirrors WorldFX):
-   expose it so those guards fire and the Artifact actually paints */
+   expose it so those guards fire and the Derelict actually paints */
 window.SphereForge = SphereForge;
 
 
@@ -7933,6 +7799,28 @@ const Score = (() => {
     note(v.root * 2, at, 0.06, 0.3, L.wave, dest, L.dly, L.wet);
     note(v.root * Math.pow(2, v.scale[2] / 12) * 2, at + gapN, 0.05, 0.35, L.wave, dest, L.dly, L.wet);
     note(v.root * Math.pow(2, v.scale[m0.d % v.scale.length] / 12) * 2, at + gapN * 2, 0.045, 0.4, L.wave, dest, L.dly, L.wet);
+  });
+
+  /* the sortie: the shuttle undocks — a soft latch-click and a rising hiss
+     ~760ms before the warp's riser takes over */
+  let lastSortie = -9;
+  window.Orrery.events.addEventListener('sortie', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastSortie < 0.6) return;
+    lastSortie = ctx.currentTime;
+    const t = ctx.currentTime + 0.02;
+    note(880, t, 0.03, 0.04, 'square', dry, 0, 0);       /* the latch */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(2400, t + 0.6);
+    const gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t);
+    gn.gain.exponentialRampToValueAtTime(0.05, t + 0.3);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    n.connect(bp); bp.connect(gn); gn.connect(bus);
+    n.start(t); n.stop(t + 0.75);
+    n.onended = () => gn.disconnect();
   });
 
   /* the warp: riser swells into the whoosh, which blooms in the hall */
