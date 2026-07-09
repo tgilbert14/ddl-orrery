@@ -299,7 +299,7 @@ const SphereForge = (() => {
   }
 
   /* ---------- runtime state (pooled; no per-frame allocation) ---------- */
-  let ripplePending = false, rippleT0 = -1, pending = 0;
+  let ripplePending = false, rippleT0 = -1, pending = 0, wasRevealing = false;
   const rings = [{ on: false, born: 0 }, { on: false, born: 0 }, { on: false, born: 0 }];
   const rm = () => docEl.classList.contains('rm');
 
@@ -370,6 +370,13 @@ const SphereForge = (() => {
       /* skin state machine: latch wants into fades; latch the reveal */
       if (revealReq) { revealUntil = clockMs + revealReq; revealReq = 0; }
       const revealing = revealUntil > clockMs && skins.biomech && skins.biomech.ready;
+      /* the plates CLOSE under a second disturbance: the opening ripple
+         masked the swap in, this one masks the swap back (never a bare snap) */
+      if (wasRevealing && !revealing && !reduced2) {
+        ripplePending = true;
+        pending = pending < 3 ? pending + 1 : 3;
+      }
+      wasRevealing = revealing;
       if (wantSkin !== curSkin && !nxtSkin) {
         const wr = skins[wantSkin];
         if (wr && wr.ready) {

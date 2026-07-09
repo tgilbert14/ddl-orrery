@@ -401,17 +401,31 @@ function placeArtifactDom() {
     artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
   }
 }
-let artLast = 0, artTouches = 0;
+let artLast = 0, artLabelT = null;
+let artTouches = parseInt(store.get('orrery-arttouches') || '0', 10) || 0;
 function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
   artLast = now;
   artTouches++;
+  store.set('orrery-arttouches', String(artTouches));  /* sustained attention is remembered */
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
     /* provoke it enough and, for a moment, the plates part: you see what
-       is underneath (every third touch; the ripple masks the swap) */
-    if (artTouches % 3 === 0 && SphereForge.reveal) SphereForge.reveal(2600);
+       is underneath (every third touch; the ripple masks the swap).
+       Sustained attention CLIMBS: a glimpse at three, a long look at six,
+       and at nine it answers — the plates stay open and, for a moment,
+       it admits to being awake. */
+    if (artTouches % 3 === 0 && SphereForge.reveal) {
+      const stage = Math.min(3, (artTouches / 3) | 0);
+      SphereForge.reveal([0, 2600, 4200, 6200][stage]);
+      if (stage >= 3 && artLabel) {
+        if (!artLabel.dataset.home) artLabel.dataset.home = artLabel.textContent;
+        artLabel.textContent = 'Object 0 · responding';
+        clearTimeout(artLabelT);
+        artLabelT = setTimeout(() => { artLabel.textContent = artLabel.dataset.home; }, 6200);
+      }
+    }
     if (!skyTask) Orrery.startAmbient();
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));

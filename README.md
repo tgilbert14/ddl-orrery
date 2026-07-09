@@ -13,7 +13,8 @@ hand-made faces ride the sphere as real rotation, one revolution every 92 second
 the gold crossfades into that world's face: engraved orrery rings at rest, molten gold for the Dust Sea,
 art-deco towers for Velocity, etched machinery for the Grid, bioluminescent veins for Abyssal (the four
 newest worlds keep their secrets, for now). Touch it three times and, for a moment, the plates part and
-you see what is underneath. The eleven worlds truly circle it, passing behind and in front; a sonar pulse
+you see what is underneath — and sustained attention climbs: a glimpse at three, a long look at six,
+and at nine it answers. The eleven worlds truly circle it, passing behind and in front; a sonar pulse
 rings out every few seconds; living light (a breathing specular constellation, rare flares, ripples)
 rides on top of every face. A hands-free Grand Tour walks every world for you — the kiosk button — and
 the sky got deeper too: a galactic band, twin nebulae, rare cross-glint giants, and one visit in three
