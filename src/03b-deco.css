@@ -23,19 +23,37 @@
 .hub-copy {
   margin-top: clamp(0.2rem, 1.5vh, 1rem);
   padding: 0.75rem 1.8rem 0.9rem;
-  max-width: min(92vw, 44rem);
+  max-width: min(92vw, 40rem);
+  /* a SCRIM, not a plate (spectacle pass): the sky and the sweep read
+     straight through the lockup — the opaque Commission plaque was hiding
+     the show it was captioning */
   background:
-    linear-gradient(180deg, rgba(var(--brass-rgb), 0.07), rgba(var(--brass-rgb), 0.02) 45%, transparent),
-    var(--plaque);
-  border: 1px solid rgba(var(--brass-rgb), 0.5);
-  /* double-rule effect: 1px border, 2px plaque gap, 1px inner brass line */
-  box-shadow: inset 0 0 0 3px var(--plaque), inset 0 0 0 4px rgba(var(--brass-rgb), 0.3);
+    linear-gradient(180deg, rgba(var(--brass-rgb), 0.06), transparent 40%),
+    radial-gradient(ellipse 90% 120% at 50% 40%, rgba(2, 10, 8, 0.62), rgba(2, 10, 8, 0.18) 70%, transparent);
+  border: 1px solid rgba(var(--brass-rgb), 0.38);
+  box-shadow: inset 0 0 0 3px rgba(10, 27, 23, 0.35), inset 0 0 0 4px rgba(var(--brass-rgb), 0.22);
   clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px),
                      calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
+  position: relative; overflow: hidden;
+}
+/* the glint: a light bar sweeps the lockup every ~11s (rm holds still) */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .hub-copy::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 42%, rgba(255, 244, 214, 0.09) 50%, transparent 58%);
+    transform: translateX(-130%);
+    animation: plate-sheen 11s ease-in-out infinite 2s;
+  }
+}
+@keyframes plate-sheen {
+  0%, 78% { transform: translateX(-130%); }
+  92%, 100% { transform: translateX(130%); }
 }
 .hub-h1 {
   /* the engraved face lets the hero stand up (was a 1.35rem weight-300
-     whisper): Cinzel caps carry a bigger scale without shouting (M3) */
+     whisper): Cinzel caps carry a bigger scale without shouting (M3).
+     The glow rides --acc, so hovering a world retints the TITLE's light
+     live (the accent system already eases) — the lockup answers the ring. */
   font-family: var(--font-engraved);
   font-size: clamp(1.35rem, 1.05rem + 1.5vw, 2.1rem);
   font-weight: 600;
@@ -44,6 +62,7 @@
   line-height: 1.32;
   color: var(--cream);
   text-wrap: balance;
+  text-shadow: 0 0 22px rgba(var(--acc-rgb), 0.38), 0 0 60px rgba(var(--acc-rgb), 0.18);
 }
 /* brass double rules above AND below the engraved line
    (::after REPLACES the old 72px coral-to-acc bar) */
@@ -151,18 +170,45 @@
   padding-right: clamp(1.4rem, 3vw, 2.4rem);
 }
 .world-card.glass {
-  background-color: rgba(6, 22, 18, 0.8);       /* darker than old 0.72: captions keep 4.5:1 over FX */
+  background-color: rgba(4, 14, 11, 0.62);      /* the FX reads THROUGH the plate now (spectacle
+                                                   pass); .glass's backdrop blur keeps captions legible */
   background-image:
     radial-gradient(4px 4px at 20px 20px,               rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
     radial-gradient(4px 4px at calc(100% - 20px) 20px,  rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
     radial-gradient(4px 4px at 20px calc(100% - 20px),  rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
     radial-gradient(4px 4px at calc(100% - 20px) calc(100% - 20px), rgba(var(--cream-rgb), 0.8) 0 26%, var(--brass) 30% 55%, rgba(20, 13, 4, 0.9) 60% 74%, transparent 78%),
     linear-gradient(180deg, rgba(var(--brass-rgb), 0.06), transparent 32%);
-  border: 1px solid rgba(var(--brass-rgb), 0.5);
+  /* the plate is LIT BY ITS WORLD now: the border and outer bloom mix the
+     world accent into the brass, so the neon city's plate glows pink and
+     the deep's glows teal (the reference site's neon-edge idiom) */
+  border: 1px solid color-mix(in srgb, var(--wa, var(--acc)) 45%, rgba(201, 163, 92, 0.55));
   border-radius: 0;
-  box-shadow: inset 0 0 0 3px rgba(6, 22, 18, 0.9), inset 0 0 0 4px rgba(var(--brass-rgb), 0.28);
+  box-shadow: inset 0 0 0 3px rgba(6, 22, 18, 0.7), inset 0 0 0 4px rgba(var(--brass-rgb), 0.28),
+              0 0 30px rgba(var(--wa-rgb, var(--acc-rgb)), 0.16);
   clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px),
                      calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
+  transform: perspective(1000px) rotateX(var(--tiltX, 0deg)) rotateY(var(--tiltY, 0deg));
+  transition: opacity 0.6s var(--ease-out), transform 0.18s ease-out;
+}
+/* the plate glint: a light bar sweeps the card every ~9s while its world
+   plays (rm holds still; the clip-path contains it) */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .world.is-active .world-card::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 42%, rgba(255, 248, 224, 0.07) 50%, transparent 58%);
+    transform: translateX(-130%);
+    animation: plate-sheen 9s ease-in-out infinite 1.2s;
+  }
+}
+/* the card SINKS after a few seconds so the world owns the stage (JS arms
+   .card-away on arrival); pointer or focus brings it straight back */
+html.js .world.card-away .world-card:not(:hover):not(:focus-within) {
+  opacity: 0.13;
+}
+.world-card h2 {
+  /* neon signage: the world's own light haloes its name */
+  text-shadow: 0 0 18px rgba(var(--wa-rgb, var(--acc-rgb)), 0.55),
+               0 0 52px rgba(var(--wa-rgb, var(--acc-rgb)), 0.25);
 }
 /* the medallion slot: integrator wires PlanetForge.drawMini into it */
 .card-planet {

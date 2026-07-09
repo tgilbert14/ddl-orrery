@@ -20,7 +20,10 @@
    brightest FX moments (arwen A1 — computed, not eyeballed) */
 .world-card.glass { background: rgba(10, 15, 34, 0.72); }
 /* every landing gets a small lift of its own (legolas L5b) */
-html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ease-out) both; }
+/* no fill-mode: a `both` fill pinned opacity/transform forever, silently
+   overriding the card's sink (opacity) and tilt (transform) — the entrance
+   plays, then releases the properties back to the cascade */
+html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ease-out) backwards; }
 .w-eyebrow { color: var(--wa, var(--acc)); margin-bottom: 0.7rem; }
 .world-card h2 {
   font-size: var(--fs-h2); font-weight: 800; letter-spacing: -0.02em; line-height: 1.02;
@@ -31,7 +34,7 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
    always shown (designed end-state text, not live-motion narration). Full
    brass, no opacity: it carries the through-narrative, so it stays ≥7:1
    even over the brightest world FX bleeding through the plate. */
-.w-lore { margin-top: 0.7rem; color: var(--brass); max-width: 30em; font-style: italic; }
+.w-lore { margin-top: 0.7rem; color: var(--brass); max-width: 30em; }
 .w-note { margin-top: 0.9rem; color: var(--ink-dim); }
 .w-proof { margin-top: 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 .w-proof a { color: var(--wa, var(--acc)); font-weight: 600; }
