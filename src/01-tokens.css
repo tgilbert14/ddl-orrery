@@ -33,7 +33,7 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-dust-a: #ffb25e;      --w-dust-a-rgb: 255, 178, 94;
   --w-dust-b: #9fc07e;
   --w-dust-glow: #ff7a45;   --w-dust-glow-rgb: 255, 122, 69;
-  --w-dust-ground: #241430;
+  --w-dust-ground: #26120c;
 
   --w-mesa-a: #ff2e97;        --w-mesa-a-rgb: 255, 46, 151;
   --w-mesa-b: #29e6ff;        --w-mesa-b-rgb: 41, 230, 255;

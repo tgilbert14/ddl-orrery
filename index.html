@@ -55,7 +55,7 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-dust-a: #ffb25e;      --w-dust-a-rgb: 255, 178, 94;
   --w-dust-b: #9fc07e;
   --w-dust-glow: #ff7a45;   --w-dust-glow-rgb: 255, 122, 69;
-  --w-dust-ground: #241430;
+  --w-dust-ground: #26120c;
 
   --w-mesa-a: #ff2e97;        --w-mesa-a-rgb: 255, 46, 151;
   --w-mesa-b: #29e6ff;        --w-mesa-b-rgb: 41, 230, 255;
@@ -1783,22 +1783,39 @@ html.approaching #artifact-hit { pointer-events: none; }
         <svg class="dust-scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
           <defs>
             <linearGradient id="dust-sky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#241430"/>
-              <stop offset="0.42" stop-color="#5b2440"/>
-              <stop offset="0.72" stop-color="#c4503a"/>
-              <stop offset="1" stop-color="#ffb25e"/>
+              <stop offset="0" stop-color="#1c100c"/>
+              <stop offset="0.34" stop-color="#4a2416"/>
+              <stop offset="0.62" stop-color="#9c4f24"/>
+              <stop offset="0.82" stop-color="#d98e3e"/>
+              <stop offset="1" stop-color="#f2c06a"/>
             </linearGradient>
             <radialGradient id="dust-sun-a" cx="0.5" cy="0.5" r="0.5">
-              <stop offset="0" stop-color="#ffe9c6"/><stop offset="0.6" stop-color="#ffd9a0"/><stop offset="1" stop-color="#ffb25e"/>
+              <stop offset="0" stop-color="#ffefd2"/><stop offset="0.55" stop-color="#ffd9a0"/><stop offset="1" stop-color="#eda75c"/>
             </radialGradient>
           </defs>
           <rect width="1200" height="640" fill="url(#dust-sky)"/>
-          <circle cx="452" cy="452" r="98" fill="url(#dust-sun-a)" opacity="0.95"/>
-          <circle cx="742" cy="516" r="46" fill="#d85f3c" opacity="0.9"/>
-          <path d="M0,520 L0,486 L150,486 L190,462 L470,462 L500,486 L1200,498 L1200,520 Z" fill="#3a2140" opacity="0.72"/>
+          <ellipse cx="600" cy="470" rx="720" ry="95" fill="rgba(240,170,86,0.16)"/>
+          <circle cx="452" cy="322" r="98" fill="url(#dust-sun-a)" opacity="0.9"/>
+          <circle cx="704" cy="368" r="46" fill="#d85f3c" opacity="0.85"/>
+          <path d="M0,520 L0,486 L150,486 L190,462 L470,462 L500,486 L1200,498 L1200,520 Z" fill="#46241a" opacity="0.7"/>
           <g class="ds-static">
-            <path d="M0,640 L0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494 L1200,640 Z" fill="#2b1837"/>
-            <path d="M0,640 L0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566 L1200,640 Z" fill="#140b20"/>
+            <path d="M0,640 L0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494 L1200,640 Z" fill="#46231d"/>
+            <path d="M0,506 C180,486 360,520 560,512 C820,502 1000,470 1200,494" fill="none" stroke="rgba(240,168,90,0.5)" stroke-width="2.5"/>
+            <rect x="302" y="497" width="2.4" height="6" fill="#140a10"/>
+            <rect x="318" y="499" width="2.4" height="6" fill="#140a10"/>
+            <!-- the colossus, frozen mid-rise: face-on maw over the front dune -->
+            <path d="M688,600 Q676,430 700,352 L820,352 Q844,430 832,600 Z" fill="#301710"/>
+            <circle cx="760" cy="352" r="66" fill="#3c1d0e"/>
+            <circle cx="760" cy="352" r="54" fill="#5a2a10"/>
+            <circle cx="760" cy="352" r="38" fill="#2c1308"/>
+            <circle cx="760" cy="352" r="17" fill="#0c0503"/>
+            <g stroke="#7a4220" stroke-width="1.6" opacity="0.7">
+              <path d="M760,300 L760,316"/><path d="M760,388 L760,404"/><path d="M708,352 L724,352"/><path d="M796,352 L812,352"/>
+              <path d="M723,315 L734,326"/><path d="M786,378 L797,389"/><path d="M797,315 L786,326"/><path d="M734,378 L723,389"/>
+            </g>
+            <ellipse cx="760" cy="560" rx="150" ry="26" fill="rgba(240,170,90,0.20)"/>
+            <path d="M0,640 L0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566 L1200,640 Z" fill="#190d15"/>
+            <path d="M0,560 C210,540 380,584 620,566 C880,548 1030,590 1200,566" fill="none" stroke="rgba(210,130,62,0.4)" stroke-width="2.5"/>
           </g>
         </svg>
         <canvas class="fx-canvas" data-canvas="dune"></canvas>
@@ -4927,16 +4944,22 @@ const WorldFX = (() => {
   const verbEvent = (kind) => window.Orrery.events.dispatchEvent(new CustomEvent(kind));
 
   /* ============================================================
-     DUST SEA: parallax dunes, wind-blown sand, and THE WORM
-     caps: 3 precomputed silhouettes · sand 78 · puffs 30 · worm <=13
+     DUST SEA: the amber sea — razor-lit crests over indigo lee faces,
+     wind-smoke off the dunes, spice glints, a walking caravan, and
+     THE WORM: a face-on colossus that rises where you strike.
+     caps: 3 precomputed ridges (+lit/lee Path2Ds) · sand 78 · puffs 30 ·
+           cascade 64 · wisps 6 · glints 16 · walkers 3 ·
+           3 prebaked sprites: maw, bloom, wisp (no per-frame gradients)
      ============================================================ */
+  const DW_RISE = 2000, DW_HOLD = 2800, DW_SINK = 2200,
+        DW_TOTAL = DW_RISE + DW_HOLD + DW_SINK;
   fx.dune = {
     init(s) {
       const rnd = (a, b) => a + Math.random() * (b - a);
       const STEP = 20, x0 = -80, x1 = s.w + 80;
       const N = Math.ceil((x1 - x0) / STEP) + 1;
-      const H = s.h;
-      function ridge(baseY, amp, fill, driftA, driftS, phase) {
+      const H = s.h, W = s.w, g0 = s.g;
+      function ridge(baseY, amp, driftA, driftS, phase) {
         const xs = new Float32Array(N), ys = new Float32Array(N);
         const w1 = rnd(150, 230), w2 = rnd(70, 110), w3 = rnd(34, 52);
         const p1 = rnd(0, 7), p2 = rnd(0, 7), p3 = rnd(0, 7);
@@ -4945,59 +4968,214 @@ const WorldFX = (() => {
           const x = x0 + i * STEP; xs[i] = x;
           ys[i] = baseY + Math.sin(x / w1 + p1) * amp + Math.sin(x / w2 + p2) * a2 + Math.sin(x / w3 + p3) * a3;
         }
-        return { xs, ys, fill, driftA, driftS, phase, baseY, x0: x0, step: STEP };
+        return { xs, ys, driftA, driftS, phase, baseY, amp, x0, step: STEP };
       }
       const ridges = [
-        ridge(H * 0.50, 18, 'rgba(74,42,66,1)', 8, 0.000030, 0.0),
-        ridge(H * 0.61, 30, 'rgba(43,24,55,1)', 16, 0.000045, 2.1),
-        ridge(H * 0.73, 46, 'rgba(20,11,32,1)', 28, 0.000062, 4.3),
+        ridge(H * 0.50, 18, 8, 0.000030, 0.0),
+        ridge(H * 0.61, 30, 16, 0.000045, 2.1),
+        ridge(H * 0.73, 46, 28, 0.000062, 4.3),
       ];
+      /* the two-tone sea: every dune wears amber where it faces the suns
+         and cold indigo where it falls away — the crest line between them
+         is the razor the whole scene rides on */
+      const TONES = [
+        { hi: 'rgba(214,140,82,1)', mid: 'rgba(120,60,50,1)', lo: 'rgba(54,30,52,1)', crest: 'rgba(255,200,124,0.55)', lee: 'rgba(40,30,68,0.40)' },
+        { hi: 'rgba(194,116,60,1)', mid: 'rgba(94,42,36,1)',  lo: 'rgba(38,20,40,1)', crest: 'rgba(255,190,110,0.42)', lee: 'rgba(34,24,60,0.48)' },
+        { hi: 'rgba(148,80,38,1)',  mid: 'rgba(58,26,22,1)',  lo: 'rgba(20,11,22,1)', crest: 'rgba(255,178,96,0.30)',  lee: 'rgba(26,18,48,0.55)' },
+      ];
+      for (let k = 0; k < 3; k++) {
+        const r = ridges[k], t = TONES[k];
+        const gr = g0.createLinearGradient(0, r.baseY - r.amp * 1.9, 0, H);
+        gr.addColorStop(0, t.hi); gr.addColorStop(0.42, t.mid); gr.addColorStop(1, t.lo);
+        r.grad = gr; r.crest = t.crest; r.leeFill = t.lee;
+        r.lit = dunePaths(r, -1);              /* sun-side crest polylines */
+        r.lee = dunePaths(r, +1);              /* lee-side shadow bands */
+      }
+      /* the maw, baked once: rings of radial bristles around a black throat,
+         a pale baleen fringe at the rim (drawn face-on, film-poster style) */
+      const MS = 256, mo = document.createElement('canvas'); mo.width = mo.height = MS;
+      const mg = mo.getContext('2d');
+      const cx = MS / 2, cy = MS / 2;
+      let grd = mg.createRadialGradient(cx, cy, MS * 0.05, cx, cy, MS * 0.5);
+      grd.addColorStop(0, '#120805'); grd.addColorStop(0.45, '#301608');
+      grd.addColorStop(0.8, '#582c14'); grd.addColorStop(1, '#4a2410');
+      mg.fillStyle = grd; mg.beginPath(); mg.arc(cx, cy, MS * 0.5, 0, 7); mg.fill();
+      for (let ring = 0; ring < 3; ring++) {
+        const r0 = MS * (0.17 + ring * 0.105), r1 = MS * (0.30 + ring * 0.105);
+        const nB = 130 + ring * 40;
+        for (let b = 0; b < nB; b++) {
+          const a = (b / nB) * Math.PI * 2 + ring * 0.05 + Math.random() * 0.03;
+          const rr0 = r0 * (0.92 + Math.random() * 0.16), rr1 = r1 * (0.94 + Math.random() * 0.12);
+          mg.strokeStyle = `rgba(${110 + ring * 26},${60 + ring * 18},${32 + ring * 9},${0.30 + Math.random() * 0.32})`;
+          mg.lineWidth = 0.8 + Math.random() * 0.9;
+          mg.beginPath();
+          mg.moveTo(cx + Math.cos(a) * rr0, cy + Math.sin(a) * rr0);
+          mg.lineTo(cx + Math.cos(a + 0.02) * rr1, cy + Math.sin(a + 0.02) * rr1);
+          mg.stroke();
+        }
+      }
+      grd = mg.createRadialGradient(cx, cy, 0, cx, cy, MS * 0.20);
+      grd.addColorStop(0, 'rgba(0,0,0,1)'); grd.addColorStop(0.7, 'rgba(10,4,2,0.9)'); grd.addColorStop(1, 'rgba(20,9,5,0)');
+      mg.fillStyle = grd; mg.beginPath(); mg.arc(cx, cy, MS * 0.20, 0, 7); mg.fill();
+      for (let b = 0; b < 100; b++) {
+        const a = (b / 100) * Math.PI * 2 + Math.random() * 0.02;
+        mg.strokeStyle = `rgba(196,138,86,${0.15 + Math.random() * 0.2})`;
+        mg.lineWidth = 1 + Math.random();
+        mg.beginPath();
+        mg.moveTo(cx + Math.cos(a) * MS * 0.46, cy + Math.sin(a) * MS * 0.46);
+        mg.lineTo(cx + Math.cos(a) * MS * (0.478 + Math.random() * 0.012), cy + Math.sin(a) * MS * (0.478 + Math.random() * 0.012));
+        mg.stroke();
+      }
+      /* one low sun on it: shade the lower-left so the face turns */
+      grd = mg.createLinearGradient(0, MS, MS * 0.7, MS * 0.2);
+      grd.addColorStop(0, 'rgba(8,3,2,0.42)'); grd.addColorStop(0.55, 'rgba(8,3,2,0)');
+      mg.fillStyle = grd; mg.beginPath(); mg.arc(cx, cy, MS * 0.5, 0, 7); mg.fill();
+      /* the body column's light, baked once (lighter up where the suns sit) */
+      const bg = g0.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, '#5f3018'); bg.addColorStop(0.5, '#43200f'); bg.addColorStop(1, '#2a1208');
+      /* warm dust bloom + one sand wisp, baked once */
+      const gs = 64, oc = document.createElement('canvas'); oc.width = oc.height = gs;
+      const og = oc.getContext('2d');
+      const gr2 = og.createRadialGradient(gs / 2, gs / 2, 0, gs / 2, gs / 2, gs / 2);
+      gr2.addColorStop(0, 'rgba(255,196,130,0.7)');
+      gr2.addColorStop(0.5, 'rgba(228,140,80,0.30)');
+      gr2.addColorStop(1, 'rgba(200,110,60,0)');
+      og.fillStyle = gr2; og.beginPath(); og.arc(gs / 2, gs / 2, gs / 2, 0, 7); og.fill();
+      const fc = document.createElement('canvas'); fc.width = 160; fc.height = 48;
+      const fg2 = fc.getContext('2d');
+      fg2.setTransform(1, 0, 0, 0.3, 0, 0);
+      const wgr = fg2.createRadialGradient(80, 80, 4, 80, 80, 78);
+      wgr.addColorStop(0, 'rgba(232,190,140,0.5)');
+      wgr.addColorStop(0.6, 'rgba(214,160,110,0.22)');
+      wgr.addColorStop(1, 'rgba(200,140,90,0)');
+      fg2.fillStyle = wgr; fg2.beginPath(); fg2.arc(80, 80, 78, 0, 7); fg2.fill();
+      /* wind-smoke off the crests: 6 wisps that respawn on high points */
+      const wisps = [];
+      for (let i = 0; i < 6; i++) wisps.push(duneWisp({ ri: 1 + (i % 2) }, ridges));
+      /* the caravan: three tiny figures walking the mid crest, west into the wind */
+      const walkers = [];
+      for (let i = 0; i < 3; i++) walkers.push({ x: W * (0.3 + i * 0.045 + Math.random() * 0.015), v: -(0.008 + Math.random() * 0.003) });
+      /* spice in the air: 16 pooled glints */
+      const glints = new Array(16);
+      for (let i = 0; i < glints.length; i++) glints[i] = { on: false, x: 0, y: 0, t0: 0, max: 1, r: 1 };
       const sand = new Array(78);
       for (let i = 0; i < sand.length; i++) sand[i] = {
-        x: Math.random() * s.w, y: rnd(H * 0.30, H * 0.86),
+        x: Math.random() * W, y: rnd(H * 0.30, H * 0.86),
         vx: -(0.18 + Math.random() * 0.16), len: 8 + Math.random() * 20, seed: rnd(0, 7),
       };
       const puffs = new Array(30);
       for (let i = 0; i < puffs.length; i++) puffs[i] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, r: 0 };
-      const worm = { on: false, t0: 0, dur: 6000, nSeg: 11, dir: 1, xA: 0, span: 560, baseY: 0, archH: 130, puffAcc: 0, bursted: false };
-      return { ridges, sand, puffs, worm, next: null };
+      /* the cascade: sand pouring off the risen body, 64 pooled streaks */
+      const casc = new Array(64);
+      for (let i = 0; i < casc.length; i++) casc[i] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1 };
+      const worm = { on: false, t0: 0, x: 0, headR: 0, topY: 0, floorY: 0, seed: 0, burst: false, cascAcc: 0 };
+      return { ridges, sand, puffs, casc, wisps, walkers, glints, worm,
+               maw: mo, bloom: oc, wispS: fc, bodyGrad: bg, next: null, glintAcc: 0 };
     },
     frame(s, st, dt, clock) {
       const g = s.g, W = s.w, H = s.h;
       g.clearRect(0, 0, W, H);
       if (st.next === null) st.next = clock + 9000 + Math.random() * 8000;
 
-      drawRidge(g, st.ridges[0], H, clock);
-      drawRidge(g, st.ridges[1], H, clock);
-
       const wm = st.worm;
       if (!wm.on && clock >= st.next)
-        duneBreach(st, clock, W * (0.28 + Math.random() * 0.44), 0);
+        duneRise(s, st, clock, W * (0.25 + Math.random() * 0.5));
+
+      /* emergence envelope + the ground answering it */
+      let u = 0, tW = 0;
       if (wm.on) {
-        const p = (clock - wm.t0) / wm.dur;
-        if (p >= 1) {
-          wm.on = false;
-          st.next = clock + 26000 + Math.random() * 18000;
-        } else {
-          g.fillStyle = 'rgba(11,6,19,0.96)';
-          for (let k = wm.nSeg - 1; k >= 0; k--) {
-            const sk = p - k * 0.045;
-            if (sk < 0 || sk > 1) continue;
-            const x = wm.xA + wm.dir * wm.span * sk;
-            const y = wm.baseY - wm.archH * Math.sin(Math.PI * sk);
-            const rr = 10 + 20 * (1 - k / wm.nSeg);
-            g.beginPath(); g.arc(x, y, rr, 0, 7); g.fill();
-          }
-          const hp = Math.min(p, 1);
-          const headX = wm.xA + wm.dir * wm.span * hp;
-          const headY = wm.baseY - wm.archH * Math.sin(Math.PI * hp);
-          if (!wm.bursted && p > 0.24) { wm.bursted = true; for (let b = 0; b < 10; b++) spawnPuff(st, headX, headY, 1.4); }
-          wm.puffAcc += dt;
-          if (wm.puffAcc > 95 && p > 0.15 && p < 0.9) { wm.puffAcc = 0; spawnPuff(st, headX, headY, 1.0); }
-        }
+        tW = clock - wm.t0;
+        if (tW >= DW_TOTAL) { wm.on = false; st.next = clock + 26000 + Math.random() * 18000; }
+        else if (tW < DW_RISE) { const k = tW / DW_RISE; u = 1 - Math.pow(1 - k, 3); }
+        else if (tW < DW_RISE + DW_HOLD) u = 1;
+        else { const k = (tW - DW_RISE - DW_HOLD) / DW_SINK; u = 1 - k * k; }
+      }
+      const rumble = wm.on ? u * (tW < DW_RISE ? 1 : tW < DW_RISE + DW_HOLD ? 0.45 : 0.25) : 0;
+      g.save();
+      if (rumble > 0.02) g.translate(Math.sin(clock * 0.11) * 2.4 * rumble, Math.cos(clock * 0.13) * 1.7 * rumble);
+
+      const gust = 0.55 + 0.45 * Math.sin(clock * 0.00028);
+
+      drawDune(g, st.ridges[0], H, clock);
+      duneWisps(g, st, 0, dt, clock, gust, W);
+      drawDune(g, st.ridges[1], H, clock);
+      duneWisps(g, st, 1, dt, clock, gust, W);
+
+      /* the caravan pauses when the ground speaks */
+      g.fillStyle = 'rgba(16,9,14,0.88)';
+      const r1 = st.ridges[1], d1 = r1.driftA * Math.sin(clock * r1.driftS + r1.phase);
+      for (const wk of st.walkers) {
+        if (!wm.on) { wk.x += wk.v * dt; if (wk.x < -20) wk.x = W + 20; }
+        const fi = Math.min(r1.xs.length - 2, Math.max(0, (wk.x - r1.x0) / r1.step));
+        const i0 = fi | 0, ft = fi - i0;
+        const wy = r1.ys[i0] + (r1.ys[i0 + 1] - r1.ys[i0]) * ft;
+        g.fillRect(wk.x + d1 - 1, wy - 5.4, 2, 4.6);
+        g.beginPath(); g.arc(wk.x + d1, wy - 6.2, 1, 0, 7); g.fill();
       }
 
-      drawRidge(g, st.ridges[2], H, clock);            /* front dune occludes the submerged body */
+      if (wm.on && u > 0.01) {
+        const R = wm.headR;
+        const hx = wm.x + Math.sin(clock * 0.0009 + wm.seed) * 10 * u;
+        const hy = wm.floorY - (wm.floorY - wm.topY) * u;
+        if (!wm.burst && u > 0.06) { wm.burst = true; for (let b = 0; b < 12; b++) spawnPuff(st, wm.x, wm.floorY - 20, 2.2); }
+        /* the backlit dust the colossus hauls up with it */
+        const bw = R * 8;
+        g.globalAlpha = (0.45 + 0.10 * Math.sin(clock * 0.004)) * u;
+        g.drawImage(st.bloom, hx - bw / 2, hy - bw * 0.34, bw, bw);
+        g.globalAlpha = 0.55 * u;
+        g.drawImage(st.bloom, hx - R * 8, wm.floorY - R * 2.2, R * 16, R * 4.4);
+        g.globalAlpha = 1;
+        /* the body: a tower with ring segments, leaning with its own sway */
+        g.fillStyle = st.bodyGrad;
+        g.beginPath();
+        g.moveTo(hx - R * 1.02, wm.floorY + 40);
+        g.quadraticCurveTo(hx - R * 1.14, hy + R * 0.35, hx - R * 0.80, hy - R * 0.05);
+        g.lineTo(hx + R * 0.80, hy - R * 0.05);
+        g.quadraticCurveTo(hx + R * 1.14, hy + R * 0.35, hx + R * 1.02, wm.floorY + 40);
+        g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(18,8,4,0.4)'; g.lineWidth = 2;
+        for (let yy = hy + R * 1.05; yy < wm.floorY; yy += R * 0.46) {
+          const tt2 = (yy - hy) / Math.max(1, wm.floorY - hy);
+          g.beginPath(); g.ellipse(hx, yy, R * (0.82 + 0.2 * tt2), R * 0.13, 0, 0, Math.PI); g.stroke();
+        }
+        g.strokeStyle = 'rgba(255,176,96,0.10)'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(hx - R * 0.98, hy + R * 0.6); g.quadraticCurveTo(hx - R * 1.06, (hy + wm.floorY) / 2, hx - R * 1.0, wm.floorY); g.stroke();
+        /* the maw, face-on, breathing a slow tilt */
+        const lean = Math.sin(clock * 0.0011 + wm.seed) * 0.07 * u;
+        g.save(); g.translate(hx, hy); g.rotate(lean);
+        g.drawImage(st.maw, -R, -R, R * 2, R * 2);
+        g.restore();
+        /* sand pouring off the risen body */
+        if (tW < DW_RISE + DW_HOLD && u > 0.15) {
+          wm.cascAcc += dt;
+          while (wm.cascAcc > 40) {
+            wm.cascAcc -= 40;
+            for (let n2 = 0; n2 < 3; n2++) {
+              let c = null; for (const q of st.casc) if (!q.on) { c = q; break; }
+              if (!c) break;
+              const side = Math.random() < 0.5 ? -1 : 1, off = 0.35 + Math.random() * 0.62;
+              c.on = true;
+              c.x = hx + side * R * off;
+              c.y = hy + R * Math.sqrt(Math.max(0, 1 - off * off)) * 0.9;
+              c.vx = side * (0.01 + Math.random() * 0.02); c.vy = 0.10 + Math.random() * 0.10;
+              c.life = 0; c.max = 900 + Math.random() * 700;
+            }
+          }
+        }
+      }
+      g.fillStyle = 'rgba(226,172,112,0.5)';
+      for (const c of st.casc) {
+        if (!c.on) continue;
+        c.life += dt; const k = c.life / c.max;
+        c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 0.00022 * dt;
+        if (k >= 1 || c.y > wm.floorY + 30) { c.on = false; continue; }
+        g.globalAlpha = 0.7 * (1 - k);
+        g.fillRect(c.x, c.y, 1.6, 6 + 5 * k);
+      }
+      g.globalAlpha = 1;
+
+      drawDune(g, st.ridges[2], H, clock);          /* the front dune keeps the base submerged */
+      duneWisps(g, st, 2, dt, clock, gust, W);
 
       for (const pf of st.puffs) {
         if (!pf.on) continue;
@@ -5009,7 +5187,33 @@ const WorldFX = (() => {
         g.beginPath(); g.arc(pf.x, pf.y, pf.r * (0.6 + k * 1.6), 0, 7); g.fill();
       }
 
-      const gust = 0.55 + 0.45 * Math.sin(clock * 0.00028);
+      /* spice on the wind: brief gold glints, thicker while the worm is up */
+      st.glintAcc += dt;
+      const glintGap = wm.on ? 120 : 320;
+      if (st.glintAcc > glintGap) {
+        st.glintAcc = 0;
+        for (const q of st.glints) if (!q.on) {
+          q.on = true; q.t0 = clock; q.max = 700 + Math.random() * 900;
+          q.r = 0.7 + Math.random() * 0.9;
+          if (wm.on && Math.random() < 0.6) {
+            q.x = wm.x + (Math.random() - 0.5) * wm.headR * 5;
+            q.y = wm.topY + Math.random() * (wm.floorY - wm.topY);
+          } else {
+            q.x = Math.random() * W; q.y = H * (0.12 + Math.random() * 0.55);
+          }
+          break;
+        }
+      }
+      g.fillStyle = 'rgba(255,216,140,1)';
+      for (const q of st.glints) {
+        if (!q.on) continue;
+        const k = (clock - q.t0) / q.max;
+        if (k >= 1) { q.on = false; continue; }
+        g.globalAlpha = Math.sin(Math.PI * k) * 0.8;
+        g.fillRect(q.x, q.y, q.r, q.r);
+      }
+      g.globalAlpha = 1;
+
       g.strokeStyle = `rgba(255,209,150,${0.05 + 0.09 * gust})`;
       g.lineWidth = 1; g.beginPath();
       for (const q of st.sand) {
@@ -5019,34 +5223,95 @@ const WorldFX = (() => {
         g.moveTo(q.x, q.y); g.lineTo(q.x + q.len * (0.6 + gust), q.y + 0.6);
       }
       g.stroke();
+      g.restore();
     },
-    /* M4 verb: strike the sand and the worm breaches where you struck —
-       the arch peaks at sk=0.5, so aiming the peak means xA = bx - span/2 */
+    /* M4 verb: strike the sand and the colossus rises where you struck */
     verb(s, st, x, y, clock) {
       if (st.worm.on) return;                       /* one worm; the desert sets the pace */
-      duneBreach(st, clock, Math.max(s.w * 0.10, Math.min(s.w * 0.90, x)), x < s.w / 2 ? 1 : -1);
+      duneRise(s, st, clock, x);
       verbEvent('worm');
     },
   };
-  function duneBreach(st, clock, bx, dir) {
-    const wm = st.worm, fr = st.ridges[2];
-    const idx = Math.min(fr.xs.length - 1, Math.max(0, Math.round((bx - fr.x0) / fr.step)));
-    wm.on = true; wm.t0 = clock; wm.dur = 6000;
-    wm.nSeg = 9 + (Math.random() * 5 | 0);
-    wm.dir = dir || (Math.random() < 0.5 ? 1 : -1);
-    wm.span = 460 + Math.random() * 220;
-    wm.xA = bx - wm.dir * wm.span * 0.5;
-    wm.baseY = fr.ys[idx] + 54;
-    wm.archH = 122 + Math.random() * 46;
-    wm.puffAcc = 0; wm.bursted = false;
+  function duneRise(s, st, clock, bx) {
+    const wm = st.worm, fr = st.ridges[2], W = s.w, H = s.h;
+    wm.on = true; wm.t0 = clock; wm.seed = Math.random() * 7;
+    wm.headR = Math.min(W * 0.13, 150) * (0.9 + Math.random() * 0.25);
+    wm.x = Math.max(wm.headR * 1.2, Math.min(W - wm.headR * 1.2, bx));
+    const idx = Math.min(fr.xs.length - 1, Math.max(0, Math.round((wm.x - fr.x0) / fr.step)));
+    wm.floorY = fr.ys[idx] + 40;                    /* it clears the front dune, base still hidden */
+    /* the tower stays in proportion to its own head on every screen */
+    wm.topY = Math.max(H * 0.20 + Math.random() * H * 0.05, wm.floorY - wm.headR * 4.8);
+    wm.burst = false; wm.cascAcc = 0;
   }
-  function drawRidge(g, r, H, clock) {
+  /* one dune: gradient body, indigo lee bands, then the lit crest razor */
+  function drawDune(g, r, H, clock) {
     const d = r.driftA * Math.sin(clock * r.driftS + r.phase);
     const xs = r.xs, ys = r.ys, n = xs.length;
-    g.fillStyle = r.fill;
+    g.fillStyle = r.grad;
     g.beginPath(); g.moveTo(xs[0] + d, H + 2);
     for (let i = 0; i < n; i++) g.lineTo(xs[i] + d, ys[i]);
     g.lineTo(xs[n - 1] + d, H + 2); g.closePath(); g.fill();
+    g.save(); g.translate(d, 0);
+    g.fillStyle = r.leeFill; g.fill(r.lee);
+    g.strokeStyle = r.crest; g.lineWidth = 1.6; g.lineJoin = 'round';
+    g.stroke(r.lit);
+    g.restore();
+  }
+  /* crest runs split by slope: ascending faces catch the suns (polylines),
+     descending faces fall into shadow (bands). Built once per ridge. */
+  function dunePaths(r, side) {
+    const xs = r.xs, ys = r.ys, n = xs.length;
+    const p = new Path2D();
+    const depth = r.amp * 1.1;
+    let i = 0;
+    while (i < n - 1) {
+      const asc = ys[i + 1] < ys[i];
+      if ((side < 0) !== asc) { i++; continue; }
+      let j = i;
+      while (j < n - 1 && ((ys[j + 1] < ys[j]) === asc)) j++;
+      if (side > 0 && j - i < 2) { i = j; continue; }   /* one-segment runs make spikes, not shade */
+      p.moveTo(xs[i], ys[i]);
+      for (let k = i + 1; k <= j; k++) p.lineTo(xs[k], ys[k]);
+      if (side > 0) {
+        /* a wedge, not a slab: the shade swells mid-slope and pinches out
+           at both ends so it reads as the dune's own lee face */
+        const len = j - i;
+        for (let k = j; k >= i; k--) {
+          const tt = len ? (k - i) / len : 0;
+          p.lineTo(xs[k], ys[k] + depth * Math.pow(Math.sin(Math.PI * tt), 0.7));
+        }
+        p.closePath();
+      }
+      i = j;
+    }
+    return p;
+  }
+  function duneWisp(w, ridges) {
+    const r = ridges[w.ri];
+    /* respawn on a high crest point: sample a few, keep the highest */
+    let gi = (Math.random() * r.xs.length) | 0;
+    for (let t = 0; t < 4; t++) { const c = (Math.random() * r.xs.length) | 0; if (r.ys[c] < r.ys[gi]) gi = c; }
+    w.x = r.xs[gi]; w.y = r.ys[gi] - 2;
+    w.w = 90 + Math.random() * 130;
+    w.a = 0.10 + Math.random() * 0.08;
+    w.v = -(0.012 + Math.random() * 0.014);
+    w.life = 0; w.max = 3600 + Math.random() * 2800;
+    w.seed = Math.random() * 7;
+    return w;
+  }
+  function duneWisps(g, st, band, dt, clock, gust, W) {
+    for (const w of st.wisps) {
+      if (w.ri !== band) continue;
+      w.life += dt;
+      const k = w.life / w.max;
+      if (k >= 1 || w.x < -w.w) { duneWisp(w, st.ridges); continue; }
+      w.x += w.v * (0.5 + gust) * dt;
+      w.y -= 0.004 * dt;
+      const mh = w.w * 0.3;
+      g.globalAlpha = w.a * Math.sin(Math.PI * Math.min(1, k)) * (0.7 + 0.3 * gust);
+      g.drawImage(st.wispS, w.x - w.w / 2, w.y - mh / 2, w.w, mh);
+    }
+    g.globalAlpha = 1;
   }
   function spawnPuff(st, x, y, scale) {
     for (const pf of st.puffs) {
@@ -7521,13 +7786,16 @@ const Score = (() => {
     verbLast[k] = ctx.currentTime;
     return true;
   };
-  window.Orrery.events.addEventListener('worm', () => {     /* the dune answers: ground-thumps + a sub swell */
+  window.Orrery.events.addEventListener('worm', () => {     /* the colossus: thumps, a sub swell, the hull-groan
+                                                               reads as its world-filling call in this voicing */
     if (!verbGate('worm', 2.5)) return;
     const v = ARR['dust-sea'], t = ctx.currentTime + 0.03;
     taiko(t, 0.5);
-    note(v.root / 2, t + 0.1, 0.09, 3.2, 'sine', bus, 0.1, 0.3);
+    note(v.root / 2, t + 0.1, 0.09, 4.2, 'sine', bus, 0.1, 0.3);
+    groan(t + 0.3);
     taiko(t + 0.42, 0.3);
     shaker(t + 0.55);
+    taiko(t + 1.1, 0.22);
   });
   window.Orrery.events.addEventListener('boost', () => {    /* throttle open: a fifth snapped up the octave */
     if (!verbGate('boost', 0.35)) return;
