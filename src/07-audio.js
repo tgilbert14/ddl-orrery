@@ -589,13 +589,16 @@ const Score = (() => {
     verbLast[k] = ctx.currentTime;
     return true;
   };
-  window.Orrery.events.addEventListener('worm', () => {     /* the dune answers: ground-thumps + a sub swell */
+  window.Orrery.events.addEventListener('worm', () => {     /* the colossus: thumps, a sub swell, the hull-groan
+                                                               reads as its world-filling call in this voicing */
     if (!verbGate('worm', 2.5)) return;
     const v = ARR['dust-sea'], t = ctx.currentTime + 0.03;
     taiko(t, 0.5);
-    note(v.root / 2, t + 0.1, 0.09, 3.2, 'sine', bus, 0.1, 0.3);
+    note(v.root / 2, t + 0.1, 0.09, 4.2, 'sine', bus, 0.1, 0.3);
+    groan(t + 0.3);
     taiko(t + 0.42, 0.3);
     shaker(t + 0.55);
+    taiko(t + 1.1, 0.22);
   });
   window.Orrery.events.addEventListener('boost', () => {    /* throttle open: a fifth snapped up the octave */
     if (!verbGate('boost', 0.35)) return;
