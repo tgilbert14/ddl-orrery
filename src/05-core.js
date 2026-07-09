@@ -26,11 +26,16 @@ rmq.addEventListener('change', setRM);
 const reduced = () => rmq.matches;
 
 /* storage is a nice-to-have, never a boot dependency (Smaug kill 6):
-   blocked cookies / sandboxed iframes throw on the GETTER */
-const store = {
-  get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
-  set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
-};
+   blocked cookies / sandboxed iframes throw on the GETTER.
+   `store` = sessionStorage (the approach cinematic: once per tab).
+   `keep`  = localStorage (the survey meta-game must outlive the tab, or
+   it isn't a pull-back loop — council ruling 6). */
+const mkStore = (backing) => ({
+  get(k) { try { return backing.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { backing.setItem(k, v); } catch (_) {} },
+});
+const store = mkStore(sessionStorage);
+const keep  = mkStore(localStorage);
 
 const finePointer = matchMedia('(pointer: fine)').matches;
 
@@ -60,19 +65,23 @@ const Ticker = (() => {
   };
 })();
 
-/* ---------- world registry (data; FX bodies live in 06) ---------- */
+/* ---------- world registry (data; FX bodies live in 06) ----------
+   `poem`: the orbit em-line, hoisted here as the single source the Grand
+   Tour narrates from (was 'Stop 3 of 11'). `a`: the accent that tints the
+   hub + rim glow — the v6 cluster is de-collided (storm → violet, beacons
+   → ember) so the eleven pass the one-second read (hue audit, M3). */
 const WORLDS = [
-  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045 },
-  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06 },
-  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055 },
-  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052 },
-  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065 },
-  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
-  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
-  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042 },
-  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058 },
-  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
-  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
+  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045, poem: 'the sand remembers a rhythm' },
+  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06,  poem: 'the city never blinks' },
+  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055, poem: 'the rain is code' },
+  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052, poem: 'the lights are alive down here' },
+  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065, poem: 'insert coin' },
+  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038, poem: 'the sky rehearses its colors' },
+  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07,  poem: 'yours is still unnamed' },
+  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042, poem: 'it has already read tomorrow' },
+  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058, poem: 'down is a direction you choose' },
+  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [178, 158, 255], speed: 0.048, poem: 'the light runs ahead of the weather' },
+  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 122, 60],  speed: 0.05,  poem: 'one fire lights the next' },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
 
@@ -138,7 +147,10 @@ function bakeNebula() {
     g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
     return c;
   };
-  nebA = mk('53,240,200'); nebB = mk('143,123,255');
+  /* sea-glass + dim brass, not teal + violet: the canvas backdrop keeps the
+     Deep Deco fiction (lamplight through water) instead of snapping to
+     default-space-demo the instant JS boots (M3) */
+  nebA = mk('80,180,160'); nebB = mk('201,163,92');
 }
 function buildStars() {
   /* a sky worth the name: ~3x the old density, a diagonal galactic band
@@ -166,8 +178,11 @@ function buildStars() {
       r: giant ? 1.7 + rnd() * 0.9 : 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
       tw: rnd() * Math.PI * 2,                         /* twinkle phase */
       k: giant ? 1 : 0,
+      /* the deco population: mostly warm cream, a fifth brass, a quarter
+         pale sea-glass — the retint that makes the fiction survive boot (M3).
+         Giants keep the amber/blue pairing so the sky still has cold accents. */
       hue: giant ? (rnd() < 0.5 ? 'rgba(255,217,160,' : 'rgba(168,200,255,')
-         : rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
+         : rnd() < 0.20 ? 'rgba(201,163,92,' : rnd() < 0.45 ? 'rgba(190,220,225,' : 'rgba(239,228,200,',
     });
   }
   /* the nebulae sit on the band spine, one each side of center */
@@ -194,6 +209,22 @@ const desktop = () => innerWidth > 700;
 /* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
+/* the dial's graduations: 60 tick segments (every 6°) baked as flat
+   [x0,y0,x1,y1,…] endpoints — one beginPath/stroke per frame, zero alloc */
+const RING_TICKS = 60;
+let ringTicks = new Float32Array(RING_TICKS * 4);
+function bakeRingTicks() {
+  for (let i = 0; i < RING_TICKS; i++) {
+    const th = (i / RING_TICKS) * Math.PI * 2;
+    const c = Math.cos(th), s = Math.sin(th);
+    const long = i % 5 === 0;                           /* every 30° a longer graduation */
+    const i0 = long ? 0.965 : 0.982, i1 = long ? 1.028 : 1.014;
+    ringTicks[i * 4]     = ART.cx + c * ART.rx * i0;
+    ringTicks[i * 4 + 1] = ART.cy + s * ART.ry * i0;
+    ringTicks[i * 4 + 2] = ART.cx + c * ART.rx * i1;
+    ringTicks[i * 4 + 3] = ART.cy + s * ART.ry * i1;
+  }
+}
 function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
   const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
@@ -204,6 +235,7 @@ function measureOrbit() {
     ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
     ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
     ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
+    bakeRingTicks();                                    /* graduations on the dial (M3) */
   } else {
     /* the pocket orrery (M2): the Artifact seats IN the .hub-stage spacer
        and belongs to the scroll flow — its live rect places the sphere, so
@@ -287,11 +319,24 @@ function drawSky(dt, clockMs) {
 
   /* hub decoration only while the hub is on stage */
   if (Scenes.current === 'hub' && desktop()) {
-    /* the orbit ring the worlds ride — faint brass, an instrument's engraving */
-    ctx.strokeStyle = 'rgba(201,163,92,0.10)';
+    /* THE DIAL, ENGRAVED (M3): the Orrery finally draws an orrery — the main
+       brass ellipse, a fainter inner rail, and sixty graduations. Batched:
+       three beginPath/stroke passes, zero allocation. */
+    ctx.strokeStyle = 'rgba(201,163,92,0.14)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, 0, 7);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(201,163,92,0.06)';
+    ctx.beginPath();
+    ctx.ellipse(ART.cx, ART.cy, ART.rx * 0.93, ART.ry * 0.93, 0, 0, 7);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(201,163,92,0.13)';
+    ctx.beginPath();
+    for (let i = 0; i < RING_TICKS; i++) {
+      ctx.moveTo(ringTicks[i * 4], ringTicks[i * 4 + 1]);
+      ctx.lineTo(ringTicks[i * 4 + 2], ringTicks[i * 4 + 3]);
+    }
     ctx.stroke();
 
     /* z-sort: far worlds first, then the Artifact, then near worlds */
@@ -313,8 +358,38 @@ function drawSky(dt, clockMs) {
            Artifact must not own the clicks on the sphere's face (its anchor
            drops below artifact-hit's z15; near worlds ride above it) */
         a.style.zIndex = p.depth > 0 ? 22 : 14;
+        /* label side from LIVE geometry, not DOM parity (M3): far-side worlds
+           wear their nameplate above, near-side below — the orbital periods
+           scramble adjacency, so a fixed odd/even split guaranteed collisions */
+        a.classList.toggle('pl-above', p.depth < 0);
       }
       const hov = hovered === w.slug;
+      const dx0 = p.x - ART.cx, dy0 = p.y - ART.cy, hyp = Math.hypot(dx0, dy0) || 1;
+      const th = Math.atan2(dy0 / ART.ry, dx0 / ART.rx);
+      /* the armature: a faint radius from the Artifact's limb out to the
+         world's bearing, brighter on the near side and igniting on hover —
+         the brass spokes an orrery is supposed to have (M3). */
+      ctx.strokeStyle = `rgba(201,163,92,${((hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim)).toFixed(3)})`;
+      ctx.lineWidth = hov ? 1.2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      /* the survey, given a face on the dial: the ~11° of ring each world
+         owns fills SOLID brass once surveyed, and stays a dim dashed gap
+         until then — the ring visibly gilds itself as you complete the tour */
+      const span = (Math.PI * 2 / WORLDS.length) * 0.46;
+      if (surveyed.has(w.slug)) {
+        ctx.strokeStyle = `rgba(201,163,92,${(0.42 * (0.45 + 0.55 * dim)).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
+      } else {
+        ctx.strokeStyle = `rgba(201,163,92,${(0.24 * (0.45 + 0.55 * dim)).toFixed(3)})`;
+        ctx.lineWidth = 1.4; ctx.setLineDash([3, 5]);
+        ctx.lineDashOffset = reduced() ? 0 : -t * 6;
+        ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
+        ctx.setLineDash([]);
+      }
       /* staged bake (M2): a world still in the oven draws nothing; a fresh
          one materializes — grows in over half a second as the orrery wakes */
       const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
@@ -459,7 +534,15 @@ function placeArtifactDom() {
     artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + (desktop() ? 30 : 10) + sTop) + 'px');
   }
 }
-let artLast = 0, artTouches = 0, artRmT = null;
+let artLast = 0, artTouches = 0, artRmT = null, artLabelLock = false;
+/* the plate whispers for `ms`, then returns to whatever the survey arc has
+   made the resting line (dataset.home is kept current by paint()) */
+function whisperArtLabel(text, ms) {
+  if (!artLabel || artLabelLock) return;
+  artLabel.textContent = text;
+  clearTimeout(artRmT);
+  artRmT = setTimeout(() => { if (!artLabelLock) artLabel.textContent = artLabel.dataset.home || text; }, ms);
+}
 function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
@@ -468,20 +551,19 @@ function touchArtifact() {
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
     /* provoke it enough and, for a moment, the plates part: you see what
-       is underneath (every third touch; the ripple masks the swap) */
-    if (artTouches % 3 === 0 && SphereForge.reveal) SphereForge.reveal(2600);
+       is underneath (every third touch; the ripple masks the swap) — and
+       the plate finally says a word about it (M3) */
+    if (artTouches % 3 === 0 && SphereForge.reveal) {
+      SphereForge.reveal(2600);
+      whisperArtLabel('Object 0 · that is not a shell', 2600);
+    }
     if (!skyTask) Orrery.startAmbient();
   } else if (reduced()) {
     /* rm: the answer is designed, not stripped — a repaint (any pending skin
        swap lands on it) and the plate acknowledges in text for a beat.
        No reveal here: with the clock held, the glimpse could never end. */
     requestStatic();
-    if (artLabel) {
-      if (!artLabel.dataset.home) artLabel.dataset.home = artLabel.textContent;
-      artLabel.textContent = 'Object 0 · it heard you';
-      clearTimeout(artRmT);
-      artRmT = setTimeout(() => { artLabel.textContent = artLabel.dataset.home; }, 2000);
-    }
+    whisperArtLabel('Object 0 · it heard you', 2000);
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));
 }
@@ -543,11 +625,13 @@ document.querySelectorAll('.scene').forEach(s => Scenes.els.set(s.dataset.scene,
 const locName = document.getElementById('hud-loc-name');
 const returnBtn = document.getElementById('return-orbit');
 
+/* the surveyed set lives in localStorage now: a survey that evaporates when
+   the tab closes was never a pull-back loop (M3, council ruling 6) */
 let surveyed = new Set();
-try { surveyed = new Set(JSON.parse(store.get('orrery-surveyed') || '[]')); } catch (_) {}
+try { surveyed = new Set(JSON.parse(keep.get('orrery-surveyed') || '[]')); } catch (_) {}
 function markSurveyed(slug) {
   surveyed.add(slug);
-  store.set('orrery-surveyed', JSON.stringify([...surveyed]));
+  keep.set('orrery-surveyed', JSON.stringify([...surveyed]));
   const a = anchors.get(slug);
   if (a) a.querySelector('.pa-tick').hidden = false;
 }
@@ -563,7 +647,7 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
   const dotsWrap = plate.querySelector('.survey-dots');
   const countEl  = plate.querySelector('.survey-count');
   const total = WORLDS.length;
-  const COMPLETE_KEY = 'orrery-survey-complete';
+  const COMPLETE_KEY = 'orrery-survey-complete';        /* localStorage: the rite fires once ever */
   const HONOR = 'Master surveyor. The orrery remembers.';
 
   /* one ringed dot per world, in registry order, built once */
@@ -596,20 +680,51 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     plate.setAttribute('aria-label',
       done ? ('All ' + total + ' worlds surveyed. Master surveyor.')
            : (n + ' of ' + total + ' worlds surveyed'));
-    if (done && store.get(COMPLETE_KEY) === '1') showSeal();   /* already earned this tab */
+    /* the location strip carries the count on every homecoming, so the
+       survey stops being invisible: 'Orbit · 4 of 11 surveyed' (M3) */
+    if (Scenes.current === 'hub' && locName) {
+      locName.textContent = done ? 'Orbit · survey complete'
+        : n > 0 ? ('Orbit · ' + n + ' of ' + total + ' surveyed')
+        : 'Orbit · choose a world';
+    }
+    /* the Artifact's plate narrates the rising mystery too: once you've
+       started, it admits something is down there; complete, it knows you */
+    if (artLabel && !artLabelLock) {
+      const resting = done ? 'Object 0 · it knows you now'
+        : n >= 4 ? 'Object 0 · something moved beneath'
+        : 'Object 0 · unsurveyed';
+      artLabel.textContent = resting;
+      artLabel.dataset.home = resting;                  /* the restore target follows the arc */
+    }
+    if (done && keep.get(COMPLETE_KEY) === '1') showSeal();   /* already earned */
   }
 
   function maybeCompletionRite() {
     if (countSurveyed() < total) return;
-    if (store.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once per session */
-    store.set(COMPLETE_KEY, '1');
+    if (keep.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once, ever */
+    keep.set(COMPLETE_KEY, '1');
     showSeal();
-    try { Orrery.events.dispatchEvent(new CustomEvent('query')); } catch (_) {}  /* aurora chime answers */
+    /* THE RITE — the Artifact answers the completed survey at last:
+       the plates part FULLY (longer than the touch glimpse), the wrong
+       answering tone comes true and rises, and the whole ring pulses gold. */
+    if (artLabel) {
+      artLabelLock = true;
+      artLabel.textContent = 'Object 0 · survey accepted';
+    }
+    if (artHit) artHit.setAttribute('aria-label', 'Object 0. Survey accepted. It knows you now.');
+    if (window.SphereForge && SphereForge.reveal && !reduced()) SphereForge.reveal(5200);
+    document.querySelectorAll('.planet-anchor').forEach(a => {
+      a.classList.remove('pa-rite'); void a.offsetWidth; a.classList.add('pa-rite');
+      setTimeout(() => a.classList.remove('pa-rite'), 2600);
+    });
+    try { Orrery.events.dispatchEvent(new CustomEvent('mastery')); } catch (_) {}
     const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
     if (hint) {
-      const prior = hint.dataset.home || hint.textContent;       /* restore the TRUE resting line */
       hint.textContent = HONOR;
-      setTimeout(() => { if (hint.textContent === HONOR) hint.textContent = prior; }, 10000);
+      setTimeout(() => {
+        if (hint.textContent === HONOR) hint.textContent = hint.dataset.home || HONOR;
+        if (artLabel) { artLabelLock = false; paint(); }         /* release to the resting arc line */
+      }, 10000);
     }
   }
 
@@ -820,7 +935,20 @@ const TourController = (() => {
                                                            null = between legs, accept any land */
   const onHash = () => { if (running && expectedHash !== null && (location.hash || '#/') !== expectedHash) stop(); };
 
-  const onInput = () => { if (running) stop(); };       /* ANY input ends the tour immediately */
+  /* input ends the tour — EXCEPT the cockpit (M3): the tour's own control and
+     the score toggle are part of driving the demo, not leaving it; and the
+     arrow keys STEER the tour (→ next world, ← previous) instead of killing
+     it. Everything else is a cancel, as before. */
+  const onInput = (e) => {
+    if (!running) return;
+    if (e && e.type === 'keydown') {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Spacebar') { stepWorld(1); return; }
+      if (e.key === 'ArrowLeft') { stepWorld(-1); return; }
+    }
+    const t = e && e.target;
+    if (t && t.closest && t.closest('#tour-toggle, #audio-toggle')) return;   /* cockpit: no cancel */
+    stop();
+  };
   function addCancel() { for (const e of CANCEL) addEventListener(e, onInput, OPTS); }
   function rmCancel()  { for (const e of CANCEL) removeEventListener(e, onInput, OPTS); }
 
@@ -849,11 +977,21 @@ const TourController = (() => {
     const leg = legs[ix];
     if (!leg || leg.t === 'closing') { finish(); return; }
     if (leg.t === 'world') {
-      expectedHash = '#/world/' + WORLDS[leg.i].slug;
-      plateSay('Stop ' + (leg.i + 1) + ' of ' + N);
-      travel(WORLDS[leg.i].slug);
+      const w = WORLDS[leg.i];
+      expectedHash = '#/world/' + w.slug;
+      /* the tour speaks the world's own poem now, not 'Stop 3 of 11' (M3) —
+         WORLDS.poem is the single source the orbit em-lines also draw from */
+      plateSay('Stop ' + (leg.i + 1) + ' of ' + N + ' · ' + w.label + ' — ' + w.poem);
+      travel(w.slug);
     }
     else { expectedHash = '#/'; location.hash = '#/'; } /* orbit breather: home via the router */
+  }
+  /* arrow-key steering: jump to the next/previous WORLD leg (skip breathers) */
+  function stepWorld(dir) {
+    let j = legIx;
+    do { j += dir; } while (j > 0 && j < legs.length - 1 && legs[j].t !== 'world');
+    j = Math.max(0, Math.min(legs.length - 1, j));
+    if (legs[j] && legs[j].t === 'world') enterLeg(j);
   }
 
   function tick(dt) {
@@ -911,7 +1049,18 @@ const TourController = (() => {
     start();
   });
 
-  return { start, stop, advance, get running() { return running; } };
+  /* the discovery nudge (M3): one beckon pulse of the footer control after a
+     stretch of untouched hub, so the best demo feature is actually found.
+     Fires at most once per visit; any real interaction cancels the arming. */
+  let beckoned = false;
+  function beckon() {
+    if (beckoned || running || Scenes.current !== 'hub') return;
+    beckoned = true;
+    btn.classList.add('tour-beckon');
+    setTimeout(() => btn.classList.remove('tour-beckon'), 3200);
+  }
+
+  return { start, stop, advance, beckon, get running() { return running; } };
 })();
 
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
@@ -925,6 +1074,11 @@ let lastInput = performance.now();
 function tickClock() {
   if (!document.hidden) {
     clockEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  /* ~22s of untouched hub → beckon the Tour once (the feature most likely to
+     run in front of a client, findable by nobody in a 0.72rem footer) */
+  if (TourController && Scenes.current === 'hub' && performance.now() - lastInput > 22000) {
+    TourController.beckon();
   }
   /* phones run budgeted EXCEPT while the visitor is actively touching or
      scrolling — the scroll-glued sphere must track the stage at full rate */

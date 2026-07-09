@@ -27,6 +27,9 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
   margin-bottom: 0.7rem;
 }
 .w-copy { font-size: var(--fs-sub); color: var(--ink); max-width: 30em; }
+/* the Artifact-facing lore line: quieter than copy, in the world's own voice,
+   always shown (it is designed end-state text, not live-motion narration) */
+.w-lore { margin-top: 0.7rem; color: var(--brass); opacity: 0.72; max-width: 30em; font-style: italic; }
 .w-note { margin-top: 0.9rem; color: var(--ink-dim); }
 .w-proof { margin-top: 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 .w-proof a { color: var(--wa, var(--acc)); font-weight: 600; }

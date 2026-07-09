@@ -380,18 +380,26 @@ const Score = (() => {
     o.start(when); o.stop(when + 0.14);
     o.onended = () => g.disconnect();
   }
-  function artifactAnswer(when) {                    /* the reply is slightly wrong: 196 sagging to 185 */
+  /* the reply is slightly WRONG: 196 sagging to 185, all visit long — until
+     the survey completes, when the wrong note finally comes true and RISES
+     185→196, fuller and longer. The whole arc lands on this one interval. */
+  let artifactTrue = false;
+  function artifactAnswer(when) {
     const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(196, when);
-    o.frequency.linearRampToValueAtTime(185, when + 1.2);
+    const dur = artifactTrue ? 2.2 : 1.2;
+    if (artifactTrue) { o.frequency.setValueAtTime(185, when); o.frequency.linearRampToValueAtTime(196, when + dur); }
+    else { o.frequency.setValueAtTime(196, when); o.frequency.linearRampToValueAtTime(185, when + dur); }
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(0.07, when + 0.25);
-    g.gain.setTargetAtTime(0.0001, when + 1.2, 0.5);
+    g.gain.linearRampToValueAtTime(artifactTrue ? 0.09 : 0.07, when + 0.25);
+    g.gain.setTargetAtTime(0.0001, when + dur, artifactTrue ? 0.7 : 0.5);
     o.connect(g); g.connect(bus);
     const w = ctx.createGain(); w.gain.value = 0.8; g.connect(w).connect(verb);
-    o.start(when); o.stop(when + 3.4);
+    o.start(when); o.stop(when + dur + 2.2);
     o.onended = () => g.disconnect();
+    if (artifactTrue) {                             /* a bloomed fifth crowns the resolved tone */
+      note(294, when + 0.12, 0.05, dur, 'sine', bus, 0, 0.7);
+    }
   }
   function riser(when) {                               /* pre-warp reverse-swell into the arrival */
     const n = noiseSrc();
@@ -606,6 +614,16 @@ const Score = (() => {
     if (ctx.currentTime - lastAnswer < 2) return;
     lastAnswer = ctx.currentTime;
     artifactAnswer(ctx.currentTime + 0.03);
+  });
+
+  /* the survey is complete: the wrong note comes true from here on, and the
+     rite sounds it in full — a swelled, resolved answer over the fanfare */
+  window.Orrery.events.addEventListener('mastery', () => {
+    artifactTrue = true;
+    if (!ready()) return;
+    lastAnswer = ctx.currentTime;
+    artifactAnswer(ctx.currentTime + 0.1);
+    fanfare(ctx.currentTime + 0.7);
   });
 
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */

@@ -34,11 +34,14 @@
                      calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
 }
 .hub-h1 {
-  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.35rem);
-  font-weight: 300;
-  letter-spacing: var(--track-deco);
+  /* the engraved face lets the hero stand up (was a 1.35rem weight-300
+     whisper): Cinzel caps carry a bigger scale without shouting (M3) */
+  font-family: var(--font-engraved);
+  font-size: clamp(1.35rem, 1.05rem + 1.5vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  line-height: 1.4;
+  line-height: 1.32;
   color: var(--cream);
   text-wrap: balance;
 }
@@ -87,7 +90,7 @@
                      calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
 }
 .brand b { color: var(--brass); }          /* coral leaves the masthead; brass takes it */
-.hud-title { color: var(--brass); font-weight: 600; }
+.hud-title { color: var(--brass); font-weight: 600; font-family: var(--font-engraved); letter-spacing: 0.28em; }
 #hud-clock { font-variant-numeric: tabular-nums; }
 
 .return-orbit, .audio-toggle {
@@ -175,11 +178,14 @@
 /* keep the eyebrow and the engraved name clear of the medallion */
 .world-card .w-eyebrow, .world-card h2 { padding-right: 62px; }
 
-/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css */
+/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css.
+   The Cinzel face is the point — a real engraved monument cap, not a
+   weight-300 system-stack costume (M3) */
 .world-card h2 {
+  font-family: var(--font-engraved);
   font-size: clamp(1.7rem, 1.2rem + 2.4vw, 3.1rem);
-  font-weight: 300;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.12;
   color: var(--cream);
@@ -422,6 +428,18 @@ html.js #tour-toggle {
   0%, 100% { opacity: 0.5; transform: scale(0.82); }
   50%      { opacity: 1;   transform: scale(1.12); }
 }
+
+/* the discovery nudge (M3): after a stretch of idle hub, the footer Tour
+   control pulses ONCE so the best demo feature is actually found. The
+   engine adds .tour-beckon; rm shows a static lifted border instead. */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) #tour-toggle.tour-beckon { animation: tour-beckon 1.5s var(--ease-out) 2; }
+}
+@keyframes tour-beckon {
+  0%, 100% { border-color: rgba(var(--brass-rgb), 0.45); box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22); }
+  50%      { border-color: rgba(255, 205, 90, 0.95); box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22), 0 0 22px rgba(255, 205, 90, 0.5); }
+}
+html.rm #tour-toggle.tour-beckon { border-color: rgba(255, 205, 90, 0.8); }
 
 /* the progress plate: engraved brass readout, announced politely */
 .tour-plate {
