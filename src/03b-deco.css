@@ -187,29 +187,41 @@
               0 0 30px rgba(var(--wa-rgb, var(--acc-rgb)), 0.16);
   clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px),
                      calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
-  transform: perspective(1000px) rotateX(var(--tiltX, 0deg)) rotateY(var(--tiltY, 0deg));
-  transition: opacity 0.6s var(--ease-out), transform 0.18s ease-out;
-}
-/* the plate glint: a light bar sweeps the card every ~9s while its world
-   plays (rm holds still; the clip-path contains it) */
-@media (prefers-reduced-motion: no-preference) {
-  html:not(.rm) .world.is-active .world-card::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(105deg, transparent 42%, rgba(255, 248, 224, 0.07) 50%, transparent 58%);
-    transform: translateX(-130%);
-    animation: plate-sheen 9s ease-in-out infinite 1.2s;
-  }
-}
-/* the card SINKS after a few seconds so the world owns the stage (JS arms
-   .card-away on arrival); pointer or focus brings it straight back */
-html.js .world.card-away .world-card:not(:hover):not(:focus-within) {
-  opacity: 0.13;
 }
 .world-card h2 {
   /* neon signage: the world's own light haloes its name */
   text-shadow: 0 0 18px rgba(var(--wa-rgb, var(--acc-rgb)), 0.55),
                0 0 52px rgba(var(--wa-rgb, var(--acc-rgb)), 0.25);
 }
+
+/* ============================================================
+   THE VISUAL CUT (founder's order): app mode shows WORLDS, not
+   plates. The whole hub lockup and every world card vanish; what
+   survives of each card is its one INTERACTIVE control, pinned as
+   a floating chip under the location strip, top-left. The no-JS
+   brochure below all these html.js rules keeps every word.
+   ============================================================ */
+html.js .hub-copy { display: none; }
+
+html.js .world-card,
+html.js .world-card.glass {                            /* .glass specificity: the plate skin,
+                                                          rivets, blur and phone overrides all
+                                                          stand down with it */
+  position: fixed; top: 5.6rem; left: 1.4rem; z-index: 30;
+  width: auto; max-width: 20rem; padding: 0; margin: 0;
+  background: none; border: 0; box-shadow: none; clip-path: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  animation: none;
+}
+/* only the controls survive: the toy row (button) and Uncharted's contact
+   note. Everything else on the plate — name, copy, lore, captions, the
+   in-card return link (the HUD already carries one) — stands down. */
+html.js .world-card > :not(.w-note):not(.w-cta) { display: none; }
+html.js .world-card .w-note { margin: 0 0 0.5rem; }
+html.js .world-card .w-note--live { display: none; }   /* caption-only notes go too */
+html.js .world-card .w-note .microlabel { display: none; }
+html.js .world-card .w-cta { margin: 0; }
+html.js .world-card .w-proof { display: none; }
 /* the medallion slot: integrator wires PlanetForge.drawMini into it */
 .card-planet {
   position: absolute;
