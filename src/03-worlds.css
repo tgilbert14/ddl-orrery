@@ -27,6 +27,11 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
   margin-bottom: 0.7rem;
 }
 .w-copy { font-size: var(--fs-sub); color: var(--ink); max-width: 30em; }
+/* the Artifact-facing lore line: quieter than copy, in the world's own voice,
+   always shown (designed end-state text, not live-motion narration). Full
+   brass, no opacity: it carries the through-narrative, so it stays ≥7:1
+   even over the brightest world FX bleeding through the plate. */
+.w-lore { margin-top: 0.7rem; color: var(--brass); max-width: 30em; font-style: italic; }
 .w-note { margin-top: 0.9rem; color: var(--ink-dim); }
 .w-proof { margin-top: 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 .w-proof a { color: var(--wa, var(--acc)); font-weight: 600; }
@@ -47,6 +52,12 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
   transition: background 0.25s, color 0.25s, transform 0.45s var(--spring);
 }
 .w-toy:hover, .w-toy:focus-visible { background: rgba(var(--wa-rgb), 0.16); transform: translateY(-2px); }
+/* a toy whose effect is mid-run wears the state instead of eating the press;
+   hover/focus lifts go quiet, but the press frame itself still answers
+   (the :active rule is last so it wins the equal-specificity fight) */
+.w-toy.is-running { opacity: 0.45; cursor: default; }
+.w-toy.is-running:hover, .w-toy.is-running:focus-visible { background: transparent; transform: none; }
+.w-toy.is-running:active { transform: translateY(1px) scale(0.97); }
 
 /* brochure mode: give each stacked world its ground so no-JS reads designed */
 .world { background: var(--wground, var(--night)); }
@@ -252,6 +263,11 @@ html:not(.js) [data-scene="grid"] .grid-static { display: block; }
    ============================================================ */
 [data-scene="arcadia"] { --wa: var(--w-arcadia-a); --wa-rgb: var(--w-arcadia-a-rgb); --wglow-rgb: var(--w-arcadia-glow-rgb); --wground: var(--w-arcadia-ground); }
 [data-scene="arcadia"] .fx-canvas { image-rendering: pixelated; }
+/* no-JS: the cabinet still shows its attract screen (rm keeps the canvas —
+   fx.arcadia.rm() paints the held pose; this covers the scriptless brochure) */
+.arc-static { display: none; }
+html:not(.js) [data-scene="arcadia"] .fx-canvas { display: none; }
+html:not(.js) [data-scene="arcadia"] .arc-static { display: block; }
 .arc-crt {
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background:

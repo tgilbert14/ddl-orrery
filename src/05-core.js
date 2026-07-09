@@ -26,11 +26,16 @@ rmq.addEventListener('change', setRM);
 const reduced = () => rmq.matches;
 
 /* storage is a nice-to-have, never a boot dependency (Smaug kill 6):
-   blocked cookies / sandboxed iframes throw on the GETTER */
-const store = {
-  get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
-  set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
-};
+   blocked cookies / sandboxed iframes throw on the GETTER.
+   `store` = sessionStorage (the approach cinematic: once per tab).
+   `keep`  = localStorage (the survey meta-game must outlive the tab, or
+   it isn't a pull-back loop — council ruling 6). */
+const mkStore = (backing) => ({
+  get(k) { try { return backing.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { backing.setItem(k, v); } catch (_) {} },
+});
+const store = mkStore(sessionStorage);
+const keep  = mkStore(localStorage);
 
 const finePointer = matchMedia('(pointer: fine)').matches;
 
@@ -38,7 +43,12 @@ const finePointer = matchMedia('(pointer: fine)').matches;
 const Ticker = (() => {
   const tasks = new Set();
   let rafId = null, last = 0, clock = 0, running = false;
+  let budget = 0, lastRun = -1e9;          /* frame budget (M2): 0 = every vsync */
   function frame(now) {
+    /* budgeted skip: a 120Hz phone must not pay double for a 10Hz twinkle —
+       keep the rAF alive, run the tasks no oftener than the budget allows */
+    if (budget && now - lastRun < budget) { rafId = requestAnimationFrame(frame); return; }
+    lastRun = now;
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
@@ -51,43 +61,69 @@ const Ticker = (() => {
     add(t) { tasks.add(t); if (!running) { running = true; last = performance.now(); rafId = requestAnimationFrame(frame); } },
     remove(t) { tasks.delete(t); },
     get clock() { return clock; },
+    setBudget(ms) { budget = ms || 0; },
   };
 })();
 
-/* ---------- world registry (data; FX bodies live in 06) ---------- */
+/* ---------- world registry (data; FX bodies live in 06) ----------
+   `poem`: the world's one-line voice — the single source. The Grand Tour
+   narrates it, and bootOrrery re-syncs the orbit em-lines from it (the
+   HTML carries the same text for the no-JS brochure; app mode trusts the
+   registry). `a`: the accent that tints the hub + rim glow — the v6
+   cluster is de-collided (storm → violet, beacons → ember) so the eleven
+   pass the one-second read (hue audit, M3). */
 const WORLDS = [
-  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045 },
-  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06 },
-  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055 },
-  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052 },
-  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065 },
-  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
-  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
-  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042 },
-  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058 },
-  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
-  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
+  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045, poem: 'the sand remembers a rhythm' },
+  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06,  poem: 'the city never blinks' },
+  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055, poem: 'the rain is code' },
+  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052, poem: 'the lights are alive down here' },
+  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065, poem: 'insert coin' },
+  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038, poem: 'the sky rehearses its colors' },
+  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07,  poem: 'yours is still unnamed' },
+  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042, poem: 'it has already read tomorrow' },
+  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058, poem: 'down is a direction you choose' },
+  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [178, 158, 255], speed: 0.048, poem: 'the light runs ahead of the weather' },
+  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 122, 60],  speed: 0.05,  poem: 'one fire lights the next' },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
+WORLDS.forEach(w => { w.tellStroke = `rgb(${w.a[0]},${w.a[1]},${w.a[2]})`; });  /* baked draw color */
 
 /* ---------- the sky canvas ---------- */
 const sky = document.getElementById('sky');
 const ctx = sky.getContext('2d');
 let W = 0, H = 0, DPR = 1;
-function sizeSky() {
+function sizeSkyCanvas() {
   DPR = Math.min(devicePixelRatio || 1, 2);           /* the phone-cook cap */
   W = innerWidth; H = innerHeight;
   sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+function sizeSky() {
+  sizeSkyCanvas();
   buildStars();
   measureOrbit();
   drawStatic();                                        /* rm / idle repaint */
 }
-let resizeT = null;
+let resizeT = null, settledH = 0;                      /* height baseline: set by FULL passes only */
 addEventListener('resize', () => {
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
+    /* a phone URL bar collapsing is not a rotation: a small height-only
+       delta refreshes the surface but must NOT re-roll the starfield or
+       restart the world mid-scroll (M2 — the dunes kept re-rolling).
+       Measured against the last SETTLED height (not the previous debounce
+       step) so a slow continuous drag cannot creep past the guard, and
+       phone-only: desktop window resizes always take the full path. */
+    const heightOnly = !desktop() && innerWidth === W && Math.abs(innerHeight - settledH) < 160;
+    if (heightOnly) {
+      sizeSkyCanvas();
+      measureOrbit();
+      drawStatic();
+      return;
+    }
     sizeSky();
+    settledH = H;
+    if (!desktop()) bakeMinis();                       /* breakpoint may have flipped */
     /* a rotated phone inside a world gets a fresh FX surface (Smaug kill 8) */
     if (Scenes.current && Scenes.current !== 'hub' && window.WorldFX) WorldFX.start(Scenes.current);
   }, 120);
@@ -114,7 +150,10 @@ function bakeNebula() {
     g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
     return c;
   };
-  nebA = mk('53,240,200'); nebB = mk('143,123,255');
+  /* sea-glass + dim brass, not teal + violet: the canvas backdrop keeps the
+     Deep Deco fiction (lamplight through water) instead of snapping to
+     default-space-demo the instant JS boots (M3) */
+  nebA = mk('80,180,160'); nebB = mk('201,163,92');
 }
 function buildStars() {
   /* a sky worth the name: ~3x the old density, a diagonal galactic band
@@ -142,8 +181,11 @@ function buildStars() {
       r: giant ? 1.7 + rnd() * 0.9 : 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
       tw: rnd() * Math.PI * 2,                         /* twinkle phase */
       k: giant ? 1 : 0,
+      /* the deco population: mostly warm cream, a fifth brass, a quarter
+         pale sea-glass — the retint that makes the fiction survive boot (M3).
+         Giants keep the amber/blue pairing so the sky still has cold accents. */
       hue: giant ? (rnd() < 0.5 ? 'rgba(255,217,160,' : 'rgba(168,200,255,')
-         : rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
+         : rnd() < 0.20 ? 'rgba(201,163,92,' : rnd() < 0.45 ? 'rgba(190,220,225,' : 'rgba(239,228,200,',
     });
   }
   /* the nebulae sit on the band spine, one each side of center */
@@ -167,9 +209,45 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+/* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
+/* the engraved dial — main rail, inner rail, sixty graduations — is static
+   between resizes, so it bakes ONCE into an offscreen sprite (the nebula
+   idiom) and costs the frame a single drawImage instead of ~62 path
+   segments and three stroke passes at 120fps */
+const RING_TICKS = 60;
+let dialSpr = null, dialW = 0, dialH = 0;
+function bakeDial() {
+  const pad = 8;
+  dialW = Math.ceil(ART.rx * 1.03 * 2) + pad * 2;
+  dialH = Math.ceil(ART.ry * 1.03 * 2) + pad * 2;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  dialSpr = document.createElement('canvas');
+  dialSpr.width = Math.round(dialW * dpr); dialSpr.height = Math.round(dialH * dpr);
+  const g = dialSpr.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = dialW / 2, cy = dialH / 2;
+  g.strokeStyle = 'rgba(201,163,92,0.14)';
+  g.lineWidth = 1;
+  g.beginPath(); g.ellipse(cx, cy, ART.rx, ART.ry, 0, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(201,163,92,0.06)';
+  g.beginPath(); g.ellipse(cx, cy, ART.rx * 0.93, ART.ry * 0.93, 0, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(201,163,92,0.13)';
+  g.beginPath();
+  for (let i = 0; i < RING_TICKS; i++) {
+    const th = (i / RING_TICKS) * Math.PI * 2;
+    const c = Math.cos(th), s = Math.sin(th);
+    const long = i % 5 === 0;                           /* every 30° a longer graduation */
+    const i0 = long ? 0.965 : 0.982, i1 = long ? 1.028 : 1.014;
+    g.moveTo(cx + c * ART.rx * i0, cy + s * ART.ry * i0);
+    g.lineTo(cx + c * ART.rx * i1, cy + s * ART.ry * i1);
+  }
+  g.stroke();
+}
+/* hoisted draw-loop constants: no arrays or strings minted per frame */
+const DASH_ARC = [3, 5], DASH_TELL = [5, 7], DASH_NONE = [];
+const BRASS_STROKE = 'rgba(201,163,92,1)';
 function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
   const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
@@ -180,11 +258,28 @@ function measureOrbit() {
     ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
     ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
     ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
+    bakeDial();                                         /* re-engrave the dial sprite (M3) */
   } else {
-    /* phone: the Artifact is a presence low in the deep, under the chart column */
-    ART.cx = W / 2;
-    ART.cy = H * 0.72;
-    ART.r  = Math.min(W * 0.34, 150);
+    /* the pocket orrery (M2): the Artifact seats IN the .hub-stage spacer
+       and belongs to the scroll flow — its live rect places the sphere, so
+       scrolling the world list carries the Artifact away with the stage
+       instead of leaving a gold ghost fixed under the rows. The hub scene's
+       scroll listener re-runs this measure. */
+    const stage = document.querySelector('.hub-stage');
+    const sr = stage && html.classList.contains('js') ? stage.getBoundingClientRect() : null;
+    if (sr && sr.height > 0) {
+      ART.fb = false;
+      ART.cx = W / 2;
+      ART.cy = sr.top + sr.height * 0.52;
+      ART.r  = Math.min(W * 0.36, sr.height * 0.42, 150);
+    } else {
+      /* no stage laid out (boot edge / viewport disagreement): the old
+         deep-presence fallback — drawn DIM, since it sits under the rows */
+      ART.fb = true;
+      ART.cx = W / 2;
+      ART.cy = H * 0.72;
+      ART.r  = Math.min(W * 0.34, 150);
+    }
     ART.rx = 0; ART.ry = 0;
   }
   placeArtifactDom();
@@ -247,12 +342,8 @@ function drawSky(dt, clockMs) {
 
   /* hub decoration only while the hub is on stage */
   if (Scenes.current === 'hub' && desktop()) {
-    /* the orbit ring the worlds ride — faint brass, an instrument's engraving */
-    ctx.strokeStyle = 'rgba(201,163,92,0.10)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, 0, 7);
-    ctx.stroke();
+    /* THE DIAL, ENGRAVED (M3): baked once per resize, blitted once per frame */
+    if (dialSpr) ctx.drawImage(dialSpr, ART.cx - dialW / 2, ART.cy - dialH / 2, dialW, dialH);
 
     /* z-sort: far worlds first, then the Artifact, then near worlds */
     const ps = WORLDS.map((w, i) => ({ w, p: planetPos(i, clockMs) }));
@@ -273,20 +364,67 @@ function drawSky(dt, clockMs) {
            Artifact must not own the clicks on the sphere's face (its anchor
            drops below artifact-hit's z15; near worlds ride above it) */
         a.style.zIndex = p.depth > 0 ? 22 : 14;
+        /* label side from LIVE geometry, not DOM parity (M3): far-side worlds
+           wear their nameplate above, near-side below — the orbital periods
+           scramble adjacency, so a fixed odd/even split guaranteed collisions */
+        a.classList.toggle('pl-above', p.depth < 0);
       }
       const hov = hovered === w.slug;
-      ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
-      /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.74 * p.sc * (hov ? 1.18 : 1), clockMs, { hover: hov, rm: reduced() });
+      const dx0 = p.x - ART.cx, dy0 = p.y - ART.cy, hyp = Math.hypot(dx0, dy0) || 1;
+      const th = Math.atan2(dy0 / ART.ry, dx0 / ART.rx);
+      /* the armature: a faint radius from the Artifact's limb out to the
+         world's bearing, brighter on the near side and igniting on hover —
+         the brass spokes an orrery is supposed to have (M3). Constant brass
+         + globalAlpha: the draw loop mints no strings (house rule). Skipped
+         while the world crosses the sphere's face/back (hyp ≤ limb: the
+         'radius' would otherwise overshoot outward past the planet). */
+      ctx.strokeStyle = BRASS_STROKE;
+      if (hyp > ART.r + 8) {
+        ctx.globalAlpha = (hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim);
+        ctx.lineWidth = hov ? 1.2 : 1;
+        ctx.beginPath();
+        ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      /* the survey, given a face on the dial: the ~11° of ring each world
+         owns fills SOLID brass once surveyed, and stays a dim dashed gap
+         until then — the ring visibly gilds itself as you complete the tour */
+      const span = (Math.PI * 2 / WORLDS.length) * 0.46;
+      if (surveyed.has(w.slug)) {
+        ctx.globalAlpha = 0.42 * (0.45 + 0.55 * dim);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
+      } else {
+        ctx.globalAlpha = 0.24 * (0.45 + 0.55 * dim);
+        ctx.lineWidth = 1.4; ctx.setLineDash(DASH_ARC);
+        ctx.lineDashOffset = reduced() ? 0 : -t * 6;
+        ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
+        ctx.setLineDash(DASH_NONE);
+      }
       ctx.globalAlpha = 1;
+      /* staged bake (M2): a world still in the oven draws nothing; a fresh
+         one materializes — grows in over half a second as the orrery wakes */
+      const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
+      if (mat > 0) {
+        ctx.globalAlpha = (hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2) * mat;
+        /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
+        PlanetForge.draw(ctx, w.slug, p.x, p.y,
+          w.size * 0.74 * p.sc * (hov ? 1.18 : 1) * (0.72 + 0.28 * mat),
+          clockMs, { hover: hov, rm: reduced() });
+        ctx.globalAlpha = 1;
+      }
 
-      if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${0.55 * (0.5 + 0.5 * dim)})`;
-        ctx.setLineDash([5, 7]);
+      if (w.tell === 'dashed' && mat > 0) {            /* the unknown keeps its survey ring —
+                                                          but not before the world itself exists */
+        ctx.strokeStyle = w.tellStroke;                /* baked once below: zero per-frame strings */
+        ctx.globalAlpha = 0.55 * (0.5 + 0.5 * dim) * mat;
+        ctx.setLineDash(DASH_TELL);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.95 * p.sc, 0, 7); ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.setLineDash(DASH_NONE);
+        ctx.globalAlpha = 1;
       }
     };
     for (const e of ps) if (e.p.depth <= 0) drawWorld(e);
@@ -296,11 +434,18 @@ function drawSky(dt, clockMs) {
       SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
     }
     for (const e of ps) if (e.p.depth > 0) drawWorld(e);
-  } else if (Scenes.current === 'hub' && window.SphereForge) {
-    /* phone: the Artifact holds the deep beneath the chart column, dim and vast */
-    ctx.globalAlpha = 0.5;
-    SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
-    ctx.globalAlpha = 1;
+  } else if (Scenes.current === 'hub' && window.SphereForge && ART.cy > -ART.r * 1.6) {
+    /* the pocket orrery (M2): full presence — seated, shadowed, answerable,
+       and gone with its stage once the list scrolls past it. The stageless
+       fallback keeps v6's dim ambient presence under the rows instead. */
+    if (ART.fb) {
+      ctx.globalAlpha = 0.5;
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      ctx.globalAlpha = 1;
+    } else {
+      SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+    }
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
@@ -310,6 +455,15 @@ function drawSky(dt, clockMs) {
 }
 
 function drawStatic() { drawSky(16, Ticker.clock); }
+
+/* event-driven repaints coalesce to one per frame: the rm hover/touch paths
+   ask for a repaint instead of painting inline, so sweeping the whole ring
+   (11 enters + 11 leaves) costs one drawSky pass, not twenty-two */
+let staticReq = 0;
+function requestStatic() {
+  if (staticReq) return;
+  staticReq = requestAnimationFrame(() => { staticReq = 0; drawStatic(); });
+}
 
 /* ---------- ambient: the idle loop + random-cadence comets (pooled, §2.10)
    A 3-slot pool: the usual lone wanderer, and one visit in three a
@@ -378,17 +532,32 @@ function stopSonar() { clearTimeout(sonarTimer); sonarTimer = null; }
 const artHit = document.getElementById('artifact-hit');
 const artLabel = document.getElementById('artifact-label');
 function placeArtifactDom() {
+  /* phone: the disc/plate are position:absolute INSIDE the scrolling hub
+     scene (03b) — write content-space coords (viewport + scrollTop) once
+     and the browser scrolls them natively with the stage */
+  const hubEl = Scenes.els.get('hub');
+  const sTop = !desktop() && hubEl ? hubEl.scrollTop : 0;
   if (artHit) {
     artHit.style.setProperty('--ax', ART.cx + 'px');
-    artHit.style.setProperty('--ay', ART.cy + 'px');
+    artHit.style.setProperty('--ay', (ART.cy + sTop) + 'px');
     artHit.style.setProperty('--ar', Math.round(ART.r * 2) + 'px');
   }
   if (artLabel) {
     artLabel.style.setProperty('--ax', ART.cx + 'px');
-    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
+    /* phone: the plate tucks close under the limb so it stays inside the
+       stage instead of colliding with the first world row */
+    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + (desktop() ? 30 : 10) + sTop) + 'px');
   }
 }
-let artLast = 0, artTouches = 0;
+let artLast = 0, artTouches = 0, artRmT = null, artLabelLock = false;
+/* the plate whispers for `ms`, then returns to whatever the survey arc has
+   made the resting line (dataset.home is kept current by paint()) */
+function whisperArtLabel(text, ms) {
+  if (!artLabel || artLabelLock) return;
+  artLabel.textContent = text;
+  clearTimeout(artRmT);
+  artRmT = setTimeout(() => { if (!artLabelLock) artLabel.textContent = artLabel.dataset.home || text; }, ms);
+}
 function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
@@ -397,9 +566,19 @@ function touchArtifact() {
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
     /* provoke it enough and, for a moment, the plates part: you see what
-       is underneath (every third touch; the ripple masks the swap) */
-    if (artTouches % 3 === 0 && SphereForge.reveal) SphereForge.reveal(2600);
+       is underneath (every third touch; the ripple masks the swap) — and
+       the plate finally says a word about it (M3) */
+    if (artTouches % 3 === 0 && SphereForge.reveal) {
+      SphereForge.reveal(2600);
+      whisperArtLabel('Object 0 · that is not a shell', 2600);
+    }
     if (!skyTask) Orrery.startAmbient();
+  } else if (reduced()) {
+    /* rm: the answer is designed, not stripped — a repaint (any pending skin
+       swap lands on it) and the plate acknowledges in text for a beat.
+       No reveal here: with the clock held, the glimpse could never end. */
+    requestStatic();
+    whisperArtLabel('Object 0 · it heard you', 2000);
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));
 }
@@ -409,7 +588,7 @@ if (artHit) artHit.addEventListener('click', touchArtifact);
 let skyTask = null;
 const Orrery = {
   startAmbient() {
-    if (skyTask || reduced()) { drawStatic(); return; }
+    if (skyTask || reduced()) { requestStatic(); return; }
     skyTask = (dt, c) => { drawSky(dt, c); return true; };
     Ticker.add(skyTask);
     scheduleComet();
@@ -422,6 +601,7 @@ const Orrery = {
   events: new EventTarget(),
   ticker: Ticker,
   reduced,
+  requestStatic,                     /* SphereForge repaints late-landing rm skins through this */
   worlds: WORLDS,
 };
 window.Orrery = Orrery;
@@ -435,12 +615,14 @@ anchors.forEach((a, slug) => {
     html.style.setProperty('--acc-rgb', w.a.join(','));
     /* the Artifact considers the world with you: it wears that world's face */
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug);
-    if (!skyTask && !reduced()) Orrery.startAmbient();   /* the morph needs frames */
+    if (!skyTask) Orrery.startAmbient();       /* the morph needs frames; under rm this
+                                                  IS the one designed repaint (drawStatic) */
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
   const untint = () => {
     if (hovered === slug) hovered = null;
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
+    if (reduced()) requestStatic();            /* rm: return the resting face too */
   };
   a.addEventListener('pointerenter', tint);
   a.addEventListener('focus', tint);
@@ -458,11 +640,13 @@ document.querySelectorAll('.scene').forEach(s => Scenes.els.set(s.dataset.scene,
 const locName = document.getElementById('hud-loc-name');
 const returnBtn = document.getElementById('return-orbit');
 
+/* the surveyed set lives in localStorage now: a survey that evaporates when
+   the tab closes was never a pull-back loop (M3, council ruling 6) */
 let surveyed = new Set();
-try { surveyed = new Set(JSON.parse(store.get('orrery-surveyed') || '[]')); } catch (_) {}
+try { surveyed = new Set(JSON.parse(keep.get('orrery-surveyed') || '[]')); } catch (_) {}
 function markSurveyed(slug) {
   surveyed.add(slug);
-  store.set('orrery-surveyed', JSON.stringify([...surveyed]));
+  keep.set('orrery-surveyed', JSON.stringify([...surveyed]));
   const a = anchors.get(slug);
   if (a) a.querySelector('.pa-tick').hidden = false;
 }
@@ -478,8 +662,11 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
   const dotsWrap = plate.querySelector('.survey-dots');
   const countEl  = plate.querySelector('.survey-count');
   const total = WORLDS.length;
-  const COMPLETE_KEY = 'orrery-survey-complete';
+  const COMPLETE_KEY = 'orrery-survey-complete';        /* localStorage: the rite fires once ever */
   const HONOR = 'Master surveyor. The orrery remembers.';
+  /* the survey's aria-live voice: progress and the rite, spoken politely */
+  const liveEl = document.getElementById('survey-live');
+  const announce = (t) => { if (liveEl) liveEl.textContent = t; };
 
   /* one ringed dot per world, in registry order, built once */
   const dots = WORLDS.map((w) => {
@@ -503,29 +690,73 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     sealed = true;
   }
 
+  let lastN = countSurveyed();                          /* boot pose: never announced */
   function paint() {
     const n = countSurveyed();
+    if (n !== lastN) {
+      lastN = n;
+      if (n < total) announce(n + ' of ' + total + ' worlds surveyed.');
+    }
     for (const d of dots) d.classList.toggle('is-surveyed', surveyed.has(d.dataset.world));
     if (countEl) countEl.textContent = n + '/' + total;
     const done = n >= total;
     plate.setAttribute('aria-label',
       done ? ('All ' + total + ' worlds surveyed. Master surveyor.')
            : (n + ' of ' + total + ' worlds surveyed'));
-    if (done && store.get(COMPLETE_KEY) === '1') showSeal();   /* already earned this tab */
+    /* the location strip carries the count on every homecoming, so the
+       survey stops being invisible: 'Orbit · 4 of 11 surveyed' (M3) */
+    if (Scenes.current === 'hub' && locName) {
+      locName.textContent = done ? 'Orbit · survey complete'
+        : n > 0 ? ('Orbit · ' + n + ' of ' + total + ' surveyed')
+        : 'Orbit · choose a world';
+    }
+    /* the Artifact's plate narrates the rising mystery too: once you've
+       started, it admits something is down there; complete, it knows you */
+    if (artLabel && !artLabelLock) {
+      const resting = done ? 'Object 0 · it knows you now'
+        : n >= 4 ? 'Object 0 · something moved beneath'
+        : 'Object 0 · unsurveyed';
+      artLabel.textContent = resting;
+      artLabel.dataset.home = resting;                  /* the restore target follows the arc */
+    }
+    if (done && keep.get(COMPLETE_KEY) === '1') showSeal();   /* already earned */
   }
 
+  let riteDone = false;                                /* in-memory once-guard: blocked storage
+                                                          must not re-fire the rite per scene */
   function maybeCompletionRite() {
     if (countSurveyed() < total) return;
-    if (store.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once per session */
-    store.set(COMPLETE_KEY, '1');
+    if (riteDone || keep.get(COMPLETE_KEY) === '1') { riteDone = true; showSeal(); return; }
+    /* completion is always REACHED inside the 11th world — but the rite's
+       stage (the ring, the sphere) is the hub. Hold fire until homecoming:
+       the 'scene' listener re-runs this the moment they return to orbit,
+       and the orrery answers where the visitor can actually see it. */
+    if (Scenes.current !== 'hub') return;
+    riteDone = true;
+    keep.set(COMPLETE_KEY, '1');
     showSeal();
-    try { Orrery.events.dispatchEvent(new CustomEvent('query')); } catch (_) {}  /* aurora chime answers */
-    const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
-    if (hint) {
-      const prior = hint.dataset.home || hint.textContent;       /* restore the TRUE resting line */
-      hint.textContent = HONOR;
-      setTimeout(() => { if (hint.textContent === HONOR) hint.textContent = prior; }, 10000);
+    /* THE RITE — the Artifact answers the completed survey at last:
+       the plates part FULLY (longer than the touch glimpse), the wrong
+       answering tone comes true and rises, and the whole ring pulses gold. */
+    if (artLabel) {
+      artLabelLock = true;
+      artLabel.textContent = 'Object 0 · survey accepted';
     }
+    if (artHit) artHit.setAttribute('aria-label', 'Object 0. Survey accepted. It knows you now.');
+    announce('All eleven worlds surveyed. ' + HONOR);   /* AT shares the moment */
+    if (window.SphereForge && SphereForge.reveal && !reduced()) SphereForge.reveal(5200);
+    document.querySelectorAll('.planet-anchor').forEach(a => {
+      a.classList.remove('pa-rite'); void a.offsetWidth; a.classList.add('pa-rite');
+      setTimeout(() => a.classList.remove('pa-rite'), 2600);
+    });
+    try { Orrery.events.dispatchEvent(new CustomEvent('mastery')); } catch (_) {}
+    const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
+    if (hint) hint.textContent = HONOR;
+    setTimeout(() => {                                 /* the release must NOT depend on the hint */
+      if (hint && hint.textContent === HONOR) hint.textContent = hint.dataset.home || HONOR;
+      artLabelLock = false;
+      paint();                                         /* settle to the resting arc line */
+    }, 10000);
   }
 
   /* live: setScene runs markSurveyed, THEN dispatches 'scene' — by the time we
@@ -554,6 +785,9 @@ function setScene(name, { instant = false } = {}) {
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
+    /* homecoming resets the Artifact's face: the departure beat set a skin
+       and a tap never blurs on iOS, so untint alone cannot be trusted */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
     Orrery.startAmbient();
     scheduleSonar();                                   /* home again: the call resumes */
     WorldFX.stopAll();
@@ -571,9 +805,11 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
-    /* refresh this card's medallion so the little world advanced since last visit */
+    /* refresh this card's medallion so the little world advanced since last
+       visit (skip while it bakes: wiping the canvas before a no-op drawMini
+       would blank it — onReady paints it the moment it lands) */
     const med = next.querySelector('.card-planet');
-    if (med && window.PlanetForge) {
+    if (med && window.PlanetForge && (!PlanetForge.progress || PlanetForge.progress(name) > 0)) {
       const g2 = med.getContext('2d');
       const dpr2 = Math.min(devicePixelRatio || 1, 2);
       med.width = 72 * dpr2; med.height = 72 * dpr2;
@@ -592,21 +828,52 @@ function setScene(name, { instant = false } = {}) {
    animationend is the fast path; a deterministic timer is the guarantee it
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
+let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
 
-function travel(slug) {
+function travel(slug, fromBeat) {
   if (Scenes.transitioning || Scenes.current === slug) return;
   const w = bySlug[slug];
   if (!w) return;
 
   if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
 
+  /* the phone departure beat (M2): the orrery acknowledges the choice —
+     the sphere considers the world and a sonar ring answers — THEN the
+     warp fires. 300ms of anticipation instead of an unceremonious cut. */
+  if (!fromBeat && !desktop() && window.SphereForge && Scenes.current === 'hub'
+      && ART.cy > 0                                    /* only while the sphere is on stage */
+      && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
+    beatSlug = slug;                                   /* a second tap RE-AIMS the pending beat */
+    SphereForge.setSkin(slug);
+    SphereForge.ping();
+    if (!skyTask) Orrery.startAmbient();
+    clearTimeout(beatTimer);
+    beatTimer = setTimeout(() => {
+      beatTimer = null;
+      const s = beatSlug; beatSlug = null;
+      travel(s, true);
+    }, 300);
+    return;
+  }
+
   Scenes.transitioning = true;
-  /* aim the flood at the planet's live position */
-  const i = WORLDS.indexOf(w);
-  const p = desktop() ? planetPos(i, Ticker.clock) : { x: W / 2, y: H / 2 };
+  /* aim the flood at the planet's live position — on the phone, at the
+     tapped row itself, so the warp blooms from under the finger (M2);
+     clamped into the viewport for rows below the fold (the tour taps
+     rows the reset scroll has not revealed) */
+  let p;
+  if (desktop()) {
+    p = planetPos(WORLDS.indexOf(w), Ticker.clock);
+  } else {
+    const a = anchors.get(slug);
+    const r = a && a.getBoundingClientRect();
+    p = r && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: W / 2, y: H / 2 };
+    p.x = Math.max(0, Math.min(W, p.x));
+    p.y = Math.max(0, Math.min(H, p.y));
+  }
   html.style.setProperty('--wx', (p.x / W * 100).toFixed(1) + '%');
   html.style.setProperty('--wy', (p.y / H * 100).toFixed(1) + '%');
   html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
@@ -654,8 +921,10 @@ function route(instant = false) {
   setScene(slug || 'hub', { instant });
 }
 addEventListener('hashchange', () => {
-  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4) */
+  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4)
+     — and a pending departure beat dies with it (M2) */
   if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
+  if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; beatSlug = null; }
   route(false);
 });
 
@@ -697,7 +966,23 @@ const TourController = (() => {
                                                            null = between legs, accept any land */
   const onHash = () => { if (running && expectedHash !== null && (location.hash || '#/') !== expectedHash) stop(); };
 
-  const onInput = () => { if (running) stop(); };       /* ANY input ends the tour immediately */
+  /* input ends the tour — EXCEPT the cockpit (M3): the tour's own control and
+     the score toggle are part of driving the demo, not leaving it; and the
+     arrow keys STEER the tour (→ next world, ← previous) instead of killing
+     it. Everything else is a cancel, as before. */
+  const onInput = (e) => {
+    if (!running) return;
+    if (e && e.type === 'keydown') {
+      /* arrows only: Space can't be claimed from a passive listener (its
+         default scroll still fires, and its keyup re-activates a focused
+         tour button — a cancel disguised as a steer) */
+      if (e.key === 'ArrowRight') { stepWorld(1); return; }
+      if (e.key === 'ArrowLeft') { stepWorld(-1); return; }
+    }
+    const t = e && e.target;
+    if (t && t.closest && t.closest('#tour-toggle, #audio-toggle')) return;   /* cockpit: no cancel */
+    stop();
+  };
   function addCancel() { for (const e of CANCEL) addEventListener(e, onInput, OPTS); }
   function rmCancel()  { for (const e of CANCEL) removeEventListener(e, onInput, OPTS); }
 
@@ -726,11 +1011,21 @@ const TourController = (() => {
     const leg = legs[ix];
     if (!leg || leg.t === 'closing') { finish(); return; }
     if (leg.t === 'world') {
-      expectedHash = '#/world/' + WORLDS[leg.i].slug;
-      plateSay('Stop ' + (leg.i + 1) + ' of ' + N);
-      travel(WORLDS[leg.i].slug);
+      const w = WORLDS[leg.i];
+      expectedHash = '#/world/' + w.slug;
+      /* the tour speaks the world's own poem now, not 'Stop 3 of 11' (M3) —
+         WORLDS.poem is the single source the orbit em-lines also draw from */
+      plateSay('Stop ' + (leg.i + 1) + ' of ' + N + ' · ' + w.label + ' — ' + w.poem);
+      travel(w.slug);
     }
     else { expectedHash = '#/'; location.hash = '#/'; } /* orbit breather: home via the router */
+  }
+  /* arrow-key steering: jump to the next/previous WORLD leg (skip breathers) */
+  function stepWorld(dir) {
+    let j = legIx;
+    do { j += dir; } while (j > 0 && j < legs.length - 1 && legs[j].t !== 'world');
+    j = Math.max(0, Math.min(legs.length - 1, j));
+    if (legs[j] && legs[j].t === 'world') enterLeg(j);
   }
 
   function tick(dt) {
@@ -788,16 +1083,42 @@ const TourController = (() => {
     start();
   });
 
-  return { start, stop, advance, get running() { return running; } };
+  /* the discovery nudge (M3): one beckon pulse of the footer control after a
+     stretch of untouched hub, so the best demo feature is actually found.
+     Fires at most once per visit; any real interaction cancels the arming. */
+  let beckoned = false;
+  function beckon() {
+    if (beckoned || running || Scenes.current !== 'hub') return;
+    beckoned = true;
+    btn.classList.add('tour-beckon');
+    setTimeout(() => btn.classList.remove('tour-beckon'), 3200);
+  }
+
+  return { start, stop, advance, beckon, get running() { return running; } };
 })();
 
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
    ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
+/* frame budget steering (M2): phones cap at ~30fps always; desktop demotes
+   after a minute of untouched hub (any input restores full rate next tick) */
+let lastInput = performance.now();
+['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(tp =>
+  addEventListener(tp, () => { lastInput = performance.now(); }, { passive: true, capture: true }));
 function tickClock() {
   if (!document.hidden) {
     clockEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+  /* ~22s of untouched hub → beckon the Tour once (the feature most likely to
+     run in front of a client, findable by nobody in a 0.72rem footer) */
+  if (TourController && Scenes.current === 'hub' && performance.now() - lastInput > 22000) {
+    TourController.beckon();
+  }
+  /* phones run budgeted EXCEPT while the visitor is actively touching or
+     scrolling — the scroll-glued sphere must track the stage at full rate */
+  const busy = performance.now() - lastInput < 1500;
+  const idle = Scenes.current === 'hub' && performance.now() - lastInput > 60000;
+  Ticker.setBudget((!desktop() && !busy) || idle ? 33 : 0);
 }
 setInterval(tickClock, 1000);
 tickClock();
@@ -806,10 +1127,42 @@ tickClock();
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
-  PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
+  /* staged bake (M2): the sphere owns frame 0; the eleven worlds land one
+     per idle slice and announce themselves everywhere they appear */
+  PlanetForge.init(WORLDS, (slug) => {
+    paintMedallion(slug);
+    paintMini(slug);
+    if (!skyTask) requestStatic();                     /* rm / idle: the newcomer still shows up */
+  });
   if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
+  /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
+     a thumb. TourController's parse-time stash has already claimed the one
+     true resting line (dataset.home), so re-point BOTH — otherwise the tour
+     or the survey honor would restore keyboard wording onto a touch screen */
+  const bootHint = document.querySelector('.hub-hint');
+  if (bootHint && matchMedia('(pointer: coarse)').matches) {
+    bootHint.textContent = 'Tap a world to travel · it holds the center';
+    bootHint.dataset.home = bootHint.textContent;
+  }
+  /* one source of truth for the poems: app mode re-syncs the orbit em-lines
+     from the registry (the HTML copies serve the no-JS brochure only) */
+  anchors.forEach((a, slug) => {
+    const em = a.querySelector('.pa-label em');
+    if (em && bySlug[slug] && bySlug[slug].poem) em.textContent = bySlug[slug].poem;
+  });
   sizeSky();
   setRM();
+  /* the pocket stage scrolls with the hub column: keep the sphere glued to
+     it (one rect read per scroll event; the ambient loop paints the move,
+     and rm gets its coalesced repaint) */
+  const hubEl = Scenes.els.get('hub');
+  if (hubEl) hubEl.addEventListener('scroll', () => {
+    if (desktop()) return;
+    lastInput = performance.now();
+    Ticker.setBudget(0);                               /* full rate NOW; tickClock re-budgets later */
+    measureOrbit();
+    if (!skyTask) requestStatic();
+  }, { passive: true });
   route(true);
   if (!reduced()) Orrery.startAmbient();
   runApproach();                                     /* first-visit arrival cinematic */
@@ -820,19 +1173,34 @@ function bootOrrery() {
 }
 
 /* the brass card medallions: one small spinning-world portrait per card,
-   painted at boot and refreshed on each arrival (static between visits) */
-function paintMedallions() {
-  document.querySelectorAll('.card-planet').forEach(c => {
-    const sec = c.closest('.scene');
-    if (!sec || !window.PlanetForge) return;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    const size = 72;
-    c.width = size * dpr; c.height = size * dpr;
-    const g = c.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
-  });
+   painted as each world bakes and refreshed on each arrival */
+function paintMedallion(slug) {
+  const sec = Scenes.els.get(slug);
+  if (!sec || !window.PlanetForge) return;
+  const c = sec.querySelector('.card-planet'); if (!c) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const size = 72;
+  c.width = size * dpr; c.height = size * dpr;
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  PlanetForge.drawMini(g, slug, size, Ticker.clock);
 }
+function paintMedallions() { WORLDS.forEach(w => paintMedallion(w.slug)); }
+
+/* the phone list shows the REAL worlds (M2): each row's dot wears a baked
+   PlanetForge portrait — one 68px offscreen bake per world, zero per-frame */
+function paintMini(slug) {
+  if (desktop() || !window.PlanetForge) return;
+  if (PlanetForge.progress && !PlanetForge.progress(slug)) return;   /* still in the oven */
+  const a = anchors.get(slug); if (!a) return;
+  const dot = a.querySelector('.pa-dot'); if (!dot) return;
+  const c = document.createElement('canvas');
+  c.width = c.height = 68;
+  PlanetForge.drawMini(c.getContext('2d'), slug, 68, Ticker.clock);
+  dot.style.backgroundImage = `url(${c.toDataURL()})`;
+  dot.classList.add('pa-mini');
+}
+function bakeMinis() { WORLDS.forEach(w => paintMini(w.slug)); }
 
 /* ---------- THE APPROACH: the once-per-session arrival cinematic ----------
    First hub visit only. You drift in from the dark and the instruments wake.

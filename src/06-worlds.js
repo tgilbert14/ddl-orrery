@@ -799,11 +799,30 @@ const WorldFX = (() => {
   /* ============================================================
      UNCHARTED: the survey drafts where you look
      ============================================================ */
+  /* one painter serves the live frame AND the rm pose (a drifted copy is a
+     differently-styled world nobody notices): litAt(c, r) supplies the charge */
+  function draftPaint(g, cols, rows, litAt) {
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const v = litAt(c, r);
+      if (v <= 0.02) continue;
+      const x = c * 56, y = r * 56;
+      g.strokeStyle = `rgba(100,213,245,${v * 0.5})`;
+      g.lineWidth = 1;
+      g.strokeRect(x + 3, y + 3, 50, 50);
+      if (v > 0.65) {
+        g.strokeStyle = `rgba(100,213,245,${(v - 0.65) * 0.9})`;
+        g.beginPath();
+        g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
+        g.stroke();
+      }
+    }
+  }
   fx.draft = {
     init(s) {
       const cols = Math.ceil(s.w / 56), rows = Math.ceil(s.h / 56);
       const lit = new Float32Array(cols * rows);
       const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
+      st.litAt = (c, r) => st.lit[c + r * st.cols];     /* bound once: zero per-frame alloc */
       const move = (e) => { st.px = e.clientX; st.py = e.clientY; };
       s.c.parentElement.parentElement.addEventListener('pointermove', move, { passive: true });
       st.cleanup = () => s.c.parentElement.parentElement.removeEventListener('pointermove', move);
@@ -824,20 +843,23 @@ const WorldFX = (() => {
         }
       }
       s.g.clearRect(0, 0, s.w, s.h);
-      for (let r = 0; r < st.rows; r++) for (let c = 0; c < st.cols; c++) {
-        const v = st.lit[c + r * st.cols];
-        if (v <= 0.02) continue;
-        const x = c * 56, y = r * 56;
-        s.g.strokeStyle = `rgba(100,213,245,${v * 0.5})`;
-        s.g.lineWidth = 1;
-        s.g.strokeRect(x + 3, y + 3, 50, 50);
-        if (v > 0.65) {
-          s.g.strokeStyle = `rgba(100,213,245,${(v - 0.65) * 0.9})`;
-          s.g.beginPath();
-          s.g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
-          s.g.stroke();
-        }
-      }
+      draftPaint(s.g, st.cols, st.rows, st.litAt);
+    },
+    rm() {                                     /* designed static pose: a survey abandoned mid-draft —
+                                                  a diagonal swath of charted cells, densest where the
+                                                  pen last worked (archive idiom; was a blank canvas) */
+      const c = document.querySelector('[data-canvas="draft"]');
+      if (!c || !c.parentElement) return;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const cols = Math.ceil(r.width / 56), rows = Math.ceil(r.height / 56);
+      g.clearRect(0, 0, r.width, r.height);
+      draftPaint(g, cols, rows, (ci, ri) => {
+        const u = ci / cols, w2 = ri / rows;
+        return Math.max(0, 1 - Math.abs(u + w2 - 1.1) * 2.4) * (0.35 + ((ci * 7 + ri * 13) % 5) * 0.16);
+      });
     },
   };
 
@@ -1320,6 +1342,9 @@ const WorldFX = (() => {
       if (dyLive) {                                    /* live arena: the next drill starts now */
         dySetForm(dyLive, (dyLive.form + 1) & 3);
         dyLive.nextForm = window.Orrery.ticker.clock + 8500;
+        const now = window.Orrery.ticker.clock;        /* the squads snap-acknowledge the order —
+                                                          the timer's automatic cycle never does this */
+        for (let i = 0; i < 21; i++) dyLive.L[i].flash = now + 400;
       } else if (window.Orrery.reduced()) {            /* rm: swap the held pose, one repaint, no motion */
         dyRmForm = (dyRmForm + 1) & 3;
         fx.drillyard.rm();
@@ -1346,7 +1371,7 @@ const WorldFX = (() => {
     const x = c.getContext('2d');
     const g = x.createRadialGradient(128, 128, 8, 128, 128, 128);
     g.addColorStop(0, 'rgba(226,236,255,0.85)');
-    g.addColorStop(0.3, 'rgba(185,169,255,0.42)');
+    g.addColorStop(0.3, 'rgba(201,182,255,0.42)');
     g.addColorStop(0.7, 'rgba(150,140,235,0.12)');
     g.addColorStop(1, 'rgba(150,140,235,0)');
     x.fillStyle = g; x.fillRect(0, 0, 256, 256);
@@ -1455,7 +1480,7 @@ const WorldFX = (() => {
           g.lineTo(tx, hY); g.lineTo(tx, -6);
           g.closePath(); g.fill();
           if (L === 0) {                               /* pale light rides the leading face */
-            g.strokeStyle = 'rgba(185,169,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
+            g.strokeStyle = 'rgba(201,182,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
             g.lineWidth = 2;
             g.beginPath();
             g.moveTo(E[0], -6);
@@ -1568,7 +1593,10 @@ const WorldFX = (() => {
            1 prebaked glow sprite (no per-frame gradients)
      ============================================================ */
   const BCN_N = 7, BCN_STAGGER = 900, BCN_RISE = 260, BCN_HOLD = 3200,
-        BCN_SETTLE = 2600, BCN_GAP = 22000, BCN_EMBER = 0.14;
+        BCN_SETTLE = 2600, BCN_GAP = 45000, BCN_EMBER = 0.14,
+        BCN_RUN = (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;   /* one full signal run */
+  /* GAP 45s, not 22s (council ruling 10): manual kindling is the primary
+     path — idle spectacle must never preempt the player's version of it */
   let beaconTrigger = null;   /* the active FX sets this; the toy button calls it */
 
   function bcnRun(st, clock) { st.sig.on = true; st.sig.t0 = clock; for (let i = 0; i < BCN_N; i++) st.burst[i] = 0; }
@@ -1665,23 +1693,42 @@ const WorldFX = (() => {
         ridges, pyres, glow: oc, embers, smoke, stars,
         inten: new Float32Array(BCN_N), rdrift: new Float32Array(ridges.length),
         sig: { on: false, t0: 0 }, burst: new Uint8Array(BCN_N),
-        next: null, trigger: false, lastEnd: -99999, calm: 1,
+        next: null, lastEnd: -99999, calm: 1, btnOn: false,
         emberAcc: 0, smokeAcc: 0, gust: 0, gustNext: 0,
       };
-      st.cleanup = () => { beaconTrigger = null; };               /* Smaug kill 7: drop the toy hook */
-      beaconTrigger = () => { st.trigger = true; };
+      st.cleanup = () => {                                        /* Smaug kill 7: drop the toy hook */
+        beaconTrigger = null;
+        if (beaconToy) { beaconToy.classList.remove('is-running'); beaconToy.removeAttribute('aria-disabled'); }
+      };
+      beaconTrigger = () => {                                     /* one guard, one place: starts the
+                                                                     run now, or reports it is busy */
+        const clock = window.Orrery.ticker.clock;
+        if (st.sig.on || clock - st.lastEnd <= 800) return false;
+        bcnRun(st, clock);
+        return true;
+      };
       return st;
     },
     frame(s, st, dt, clock) {
       const g = s.g, W = s.w, H = s.h;
       g.clearRect(0, 0, W, H);
-      if (st.next === null) st.next = clock + 4200;
+      if (st.next === null) st.next = clock + 14000;   /* the player gets first strike at the flint */
 
-      /* the signal run: auto on a ~22s cadence, or the toy fires it now (no stacking) */
-      if (st.trigger) { st.trigger = false; if (!st.sig.on && clock - st.lastEnd > 800) bcnRun(st, clock); }
+      /* the signal run: auto on a slow cadence (the toy starts its own via beaconTrigger) */
       if (!st.sig.on && clock >= st.next) bcnRun(st, clock);
+      /* the button wears the run state — the FX owns it on the shared clock,
+         so auto-runs and frozen hidden tabs stay truthful (no wall timers).
+         The 800ms post-run cooldown counts as busy: no press is ever eaten
+         by a state the button isn't showing. */
+      const busy = st.sig.on || clock - st.lastEnd <= 800;
+      if (beaconToy && st.btnOn !== busy) {
+        st.btnOn = busy;
+        beaconToy.classList.toggle('is-running', busy);
+        if (busy) beaconToy.setAttribute('aria-disabled', 'true');
+        else beaconToy.removeAttribute('aria-disabled');
+      }
       if (st.sig.on) {
-        const runEnd = st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;
+        const runEnd = st.sig.t0 + BCN_RUN;
         if (clock >= runEnd) { st.sig.on = false; st.lastEnd = clock; st.next = st.sig.t0 + BCN_GAP + Math.random() * 4000; }
       }
 
@@ -1765,15 +1812,22 @@ const WorldFX = (() => {
     },
     rm() { /* intentional no-op: the frozen mid-burn pose is the .beacon-static SVG (see 03-worlds.css) */ },
   };
-  /* the toy: light the chain now. Cooldown lives in bcnRun's guard (no stacked runs). */
+  /* the toy: light the chain now. The FX owns the run + the button's busy
+     state; the score's horns take their cadence FROM the event so the two
+     files can never disagree about the chain's tempo. */
   const beaconToy = document.getElementById('light-beacons');
+  const beaconEvent = () => window.Orrery.events.dispatchEvent(
+    new CustomEvent('beacon', { detail: { n: BCN_N, stagger: BCN_STAGGER } }));
   if (beaconToy) beaconToy.addEventListener('click', () => {
     if (window.Orrery.reduced()) {
       /* rm answer: a one-shot flare of the static SVG pyres (user-initiated) */
       const sec = document.getElementById('world-beacons');
       if (sec) { sec.classList.remove('is-signaled'); void sec.offsetWidth; sec.classList.add('is-signaled'); }
-    } else if (beaconTrigger) beaconTrigger();
-    window.Orrery.events.dispatchEvent(new CustomEvent('beacon'));
+      beaconEvent();
+      return;
+    }
+    /* no live FX hook (init failed?) → the horns still answer the press */
+    if (!beaconTrigger || beaconTrigger()) beaconEvent();
   });
 
   return { start, stopAll };

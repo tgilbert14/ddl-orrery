@@ -15,6 +15,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">
 <meta name="theme-color" content="#060a18">
+<link rel="preload" href="assets/cinzel-subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='14' fill='%23f97366'/%3E%3Cellipse cx='32' cy='32' rx='26' ry='8' fill='none' stroke='%234af3ff' stroke-width='3' transform='rotate(-18 32 32)'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -87,15 +88,18 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-un-ground: #0f141c;
 
   /* -- Sector 11 · The Beacons: dusk indigo range · firelight gold · cold star-white -- */
-  --w-beacon-a: #ffa53a;      --w-beacon-a-rgb: 255, 165, 58;    /* firelight gold (the signature accent) */
+  /* hue audit (M3): the four v6 worlds shared one indigo cluster with two
+     near-identical light blues. Beacons commits to ember, Stormwall to
+     violet — so the orbit ring passes the one-second read. */
+  --w-beacon-a: #ff7a3c;      --w-beacon-a-rgb: 255, 122, 60;    /* ember (was firelight gold, too near dust) */
   --w-beacon-b: #dfe9ff;      --w-beacon-b-rgb: 223, 233, 255;   /* cold star-white */
-  --w-beacon-glow: #ff7e33;   --w-beacon-glow-rgb: 255, 126, 51; /* ember bloom / slope-glow */
-  --w-beacon-ground: #0b1230;                                    /* dusk indigo deep */
+  --w-beacon-glow: #ff6428;   --w-beacon-glow-rgb: 255, 100, 40; /* ember bloom / slope-glow */
+  --w-beacon-ground: #1a1024;                                    /* dusk ember-indigo */
 
-  --w-storm-a: #7fb3ff;       --w-storm-a-rgb: 127, 179, 255;
+  --w-storm-a: #b29eff;       --w-storm-a-rgb: 178, 158, 255;    /* stormlight violet (promoted from glow) */
   --w-storm-b: #cfe6ff;       --w-storm-b-rgb: 207, 230, 255;
-  --w-storm-glow: #b9a9ff;    --w-storm-glow-rgb: 185, 169, 255;
-  --w-storm-ground: #131022;
+  --w-storm-glow: #c9b6ff;    --w-storm-glow-rgb: 201, 182, 255;
+  --w-storm-ground: #191030;                                     /* bruised violet */
 
   --w-drill-a: #7fb2e5;       --w-drill-a-rgb: 127, 178, 229;
   --w-drill-b: #66ff9e;       --w-drill-b-rgb: 102, 255, 158;
@@ -115,6 +119,10 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
   /* -- type scale (names kept; hub display duty moves to the plaque rules) -- */
   --font-display: ui-sans-serif, system-ui, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+  /* the engraved display face: Cinzel SemiBold, subset to caps+digits (9.5KB).
+     The whole brass fiction was a per-OS weight-300 lottery before (M3). Only
+     the three display surfaces wear it; body copy keeps the system stack. */
+  --font-engraved: "Cinzel", "Trajan Pro", Georgia, var(--font-display);
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
   --fs-hero: clamp(1.9rem, 1.1rem + 4.2vw, 4.2rem);
   --fs-h2: clamp(2.2rem, 1.4rem + 4.6vw, 4.8rem);
@@ -131,6 +139,22 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --spring: linear(0, 0.32, 0.72, 1.03, 1.01, 0.99, 1);
   --warp-ms: 1100ms;
+}
+
+/* the engraved face. font-display:swap = the LCP headline paints in the
+   fallback the same frame and swaps when the 9.5KB subset lands (never
+   gated). The metric overrides lock the line box to the fallback's, so the
+   swap causes no vertical shift (CLS-safe) — ascent/descent from the subset,
+   size-adjust tuned so Cinzel's caps sit at the fallback's cap height. */
+@font-face {
+  font-family: "Cinzel";
+  src: url("assets/cinzel-subset.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+  ascent-override: 97%;
+  descent-override: 37%;
+  line-gap-override: 0%;
+  size-adjust: 108%;
 }
 
 /* ============ reset + base ============ */
@@ -165,6 +189,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   transition: top 0.2s var(--ease-out);
 }
 .skip-link:focus-visible { top: 1rem; }
+
+/* screen-reader-only: real words for AT where the visual page speaks in art.
+   Hidden entirely without JS: the copy documents app-mode behavior (Enter
+   travels, Escape returns) that the scriptless brochure does not have */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+html:not(.js) .sr-only { display: none; }
 
 /* small-caps micro-typography (house vocabulary) */
 .microlabel {
@@ -386,9 +420,11 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
   html.js .planet-anchor:hover .pa-label,
   html.js .planet-anchor:focus-visible .pa-label { opacity: 1; }
-  /* neighbors alternate label sides (odd above, even below): two worlds
-     passing close on the ring can no longer stack their nameplates */
-  html.js .planet-anchor:nth-child(odd) .pa-label {
+  /* label side is set per frame from live orbital depth (05-core writes
+     .pl-above on far-side worlds): far names ride above, near names below,
+     so two worlds passing close never stack their nameplates. The old
+     nth-child parity assumed a fixed adjacency the periods destroy. */
+  html.js .planet-anchor.pl-above .pa-label {
     top: auto; bottom: calc(100% + 0.2rem);
   }
   html.js .planet-anchor .pa-label b { font-size: 0.92rem; text-shadow: 0 2px 12px rgba(5,7,15,0.9); }
@@ -405,10 +441,43 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
 }
 
-/* mobile app-mode: the star-chart column (big targets, tells intact) */
+/* mobile app-mode: the pocket orrery (M2) — the Artifact seats in a real
+   stage under the plaque, and the star-chart column begins below its limb */
+.hub-stage { display: none; }
 @media (max-width: 700px) {
-  html.js .orbits { position: relative; z-index: 20; }
+  html.js .hub-stage { display: block; width: 100%; height: clamp(150px, 36svh, 340px); flex: none; }
+  html.js .orbits { position: relative; z-index: 20; margin-top: 0; }
   html.js .planet-anchor { min-height: 64px; }
+  /* each row's dot wears its baked PlanetForge portrait (05-core paintMini) */
+  html.js .pa-dot.pa-mini {
+    background-size: 100% 100%;
+    box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35);
+  }
+}
+
+/* the completion rite (M3): when the survey is accepted, the whole ring
+   pulses gold once. On desktop the canvas draws the planets and .pa-dot is
+   invisible, so the pulse rides the .pa-ring; on phone/brochure it rides
+   the .pa-dot. Compositor-only, user-earned; rm holds a designed glow. */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) .planet-anchor.pa-rite .pa-dot { animation: pa-rite-dot 2.4s var(--ease-out) 1; }
+  html:not(.rm) .planet-anchor.pa-rite .pa-ring { animation: pa-rite-ring 2.4s var(--ease-out) 1; }
+}
+@keyframes pa-rite-dot {
+  0%   { box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35); }
+  22%  { box-shadow: 0 0 44px 6px rgba(255, 205, 90, 0.85); }
+  100% { box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35); }
+}
+@keyframes pa-rite-ring {
+  0%, 100% { border-color: rgba(var(--pa-rgb, var(--acc-rgb)), 0); box-shadow: none; }
+  22%      { border-color: rgba(255, 205, 90, 0.95); box-shadow: 0 0 30px 4px rgba(255, 205, 90, 0.55); }
+}
+html.rm .planet-anchor.pa-rite .pa-dot { box-shadow: 0 0 30px 3px rgba(255, 205, 90, 0.6); }
+/* rm desktop: .pa-dot is opacity:0 there (the canvas draws the planets), so
+   the held glow must ride the ring or the earned climax vanishes */
+html.rm .planet-anchor.pa-rite .pa-ring {
+  border-color: rgba(255, 205, 90, 0.8);
+  box-shadow: 0 0 22px 3px rgba(255, 205, 90, 0.4);
 }
 
 /* ---------- pre-boot / no-JS planet drift (negative-delay ensemble, §2.7) ---------- */
@@ -474,6 +543,11 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
   margin-bottom: 0.7rem;
 }
 .w-copy { font-size: var(--fs-sub); color: var(--ink); max-width: 30em; }
+/* the Artifact-facing lore line: quieter than copy, in the world's own voice,
+   always shown (designed end-state text, not live-motion narration). Full
+   brass, no opacity: it carries the through-narrative, so it stays ≥7:1
+   even over the brightest world FX bleeding through the plate. */
+.w-lore { margin-top: 0.7rem; color: var(--brass); max-width: 30em; font-style: italic; }
 .w-note { margin-top: 0.9rem; color: var(--ink-dim); }
 .w-proof { margin-top: 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 .w-proof a { color: var(--wa, var(--acc)); font-weight: 600; }
@@ -494,6 +568,12 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
   transition: background 0.25s, color 0.25s, transform 0.45s var(--spring);
 }
 .w-toy:hover, .w-toy:focus-visible { background: rgba(var(--wa-rgb), 0.16); transform: translateY(-2px); }
+/* a toy whose effect is mid-run wears the state instead of eating the press;
+   hover/focus lifts go quiet, but the press frame itself still answers
+   (the :active rule is last so it wins the equal-specificity fight) */
+.w-toy.is-running { opacity: 0.45; cursor: default; }
+.w-toy.is-running:hover, .w-toy.is-running:focus-visible { background: transparent; transform: none; }
+.w-toy.is-running:active { transform: translateY(1px) scale(0.97); }
 
 /* brochure mode: give each stacked world its ground so no-JS reads designed */
 .world { background: var(--wground, var(--night)); }
@@ -699,6 +779,11 @@ html:not(.js) [data-scene="grid"] .grid-static { display: block; }
    ============================================================ */
 [data-scene="arcadia"] { --wa: var(--w-arcadia-a); --wa-rgb: var(--w-arcadia-a-rgb); --wglow-rgb: var(--w-arcadia-glow-rgb); --wground: var(--w-arcadia-ground); }
 [data-scene="arcadia"] .fx-canvas { image-rendering: pixelated; }
+/* no-JS: the cabinet still shows its attract screen (rm keeps the canvas —
+   fx.arcadia.rm() paints the held pose; this covers the scriptless brochure) */
+.arc-static { display: none; }
+html:not(.js) [data-scene="arcadia"] .fx-canvas { display: none; }
+html:not(.js) [data-scene="arcadia"] .arc-static { display: block; }
 .arc-crt {
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background:
@@ -913,11 +998,14 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
                      calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
 }
 .hub-h1 {
-  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.35rem);
-  font-weight: 300;
-  letter-spacing: var(--track-deco);
+  /* the engraved face lets the hero stand up (was a 1.35rem weight-300
+     whisper): Cinzel caps carry a bigger scale without shouting (M3) */
+  font-family: var(--font-engraved);
+  font-size: clamp(1.35rem, 1.05rem + 1.5vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  line-height: 1.4;
+  line-height: 1.32;
   color: var(--cream);
   text-wrap: balance;
 }
@@ -966,7 +1054,7 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
                      calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
 }
 .brand b { color: var(--brass); }          /* coral leaves the masthead; brass takes it */
-.hud-title { color: var(--brass); font-weight: 600; }
+.hud-title { color: var(--brass); font-weight: 600; font-family: var(--font-engraved); letter-spacing: 0.28em; }
 #hud-clock { font-variant-numeric: tabular-nums; }
 
 .return-orbit, .audio-toggle {
@@ -983,6 +1071,21 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
 /* clip-path swallows an OUTSIDE outline: chamfered controls get an inner focus ring */
 .brand:focus-visible, .return-orbit:focus-visible, .audio-toggle:focus-visible,
 .w-return:focus-visible, .w-toy:focus-visible { outline-offset: -4px; }
+
+/* phone HUD (M2): the brass plates were colliding at 390px — tighter bars,
+   smaller chips, and the score toggle speaks through its EQ bars alone
+   (the full label + aria state stay for AT; the pressed state never lies) */
+@media (max-width: 700px) {
+  .hud { padding: 0.55rem 0.7rem; gap: 0.5rem; }
+  .hud-loc { top: 2.9rem; }
+  .brand { padding: 0.3rem 0.5rem; letter-spacing: 0.12em; }
+  .audio-toggle, .return-orbit { padding: 0.35rem 0.55rem; white-space: nowrap; }
+  .audio-toggle .audio-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+  #hud-loc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+}
 
 /* ---------- 4 · the porthole + film grain (NEW elements) ---------- */
 /* z-order: scenes 10 < warpfx 90 < porthole 110 < grain 111 < HUD 120 < skip-link 300.
@@ -1039,11 +1142,14 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
 /* keep the eyebrow and the engraved name clear of the medallion */
 .world-card .w-eyebrow, .world-card h2 { padding-right: 62px; }
 
-/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css */
+/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css.
+   The Cinzel face is the point — a real engraved monument cap, not a
+   weight-300 system-stack costume (M3) */
 .world-card h2 {
+  font-family: var(--font-engraved);
   font-size: clamp(1.7rem, 1.2rem + 2.4vw, 3.1rem);
-  font-weight: 300;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.12;
   color: var(--cream);
@@ -1053,6 +1159,14 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
   border-radius: 0;
   clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px),
                      calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+}
+
+/* the press frame itself answers: every control acknowledges the finger
+   before its effect lands (user-initiated, so rm-safe by definition) */
+.w-toy:active, .w-return:active, .cta-btn:active,
+.audio-toggle:active, .tour-toggle:active, .return-orbit:active {
+  transform: translateY(1px) scale(0.97);
+  transition-duration: 0.05s;
 }
 
 /* ---------- 6 · brochure list chrome (mobile / no-JS planet index) ----------
@@ -1183,9 +1297,12 @@ html.js .artifact-label { display: block; }
   background: transparent; border: 0; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc */
+/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc.
+   The transparent outline is real to forced-colors mode, which strips the
+   box-shadow and repaints the outline in Highlight — the ring never vanishes. */
 #artifact-hit:focus-visible {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: -4px;
   box-shadow: 0 0 0 2px rgba(var(--brass-rgb), 0.9),
               0 0 22px 4px rgba(255, 205, 90, 0.5) inset;
 }
@@ -1202,11 +1319,26 @@ html.js .artifact-label { display: block; }
   html:not(.rm) .artifact-label { animation: hint-breathe 8s ease-in-out infinite 1.4s; }
 }
 
-/* the phone keeps the Artifact as ambient art only: the invisible hit target
-   would otherwise sit over the world column and steal its taps + scroll. The
-   canvas still paints the dim sphere and the sonar ring behind everything. */
+/* the pocket orrery (M2): the Artifact is TOUCHABLE on phones now — it seats
+   in the .hub-stage spacer, below the world rows (z20), so it can never steal
+   a row's tap. ABSOLUTE, not fixed, on phones: the disc and plate live in the
+   hub scene's scroll flow (05-core writes content-space coords), so they
+   scroll away with the stage AND a swipe that starts on the gold chains to
+   the scene scroller like any other content. */
 @media (max-width: 700px) {
-  #artifact-hit, .artifact-label { display: none !important; }
+  #artifact-hit, .artifact-label { position: absolute; }
+}
+
+/* phone compositing cuts (M2): a live canvas under a backdrop-filter card
+   plus a blended grain layer is a real slice of a mid-phone's frame budget.
+   The card plate is already 80% opaque — nobody can see the refraction. */
+@media (max-width: 700px) {
+  .world-card.glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: rgba(6, 22, 18, 0.9);
+  }
+  .grain { mix-blend-mode: normal; opacity: 0.035; }
 }
 
 /* reduced-motion: the dust, flicker, breathe all hold still (the dark and the
@@ -1261,6 +1393,18 @@ html.js #tour-toggle {
   50%      { opacity: 1;   transform: scale(1.12); }
 }
 
+/* the discovery nudge (M3): after a stretch of idle hub, the footer Tour
+   control pulses ONCE so the best demo feature is actually found. The
+   engine adds .tour-beckon; rm shows a static lifted border instead. */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) #tour-toggle.tour-beckon { animation: tour-beckon 1.5s var(--ease-out) 2; }
+}
+@keyframes tour-beckon {
+  0%, 100% { border-color: rgba(var(--brass-rgb), 0.45); box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22); }
+  50%      { border-color: rgba(255, 205, 90, 0.95); box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22), 0 0 22px rgba(255, 205, 90, 0.5); }
+}
+html.rm #tour-toggle.tour-beckon { border-color: rgba(255, 205, 90, 0.8); }
+
 /* the progress plate: engraved brass readout, announced politely */
 .tour-plate {
   color: var(--brass);
@@ -1312,6 +1456,12 @@ html.js .survey-log {
   border-color: rgba(var(--brass-rgb), 0.9);
   box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
 }
+/* forced-colors strips gradients and shadows: state must survive on borders */
+@media (forced-colors: active) {
+  .survey-dot { border: 1px solid CanvasText; }
+  .survey-dot.is-surveyed { border: 4px solid CanvasText; }
+  html.js .planet-anchor { border: 1px solid CanvasText; }
+}
 /* the fill eases only where motion is welcome (konami-ring precedent); rm snaps */
 @media (prefers-reduced-motion: no-preference) {
   html:not(.rm) .survey-dot {
@@ -1359,6 +1509,12 @@ html.js .survey-log {
    is (0,4,1) so it still wins WHILE drifting. Order-independent. */
 html.js.approached .hub-sub,
 html.js.approached .hub-hint { animation: none; }
+
+/* invisible is untouchable: while the cinematic runs, the fading-in anchors
+   and the artifact disc take no clicks — a stray early click aborts the
+   cinematic (window capture) without also warping the visitor blind */
+html.approaching .planet-anchor,
+html.approaching #artifact-hit { pointer-events: none; }
 
 @media (prefers-reduced-motion: no-preference) {
 
@@ -1465,10 +1621,17 @@ html.js.approached .hub-hint { animation: none; }
     <!-- ============ THE HUB ============ -->
     <section id="hub" class="scene scene-hub" data-scene="hub">
       <div class="hub-copy">
-        <h1 class="hub-h1">Eleven worlds. One clock.<br>One artifact, holding the center.</h1>
+        <!-- no hard <br>: text-wrap:balance sets the monument lockup at every
+             width; a forced break went ragged under the bigger engraved face -->
+        <h1 class="hub-h1">Eleven worlds. One clock. One artifact, holding the center.</h1>
         <p class="hub-sub">Eleven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
+
+      <!-- the pocket orrery's stage (M2): on phones this spacer holds open
+           the scroll flow where the sky canvas seats the Artifact, so the
+           world list begins below the limb. Display:none everywhere else. -->
+      <div class="hub-stage" aria-hidden="true"></div>
 
       <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
            sphere; this button is its keyboard/AT presence and the ripple trigger.
@@ -1477,10 +1640,11 @@ html.js.approached .hub-hint { animation: none; }
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
+        <p class="sr-only">Eleven world links follow. Enter travels to a world; Escape returns to orbit.</p>
         <a class="planet-anchor" data-world="dust-sea" href="#world-dust-sea" style="--i:0">
           <span class="pa-ring" aria-hidden="true"></span>
           <span class="pa-dot" aria-hidden="true"></span>
-          <span class="pa-label"><b>Dust Sea</b><em>two suns, and something beneath</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
+          <span class="pa-label"><b>Dust Sea</b><em>the sand remembers a rhythm</em><span class="pa-tick" hidden>&#10003; surveyed</span></span>
         </a>
         <a class="planet-anchor" data-world="velocity" href="#world-velocity" style="--i:1">
           <span class="pa-ring" aria-hidden="true"></span>
@@ -1565,7 +1729,8 @@ html.js.approached .hub-hint { animation: none; }
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 01 &middot; Desert giant</p>
         <h2 id="h-dust">Dust Sea</h2>
-        <p class="w-copy">Two suns down. Something vast turns beneath the dunes.</p>
+        <p class="w-copy">Two suns down. Something vast keeps the rhythm beneath.</p>
+        <p class="w-lore microlabel">Whatever turns under the dunes, it is not the oldest thing you can see from here.</p>
         <p class="w-note w-note--live microlabel">Stay a while. The dunes are not as empty as they look.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -1592,7 +1757,8 @@ html.js.approached .hub-hint { animation: none; }
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 02 &middot; Neon metropolis</p>
         <h2 id="h-velocity">Velocity</h2>
-        <p class="w-copy">Two riders. One horizon. The city never blinks.</p>
+        <p class="w-copy">The sun never sets here. It loops. The city never blinks.</p>
+        <p class="w-lore microlabel">Every lap the city runs, it runs around a center that does not move.</p>
         <p class="w-note w-note--live microlabel">The skyline re-renders on the orrery clock while you watch.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -1610,6 +1776,7 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 03 &middot; Cyberspace</p>
         <h2 id="h-grid">The Grid</h2>
         <p class="w-copy">The rain is code. It always was.</p>
+        <p class="w-lore microlabel">Some glyphs spell a designation the rain never finishes: 0.</p>
         <p class="w-note w-note--live microlabel">Watch for the white trace. It knows where it is going.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -1668,6 +1835,7 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 04 &middot; Hadal zone</p>
         <h2 id="h-abyssal">Abyssal</h2>
         <p class="w-copy">Ten thousand meters down, the lights are alive.</p>
+        <p class="w-lore microlabel">The sonar down here answers a ping nobody sent.</p>
         <p class="w-note w-note--live microlabel">Every half minute or so, the dark gets a little bigger. Keep watching.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -1677,6 +1845,46 @@ html.js.approached .hub-hint { animation: none; }
     <section id="world-arcadia" class="scene world" data-scene="arcadia" data-fx="arcadia" aria-labelledby="h-arcadia">
       <div class="world-fx" aria-hidden="true">
         <canvas class="fx-canvas" data-canvas="arcadia"></canvas>
+        <!-- the same attract screen, frozen: shown only when JS is absent
+             (rm is painted by the canvas). Shapes are the engine's own
+             INVADER_A / PLAYER bitmaps at the 4px grid. -->
+        <svg class="arc-static" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <g id="arc-inv">
+              <rect x="12" y="0" width="8" height="4"/>
+              <rect x="8" y="4" width="16" height="4"/>
+              <rect x="4" y="8" width="24" height="4"/>
+              <rect x="0" y="12" width="8" height="4"/><rect x="12" y="12" width="8" height="4"/><rect x="24" y="12" width="8" height="4"/>
+              <rect x="0" y="16" width="32" height="4"/>
+              <rect x="8" y="20" width="4" height="4"/><rect x="20" y="20" width="4" height="4"/>
+              <rect x="4" y="24" width="4" height="4"/><rect x="12" y="24" width="8" height="4"/><rect x="24" y="24" width="4" height="4"/>
+              <rect x="0" y="28" width="4" height="4"/><rect x="8" y="28" width="4" height="4"/><rect x="20" y="28" width="4" height="4"/><rect x="28" y="28" width="4" height="4"/>
+            </g>
+          </defs>
+          <g fill="rgba(230,240,255,0.7)">
+            <rect x="96" y="60" width="4" height="4"/><rect x="288" y="132" width="4" height="4"/>
+            <rect x="472" y="48" width="4" height="4"/><rect x="668" y="104" width="4" height="4"/>
+            <rect x="852" y="64" width="4" height="4"/><rect x="1024" y="140" width="4" height="4"/>
+            <rect x="1132" y="76" width="4" height="4"/><rect x="196" y="300" width="4" height="4"/>
+            <rect x="560" y="356" width="4" height="4"/><rect x="944" y="320" width="4" height="4"/>
+            <rect x="376" y="440" width="4" height="4"/><rect x="1076" y="420" width="4" height="4"/>
+          </g>
+          <g fill="#7dff5a">
+            <use href="#arc-inv" x="296" y="152"/><use href="#arc-inv" x="360" y="152"/>
+            <use href="#arc-inv" x="424" y="152"/><use href="#arc-inv" x="488" y="152"/>
+            <use href="#arc-inv" x="552" y="152"/><use href="#arc-inv" x="616" y="152"/>
+            <use href="#arc-inv" x="680" y="152"/><use href="#arc-inv" x="744" y="152"/>
+            <use href="#arc-inv" x="808" y="152"/><use href="#arc-inv" x="872" y="152"/>
+          </g>
+          <rect x="598" y="472" width="4" height="12" fill="#e6f0ff"/>
+          <g fill="#ffd23f">
+            <rect x="596" y="564" width="8" height="8"/>
+            <rect x="592" y="572" width="16" height="4"/>
+            <rect x="588" y="576" width="24" height="4"/>
+            <rect x="584" y="580" width="32" height="12"/>
+            <rect x="584" y="592" width="12" height="4"/><rect x="604" y="592" width="12" height="4"/>
+          </g>
+        </svg>
         <div class="arc-crt"></div>
       </div>
       <div class="world-card glass">
@@ -1684,6 +1892,7 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 05 &middot; Cabinet world</p>
         <h2 id="h-arcadia">Arcadia</h2>
         <p class="w-copy">Insert coin. The high score is still yours to lose.</p>
+        <p class="w-lore microlabel">There is a high score older than the cabinet. Object 0 set it.</p>
         <p class="w-note w-note--live microlabel">The defenders march. The little ship holds the line, forever.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
@@ -1728,6 +1937,7 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 06 &middot; Frozen world</p>
         <h2 id="h-aurora">Aurora</h2>
         <p class="w-copy">The sky rehearses its colors over the ice.</p>
+        <p class="w-lore microlabel">The lights rehearse for something at the center they will not name.</p>
         <p class="w-note"><button class="w-toy" id="run-query" type="button">Send a pulse</button>
           <span class="microlabel">light the constellation</span></p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
@@ -1745,6 +1955,7 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 07 &middot; Awaiting designation</p>
         <h2 id="h-uncharted">Uncharted</h2>
         <p class="w-copy">Every fleet needs a next world. This one is waiting for a name.</p>
+        <p class="w-lore microlabel">Every chart drawn here leaves one object unmeasured, dead center.</p>
         <p class="w-note w-note--live microlabel">Move the pointer: the survey drafts wherever you look. It stays unfinished on purpose.</p>
         <p class="w-cta">
           <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Name it with us</a>
@@ -1798,7 +2009,8 @@ html.js.approached .hub-hint { animation: none; }
         <canvas class="card-planet" width="72" height="72" aria-hidden="true"></canvas>
         <p class="w-eyebrow microlabel">Sector 08 &middot; Predictive archive</p>
         <h2 id="h-archive">The Archive</h2>
-        <p class="w-copy">Ten thousand years of records, and the mathematics to read them forward. Every branch is a future the numbers weigh; the brightest is the one worth planning for.</p>
+        <p class="w-copy">Ten thousand years of records, read forward. The brightest branch is the one worth planning for.</p>
+        <p class="w-lore microlabel">Every fan the archive grows bends around one object it cannot weigh.</p>
         <p class="w-note w-note--live microlabel">The fans branch and weight, then every few seconds collapse to the single lit path.</p>
         <p class="w-note"><button class="w-toy" id="consult-archive" type="button">Consult the archive</button>
           <span class="microlabel">re-roll the futures</span></p>
@@ -1843,10 +2055,10 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 09 &middot; Training arena</p>
         <h2 id="h-drillyard">The Drillyard</h2>
         <p class="w-copy">Zero gravity. Three squads. The floor is wherever they agree it is.</p>
+        <p class="w-lore microlabel">Down is a choice everywhere in this arena but one: the center keeps its own.</p>
         <p class="w-note w-note--live microlabel">Wait for the slow turn: the arena picks a new down, and the drills simply continue.</p>
         <p class="w-note"><button class="w-toy" id="call-drill" type="button">Call a drill</button>
           <span class="microlabel">cycle the next formation</span></p>
-        <p class="w-proof microlabel">Desert Data Labs drills real teams the same way: training tools, practice runs, and live operational dashboards that keep every crew oriented when the ground moves.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -1867,8 +2079,8 @@ html.js.approached .hub-hint { animation: none; }
             </linearGradient>
             <radialGradient id="sw-flashg" cx="0.5" cy="0.5" r="0.5">
               <stop offset="0" stop-color="#e2ecff" stop-opacity="0.5"/>
-              <stop offset="0.45" stop-color="#b9a9ff" stop-opacity="0.2"/>
-              <stop offset="1" stop-color="#b9a9ff" stop-opacity="0"/>
+              <stop offset="0.45" stop-color="#c9b6ff" stop-opacity="0.2"/>
+              <stop offset="1" stop-color="#c9b6ff" stop-opacity="0"/>
             </radialGradient>
           </defs>
           <rect width="1200" height="640" fill="url(#sw-skyg)"/>
@@ -1878,7 +2090,7 @@ html.js.approached .hub-hint { animation: none; }
           <path d="M1200,0 L840,0 L862,60 L836,124 L866,188 L842,252 L872,316 L848,380 L876,444 L854,512 L1200,512 Z" fill="#111322"/>
           <ellipse cx="960" cy="170" rx="150" ry="120" fill="url(#sw-flashg)"/>
           <ellipse cx="1090" cy="340" rx="110" ry="88" fill="url(#sw-flashg)" opacity="0.7"/>
-          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(185,169,255,0.3)" stroke-width="2"/>
+          <path d="M742,0 L768,64 L738,128 L772,192 L744,256 L776,320 L748,384 L780,448 L756,512" fill="none" stroke="rgba(201,182,255,0.3)" stroke-width="2"/>
           <!-- the plain -->
           <rect y="512" width="1200" height="128" fill="#17142a"/>
           <path d="M0,640 L0,584 C220,568 480,596 720,580 C920,568 1080,590 1200,578 L1200,640 Z" fill="#0d0b18"/>
@@ -1916,9 +2128,9 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 10 &middot; Tempest plain</p>
         <h2 id="h-stormwall">Stormwall</h2>
         <p class="w-copy">The weather here is a wall. The light knows before you do.</p>
+        <p class="w-lore microlabel">The light runs ahead of the storm — and behind whatever the center already knew.</p>
         <p class="w-note"><button class="w-toy" id="brace-wall" type="button">Brace for the wall</button>
           <span class="microlabel">call the front in early</span></p>
-        <p class="w-proof microlabel">Desert Data Labs schedules pipelines the way this plain reads weather: jobs that see the front coming, close up safe, and reopen with nothing lost.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -1963,9 +2175,10 @@ html.js.approached .hub-hint { animation: none; }
         <p class="w-eyebrow microlabel">Sector 11 &middot; Watch-fire range</p>
         <h2 id="h-beacons">The Beacons</h2>
         <p class="w-copy">One pyre catches at dusk, and the next answers down the range, faster than any rider could carry the word.</p>
+        <p class="w-lore microlabel">The oldest fire on the range does not need lighting.</p>
         <p class="w-note"><button class="w-toy" id="light-beacons" type="button">Light the beacons</button>
           <span class="microlabel">run the signal down the range</span></p>
-        <p class="w-proof microlabel">Desert Data Labs wires the same chain into your systems: when one lights, the next answers within the minute. Nobody rides all night to find out.</p>
+        <p class="w-proof microlabel">Nobody rides all night to find out.</p>
         <a class="w-return" data-return href="#worlds-index">&#9666; Return to orbit</a>
       </div>
     </section>
@@ -1998,6 +2211,9 @@ html.js.approached .hub-hint { animation: none; }
         <span class="survey-count">0/0</span>
       </span>
     </div>
+    <!-- the survey's voice for AT: progress + the completion rite are spoken
+         here (the visual log is role=img and the hint is decorative) -->
+    <span id="survey-live" class="sr-only" aria-live="polite"></span>
   </footer>
 
   <div class="porthole" aria-hidden="true"></div>
@@ -2042,11 +2258,16 @@ rmq.addEventListener('change', setRM);
 const reduced = () => rmq.matches;
 
 /* storage is a nice-to-have, never a boot dependency (Smaug kill 6):
-   blocked cookies / sandboxed iframes throw on the GETTER */
-const store = {
-  get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
-  set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
-};
+   blocked cookies / sandboxed iframes throw on the GETTER.
+   `store` = sessionStorage (the approach cinematic: once per tab).
+   `keep`  = localStorage (the survey meta-game must outlive the tab, or
+   it isn't a pull-back loop — council ruling 6). */
+const mkStore = (backing) => ({
+  get(k) { try { return backing.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { backing.setItem(k, v); } catch (_) {} },
+});
+const store = mkStore(sessionStorage);
+const keep  = mkStore(localStorage);
 
 const finePointer = matchMedia('(pointer: fine)').matches;
 
@@ -2054,7 +2275,12 @@ const finePointer = matchMedia('(pointer: fine)').matches;
 const Ticker = (() => {
   const tasks = new Set();
   let rafId = null, last = 0, clock = 0, running = false;
+  let budget = 0, lastRun = -1e9;          /* frame budget (M2): 0 = every vsync */
   function frame(now) {
+    /* budgeted skip: a 120Hz phone must not pay double for a 10Hz twinkle —
+       keep the rAF alive, run the tasks no oftener than the budget allows */
+    if (budget && now - lastRun < budget) { rafId = requestAnimationFrame(frame); return; }
+    lastRun = now;
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
@@ -2067,43 +2293,69 @@ const Ticker = (() => {
     add(t) { tasks.add(t); if (!running) { running = true; last = performance.now(); rafId = requestAnimationFrame(frame); } },
     remove(t) { tasks.delete(t); },
     get clock() { return clock; },
+    setBudget(ms) { budget = ms || 0; },
   };
 })();
 
-/* ---------- world registry (data; FX bodies live in 06) ---------- */
+/* ---------- world registry (data; FX bodies live in 06) ----------
+   `poem`: the world's one-line voice — the single source. The Grand Tour
+   narrates it, and bootOrrery re-syncs the orbit em-lines from it (the
+   HTML carries the same text for the no-JS brochure; app mode trusts the
+   registry). `a`: the accent that tints the hub + rim glow — the v6
+   cluster is de-collided (storm → violet, beacons → ember) so the eleven
+   pass the one-second read (hue audit, M3). */
 const WORLDS = [
-  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045 },
-  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06 },
-  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055 },
-  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052 },
-  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065 },
-  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038 },
-  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07 },
-  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042 },
-  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058 },
-  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [127, 179, 255], speed: 0.048 },
-  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 165, 58],  speed: 0.05 },
+  { slug: 'dust-sea',  label: 'Dust Sea',   size: 58, tell: 'heat',    a: [255, 178, 94],  speed: 0.045, poem: 'the sand remembers a rhythm' },
+  { slug: 'velocity',  label: 'Velocity',   size: 62, tell: 'pulse',   a: [255, 46, 151],  speed: 0.06,  poem: 'the city never blinks' },
+  { slug: 'grid',      label: 'The Grid',   size: 50, tell: 'rain',    a: [52, 255, 136],  speed: 0.055, poem: 'the rain is code' },
+  { slug: 'abyssal',   label: 'Abyssal',    size: 54, tell: 'breathe', a: [53, 240, 200],  speed: 0.052, poem: 'the lights are alive down here' },
+  { slug: 'arcadia',   label: 'Arcadia',    size: 48, tell: 'pixel',   a: [255, 210, 63],  speed: 0.065, poem: 'insert coin' },
+  { slug: 'aurora',    label: 'Aurora',     size: 58, tell: 'glint',   a: [168, 233, 255], speed: 0.038, poem: 'the sky rehearses its colors' },
+  { slug: 'uncharted', label: 'Uncharted',  size: 44, tell: 'dashed',  a: [100, 213, 245], speed: 0.07,  poem: 'yours is still unnamed' },
+  { slug: 'archive',   label: 'The Archive', size: 52, tell: 'pulse',   a: [236, 194, 122], speed: 0.042, poem: 'it has already read tomorrow' },
+  { slug: 'drillyard', label: 'The Drillyard', size: 52, tell: 'pulse', a: [127, 178, 229], speed: 0.058, poem: 'down is a direction you choose' },
+  { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [178, 158, 255], speed: 0.048, poem: 'the light runs ahead of the weather' },
+  { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 122, 60],  speed: 0.05,  poem: 'one fire lights the next' },
 ];
 const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
+WORLDS.forEach(w => { w.tellStroke = `rgb(${w.a[0]},${w.a[1]},${w.a[2]})`; });  /* baked draw color */
 
 /* ---------- the sky canvas ---------- */
 const sky = document.getElementById('sky');
 const ctx = sky.getContext('2d');
 let W = 0, H = 0, DPR = 1;
-function sizeSky() {
+function sizeSkyCanvas() {
   DPR = Math.min(devicePixelRatio || 1, 2);           /* the phone-cook cap */
   W = innerWidth; H = innerHeight;
   sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+function sizeSky() {
+  sizeSkyCanvas();
   buildStars();
   measureOrbit();
   drawStatic();                                        /* rm / idle repaint */
 }
-let resizeT = null;
+let resizeT = null, settledH = 0;                      /* height baseline: set by FULL passes only */
 addEventListener('resize', () => {
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
+    /* a phone URL bar collapsing is not a rotation: a small height-only
+       delta refreshes the surface but must NOT re-roll the starfield or
+       restart the world mid-scroll (M2 — the dunes kept re-rolling).
+       Measured against the last SETTLED height (not the previous debounce
+       step) so a slow continuous drag cannot creep past the guard, and
+       phone-only: desktop window resizes always take the full path. */
+    const heightOnly = !desktop() && innerWidth === W && Math.abs(innerHeight - settledH) < 160;
+    if (heightOnly) {
+      sizeSkyCanvas();
+      measureOrbit();
+      drawStatic();
+      return;
+    }
     sizeSky();
+    settledH = H;
+    if (!desktop()) bakeMinis();                       /* breakpoint may have flipped */
     /* a rotated phone inside a world gets a fresh FX surface (Smaug kill 8) */
     if (Scenes.current && Scenes.current !== 'hub' && window.WorldFX) WorldFX.start(Scenes.current);
   }, 120);
@@ -2130,7 +2382,10 @@ function bakeNebula() {
     g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
     return c;
   };
-  nebA = mk('53,240,200'); nebB = mk('143,123,255');
+  /* sea-glass + dim brass, not teal + violet: the canvas backdrop keeps the
+     Deep Deco fiction (lamplight through water) instead of snapping to
+     default-space-demo the instant JS boots (M3) */
+  nebA = mk('80,180,160'); nebB = mk('201,163,92');
 }
 function buildStars() {
   /* a sky worth the name: ~3x the old density, a diagonal galactic band
@@ -2158,8 +2413,11 @@ function buildStars() {
       r: giant ? 1.7 + rnd() * 0.9 : 0.5 + rnd() * (depth === 2 ? 1.4 : 0.9),
       tw: rnd() * Math.PI * 2,                         /* twinkle phase */
       k: giant ? 1 : 0,
+      /* the deco population: mostly warm cream, a fifth brass, a quarter
+         pale sea-glass — the retint that makes the fiction survive boot (M3).
+         Giants keep the amber/blue pairing so the sky still has cold accents. */
       hue: giant ? (rnd() < 0.5 ? 'rgba(255,217,160,' : 'rgba(168,200,255,')
-         : rnd() < 0.12 ? 'rgba(168,233,255,' : rnd() < 0.2 ? 'rgba(207,216,255,' : 'rgba(233,238,249,',
+         : rnd() < 0.20 ? 'rgba(201,163,92,' : rnd() < 0.45 ? 'rgba(190,220,225,' : 'rgba(239,228,200,',
     });
   }
   /* the nebulae sit on the band spine, one each side of center */
@@ -2183,9 +2441,45 @@ const anchors = new Map();
 document.querySelectorAll('.planet-anchor').forEach(a => anchors.set(a.dataset.world, a));
 const desktop = () => innerWidth > 700;
 
-/* the Artifact holds the center; the seven worlds truly ORBIT it on a
+/* the Artifact holds the center; the eleven worlds truly ORBIT it on a
    flattened ellipse, passing behind and in front (z-sorted in drawSky) */
 const ART = { cx: 0, cy: 0, r: 120, rx: 300, ry: 90 };
+/* the engraved dial — main rail, inner rail, sixty graduations — is static
+   between resizes, so it bakes ONCE into an offscreen sprite (the nebula
+   idiom) and costs the frame a single drawImage instead of ~62 path
+   segments and three stroke passes at 120fps */
+const RING_TICKS = 60;
+let dialSpr = null, dialW = 0, dialH = 0;
+function bakeDial() {
+  const pad = 8;
+  dialW = Math.ceil(ART.rx * 1.03 * 2) + pad * 2;
+  dialH = Math.ceil(ART.ry * 1.03 * 2) + pad * 2;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  dialSpr = document.createElement('canvas');
+  dialSpr.width = Math.round(dialW * dpr); dialSpr.height = Math.round(dialH * dpr);
+  const g = dialSpr.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = dialW / 2, cy = dialH / 2;
+  g.strokeStyle = 'rgba(201,163,92,0.14)';
+  g.lineWidth = 1;
+  g.beginPath(); g.ellipse(cx, cy, ART.rx, ART.ry, 0, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(201,163,92,0.06)';
+  g.beginPath(); g.ellipse(cx, cy, ART.rx * 0.93, ART.ry * 0.93, 0, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(201,163,92,0.13)';
+  g.beginPath();
+  for (let i = 0; i < RING_TICKS; i++) {
+    const th = (i / RING_TICKS) * Math.PI * 2;
+    const c = Math.cos(th), s = Math.sin(th);
+    const long = i % 5 === 0;                           /* every 30° a longer graduation */
+    const i0 = long ? 0.965 : 0.982, i1 = long ? 1.028 : 1.014;
+    g.moveTo(cx + c * ART.rx * i0, cy + s * ART.ry * i0);
+    g.lineTo(cx + c * ART.rx * i1, cy + s * ART.ry * i1);
+  }
+  g.stroke();
+}
+/* hoisted draw-loop constants: no arrays or strings minted per frame */
+const DASH_ARC = [3, 5], DASH_TELL = [5, 7], DASH_NONE = [];
+const BRASS_STROKE = 'rgba(201,163,92,1)';
 function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
   const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
@@ -2196,11 +2490,28 @@ function measureOrbit() {
     ART.r  = Math.min(room * 0.40, W * 0.165, 250);    /* huge, but never crowding the copy */
     ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
     ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
+    bakeDial();                                         /* re-engrave the dial sprite (M3) */
   } else {
-    /* phone: the Artifact is a presence low in the deep, under the chart column */
-    ART.cx = W / 2;
-    ART.cy = H * 0.72;
-    ART.r  = Math.min(W * 0.34, 150);
+    /* the pocket orrery (M2): the Artifact seats IN the .hub-stage spacer
+       and belongs to the scroll flow — its live rect places the sphere, so
+       scrolling the world list carries the Artifact away with the stage
+       instead of leaving a gold ghost fixed under the rows. The hub scene's
+       scroll listener re-runs this measure. */
+    const stage = document.querySelector('.hub-stage');
+    const sr = stage && html.classList.contains('js') ? stage.getBoundingClientRect() : null;
+    if (sr && sr.height > 0) {
+      ART.fb = false;
+      ART.cx = W / 2;
+      ART.cy = sr.top + sr.height * 0.52;
+      ART.r  = Math.min(W * 0.36, sr.height * 0.42, 150);
+    } else {
+      /* no stage laid out (boot edge / viewport disagreement): the old
+         deep-presence fallback — drawn DIM, since it sits under the rows */
+      ART.fb = true;
+      ART.cx = W / 2;
+      ART.cy = H * 0.72;
+      ART.r  = Math.min(W * 0.34, 150);
+    }
     ART.rx = 0; ART.ry = 0;
   }
   placeArtifactDom();
@@ -2263,12 +2574,8 @@ function drawSky(dt, clockMs) {
 
   /* hub decoration only while the hub is on stage */
   if (Scenes.current === 'hub' && desktop()) {
-    /* the orbit ring the worlds ride — faint brass, an instrument's engraving */
-    ctx.strokeStyle = 'rgba(201,163,92,0.10)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, 0, 7);
-    ctx.stroke();
+    /* THE DIAL, ENGRAVED (M3): baked once per resize, blitted once per frame */
+    if (dialSpr) ctx.drawImage(dialSpr, ART.cx - dialW / 2, ART.cy - dialH / 2, dialW, dialH);
 
     /* z-sort: far worlds first, then the Artifact, then near worlds */
     const ps = WORLDS.map((w, i) => ({ w, p: planetPos(i, clockMs) }));
@@ -2289,20 +2596,67 @@ function drawSky(dt, clockMs) {
            Artifact must not own the clicks on the sphere's face (its anchor
            drops below artifact-hit's z15; near worlds ride above it) */
         a.style.zIndex = p.depth > 0 ? 22 : 14;
+        /* label side from LIVE geometry, not DOM parity (M3): far-side worlds
+           wear their nameplate above, near-side below — the orbital periods
+           scramble adjacency, so a fixed odd/even split guaranteed collisions */
+        a.classList.toggle('pl-above', p.depth < 0);
       }
       const hov = hovered === w.slug;
-      ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
-      /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.74 * p.sc * (hov ? 1.18 : 1), clockMs, { hover: hov, rm: reduced() });
+      const dx0 = p.x - ART.cx, dy0 = p.y - ART.cy, hyp = Math.hypot(dx0, dy0) || 1;
+      const th = Math.atan2(dy0 / ART.ry, dx0 / ART.rx);
+      /* the armature: a faint radius from the Artifact's limb out to the
+         world's bearing, brighter on the near side and igniting on hover —
+         the brass spokes an orrery is supposed to have (M3). Constant brass
+         + globalAlpha: the draw loop mints no strings (house rule). Skipped
+         while the world crosses the sphere's face/back (hyp ≤ limb: the
+         'radius' would otherwise overshoot outward past the planet). */
+      ctx.strokeStyle = BRASS_STROKE;
+      if (hyp > ART.r + 8) {
+        ctx.globalAlpha = (hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim);
+        ctx.lineWidth = hov ? 1.2 : 1;
+        ctx.beginPath();
+        ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      /* the survey, given a face on the dial: the ~11° of ring each world
+         owns fills SOLID brass once surveyed, and stays a dim dashed gap
+         until then — the ring visibly gilds itself as you complete the tour */
+      const span = (Math.PI * 2 / WORLDS.length) * 0.46;
+      if (surveyed.has(w.slug)) {
+        ctx.globalAlpha = 0.42 * (0.45 + 0.55 * dim);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
+      } else {
+        ctx.globalAlpha = 0.24 * (0.45 + 0.55 * dim);
+        ctx.lineWidth = 1.4; ctx.setLineDash(DASH_ARC);
+        ctx.lineDashOffset = reduced() ? 0 : -t * 6;
+        ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, th - span, th + span); ctx.stroke();
+        ctx.setLineDash(DASH_NONE);
+      }
       ctx.globalAlpha = 1;
+      /* staged bake (M2): a world still in the oven draws nothing; a fresh
+         one materializes — grows in over half a second as the orrery wakes */
+      const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
+      if (mat > 0) {
+        ctx.globalAlpha = (hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2) * mat;
+        /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
+        PlanetForge.draw(ctx, w.slug, p.x, p.y,
+          w.size * 0.74 * p.sc * (hov ? 1.18 : 1) * (0.72 + 0.28 * mat),
+          clockMs, { hover: hov, rm: reduced() });
+        ctx.globalAlpha = 1;
+      }
 
-      if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${0.55 * (0.5 + 0.5 * dim)})`;
-        ctx.setLineDash([5, 7]);
+      if (w.tell === 'dashed' && mat > 0) {            /* the unknown keeps its survey ring —
+                                                          but not before the world itself exists */
+        ctx.strokeStyle = w.tellStroke;                /* baked once below: zero per-frame strings */
+        ctx.globalAlpha = 0.55 * (0.5 + 0.5 * dim) * mat;
+        ctx.setLineDash(DASH_TELL);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(p.x, p.y, w.size * 0.95 * p.sc, 0, 7); ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.setLineDash(DASH_NONE);
+        ctx.globalAlpha = 1;
       }
     };
     for (const e of ps) if (e.p.depth <= 0) drawWorld(e);
@@ -2312,11 +2666,18 @@ function drawSky(dt, clockMs) {
       SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
     }
     for (const e of ps) if (e.p.depth > 0) drawWorld(e);
-  } else if (Scenes.current === 'hub' && window.SphereForge) {
-    /* phone: the Artifact holds the deep beneath the chart column, dim and vast */
-    ctx.globalAlpha = 0.5;
-    SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
-    ctx.globalAlpha = 1;
+  } else if (Scenes.current === 'hub' && window.SphereForge && ART.cy > -ART.r * 1.6) {
+    /* the pocket orrery (M2): full presence — seated, shadowed, answerable,
+       and gone with its stage once the list scrolls past it. The stageless
+       fallback keeps v6's dim ambient presence under the rows instead. */
+    if (ART.fb) {
+      ctx.globalAlpha = 0.5;
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      ctx.globalAlpha = 1;
+    } else {
+      SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+    }
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
@@ -2326,6 +2687,15 @@ function drawSky(dt, clockMs) {
 }
 
 function drawStatic() { drawSky(16, Ticker.clock); }
+
+/* event-driven repaints coalesce to one per frame: the rm hover/touch paths
+   ask for a repaint instead of painting inline, so sweeping the whole ring
+   (11 enters + 11 leaves) costs one drawSky pass, not twenty-two */
+let staticReq = 0;
+function requestStatic() {
+  if (staticReq) return;
+  staticReq = requestAnimationFrame(() => { staticReq = 0; drawStatic(); });
+}
 
 /* ---------- ambient: the idle loop + random-cadence comets (pooled, §2.10)
    A 3-slot pool: the usual lone wanderer, and one visit in three a
@@ -2394,17 +2764,32 @@ function stopSonar() { clearTimeout(sonarTimer); sonarTimer = null; }
 const artHit = document.getElementById('artifact-hit');
 const artLabel = document.getElementById('artifact-label');
 function placeArtifactDom() {
+  /* phone: the disc/plate are position:absolute INSIDE the scrolling hub
+     scene (03b) — write content-space coords (viewport + scrollTop) once
+     and the browser scrolls them natively with the stage */
+  const hubEl = Scenes.els.get('hub');
+  const sTop = !desktop() && hubEl ? hubEl.scrollTop : 0;
   if (artHit) {
     artHit.style.setProperty('--ax', ART.cx + 'px');
-    artHit.style.setProperty('--ay', ART.cy + 'px');
+    artHit.style.setProperty('--ay', (ART.cy + sTop) + 'px');
     artHit.style.setProperty('--ar', Math.round(ART.r * 2) + 'px');
   }
   if (artLabel) {
     artLabel.style.setProperty('--ax', ART.cx + 'px');
-    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
+    /* phone: the plate tucks close under the limb so it stays inside the
+       stage instead of colliding with the first world row */
+    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + (desktop() ? 30 : 10) + sTop) + 'px');
   }
 }
-let artLast = 0, artTouches = 0;
+let artLast = 0, artTouches = 0, artRmT = null, artLabelLock = false;
+/* the plate whispers for `ms`, then returns to whatever the survey arc has
+   made the resting line (dataset.home is kept current by paint()) */
+function whisperArtLabel(text, ms) {
+  if (!artLabel || artLabelLock) return;
+  artLabel.textContent = text;
+  clearTimeout(artRmT);
+  artRmT = setTimeout(() => { if (!artLabelLock) artLabel.textContent = artLabel.dataset.home || text; }, ms);
+}
 function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
@@ -2413,9 +2798,19 @@ function touchArtifact() {
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
     /* provoke it enough and, for a moment, the plates part: you see what
-       is underneath (every third touch; the ripple masks the swap) */
-    if (artTouches % 3 === 0 && SphereForge.reveal) SphereForge.reveal(2600);
+       is underneath (every third touch; the ripple masks the swap) — and
+       the plate finally says a word about it (M3) */
+    if (artTouches % 3 === 0 && SphereForge.reveal) {
+      SphereForge.reveal(2600);
+      whisperArtLabel('Object 0 · that is not a shell', 2600);
+    }
     if (!skyTask) Orrery.startAmbient();
+  } else if (reduced()) {
+    /* rm: the answer is designed, not stripped — a repaint (any pending skin
+       swap lands on it) and the plate acknowledges in text for a beat.
+       No reveal here: with the clock held, the glimpse could never end. */
+    requestStatic();
+    whisperArtLabel('Object 0 · it heard you', 2000);
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));
 }
@@ -2425,7 +2820,7 @@ if (artHit) artHit.addEventListener('click', touchArtifact);
 let skyTask = null;
 const Orrery = {
   startAmbient() {
-    if (skyTask || reduced()) { drawStatic(); return; }
+    if (skyTask || reduced()) { requestStatic(); return; }
     skyTask = (dt, c) => { drawSky(dt, c); return true; };
     Ticker.add(skyTask);
     scheduleComet();
@@ -2438,6 +2833,7 @@ const Orrery = {
   events: new EventTarget(),
   ticker: Ticker,
   reduced,
+  requestStatic,                     /* SphereForge repaints late-landing rm skins through this */
   worlds: WORLDS,
 };
 window.Orrery = Orrery;
@@ -2451,12 +2847,14 @@ anchors.forEach((a, slug) => {
     html.style.setProperty('--acc-rgb', w.a.join(','));
     /* the Artifact considers the world with you: it wears that world's face */
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug);
-    if (!skyTask && !reduced()) Orrery.startAmbient();   /* the morph needs frames */
+    if (!skyTask) Orrery.startAmbient();       /* the morph needs frames; under rm this
+                                                  IS the one designed repaint (drawStatic) */
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
   const untint = () => {
     if (hovered === slug) hovered = null;
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
+    if (reduced()) requestStatic();            /* rm: return the resting face too */
   };
   a.addEventListener('pointerenter', tint);
   a.addEventListener('focus', tint);
@@ -2474,11 +2872,13 @@ document.querySelectorAll('.scene').forEach(s => Scenes.els.set(s.dataset.scene,
 const locName = document.getElementById('hud-loc-name');
 const returnBtn = document.getElementById('return-orbit');
 
+/* the surveyed set lives in localStorage now: a survey that evaporates when
+   the tab closes was never a pull-back loop (M3, council ruling 6) */
 let surveyed = new Set();
-try { surveyed = new Set(JSON.parse(store.get('orrery-surveyed') || '[]')); } catch (_) {}
+try { surveyed = new Set(JSON.parse(keep.get('orrery-surveyed') || '[]')); } catch (_) {}
 function markSurveyed(slug) {
   surveyed.add(slug);
-  store.set('orrery-surveyed', JSON.stringify([...surveyed]));
+  keep.set('orrery-surveyed', JSON.stringify([...surveyed]));
   const a = anchors.get(slug);
   if (a) a.querySelector('.pa-tick').hidden = false;
 }
@@ -2494,8 +2894,11 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
   const dotsWrap = plate.querySelector('.survey-dots');
   const countEl  = plate.querySelector('.survey-count');
   const total = WORLDS.length;
-  const COMPLETE_KEY = 'orrery-survey-complete';
+  const COMPLETE_KEY = 'orrery-survey-complete';        /* localStorage: the rite fires once ever */
   const HONOR = 'Master surveyor. The orrery remembers.';
+  /* the survey's aria-live voice: progress and the rite, spoken politely */
+  const liveEl = document.getElementById('survey-live');
+  const announce = (t) => { if (liveEl) liveEl.textContent = t; };
 
   /* one ringed dot per world, in registry order, built once */
   const dots = WORLDS.map((w) => {
@@ -2519,29 +2922,73 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     sealed = true;
   }
 
+  let lastN = countSurveyed();                          /* boot pose: never announced */
   function paint() {
     const n = countSurveyed();
+    if (n !== lastN) {
+      lastN = n;
+      if (n < total) announce(n + ' of ' + total + ' worlds surveyed.');
+    }
     for (const d of dots) d.classList.toggle('is-surveyed', surveyed.has(d.dataset.world));
     if (countEl) countEl.textContent = n + '/' + total;
     const done = n >= total;
     plate.setAttribute('aria-label',
       done ? ('All ' + total + ' worlds surveyed. Master surveyor.')
            : (n + ' of ' + total + ' worlds surveyed'));
-    if (done && store.get(COMPLETE_KEY) === '1') showSeal();   /* already earned this tab */
+    /* the location strip carries the count on every homecoming, so the
+       survey stops being invisible: 'Orbit · 4 of 11 surveyed' (M3) */
+    if (Scenes.current === 'hub' && locName) {
+      locName.textContent = done ? 'Orbit · survey complete'
+        : n > 0 ? ('Orbit · ' + n + ' of ' + total + ' surveyed')
+        : 'Orbit · choose a world';
+    }
+    /* the Artifact's plate narrates the rising mystery too: once you've
+       started, it admits something is down there; complete, it knows you */
+    if (artLabel && !artLabelLock) {
+      const resting = done ? 'Object 0 · it knows you now'
+        : n >= 4 ? 'Object 0 · something moved beneath'
+        : 'Object 0 · unsurveyed';
+      artLabel.textContent = resting;
+      artLabel.dataset.home = resting;                  /* the restore target follows the arc */
+    }
+    if (done && keep.get(COMPLETE_KEY) === '1') showSeal();   /* already earned */
   }
 
+  let riteDone = false;                                /* in-memory once-guard: blocked storage
+                                                          must not re-fire the rite per scene */
   function maybeCompletionRite() {
     if (countSurveyed() < total) return;
-    if (store.get(COMPLETE_KEY) === '1') { showSeal(); return; }  /* once per session */
-    store.set(COMPLETE_KEY, '1');
+    if (riteDone || keep.get(COMPLETE_KEY) === '1') { riteDone = true; showSeal(); return; }
+    /* completion is always REACHED inside the 11th world — but the rite's
+       stage (the ring, the sphere) is the hub. Hold fire until homecoming:
+       the 'scene' listener re-runs this the moment they return to orbit,
+       and the orrery answers where the visitor can actually see it. */
+    if (Scenes.current !== 'hub') return;
+    riteDone = true;
+    keep.set(COMPLETE_KEY, '1');
     showSeal();
-    try { Orrery.events.dispatchEvent(new CustomEvent('query')); } catch (_) {}  /* aurora chime answers */
-    const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
-    if (hint) {
-      const prior = hint.dataset.home || hint.textContent;       /* restore the TRUE resting line */
-      hint.textContent = HONOR;
-      setTimeout(() => { if (hint.textContent === HONOR) hint.textContent = prior; }, 10000);
+    /* THE RITE — the Artifact answers the completed survey at last:
+       the plates part FULLY (longer than the touch glimpse), the wrong
+       answering tone comes true and rises, and the whole ring pulses gold. */
+    if (artLabel) {
+      artLabelLock = true;
+      artLabel.textContent = 'Object 0 · survey accepted';
     }
+    if (artHit) artHit.setAttribute('aria-label', 'Object 0. Survey accepted. It knows you now.');
+    announce('All eleven worlds surveyed. ' + HONOR);   /* AT shares the moment */
+    if (window.SphereForge && SphereForge.reveal && !reduced()) SphereForge.reveal(5200);
+    document.querySelectorAll('.planet-anchor').forEach(a => {
+      a.classList.remove('pa-rite'); void a.offsetWidth; a.classList.add('pa-rite');
+      setTimeout(() => a.classList.remove('pa-rite'), 2600);
+    });
+    try { Orrery.events.dispatchEvent(new CustomEvent('mastery')); } catch (_) {}
+    const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
+    if (hint) hint.textContent = HONOR;
+    setTimeout(() => {                                 /* the release must NOT depend on the hint */
+      if (hint && hint.textContent === HONOR) hint.textContent = hint.dataset.home || HONOR;
+      artLabelLock = false;
+      paint();                                         /* settle to the resting arc line */
+    }, 10000);
   }
 
   /* live: setScene runs markSurveyed, THEN dispatches 'scene' — by the time we
@@ -2570,6 +3017,9 @@ function setScene(name, { instant = false } = {}) {
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
+    /* homecoming resets the Artifact's face: the departure beat set a skin
+       and a tap never blurs on iOS, so untint alone cannot be trusted */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
     Orrery.startAmbient();
     scheduleSonar();                                   /* home again: the call resumes */
     WorldFX.stopAll();
@@ -2587,9 +3037,11 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
-    /* refresh this card's medallion so the little world advanced since last visit */
+    /* refresh this card's medallion so the little world advanced since last
+       visit (skip while it bakes: wiping the canvas before a no-op drawMini
+       would blank it — onReady paints it the moment it lands) */
     const med = next.querySelector('.card-planet');
-    if (med && window.PlanetForge) {
+    if (med && window.PlanetForge && (!PlanetForge.progress || PlanetForge.progress(name) > 0)) {
       const g2 = med.getContext('2d');
       const dpr2 = Math.min(devicePixelRatio || 1, 2);
       med.width = 72 * dpr2; med.height = 72 * dpr2;
@@ -2608,21 +3060,52 @@ function setScene(name, { instant = false } = {}) {
    animationend is the fast path; a deterministic timer is the guarantee it
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
+let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
 
-function travel(slug) {
+function travel(slug, fromBeat) {
   if (Scenes.transitioning || Scenes.current === slug) return;
   const w = bySlug[slug];
   if (!w) return;
 
   if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
 
+  /* the phone departure beat (M2): the orrery acknowledges the choice —
+     the sphere considers the world and a sonar ring answers — THEN the
+     warp fires. 300ms of anticipation instead of an unceremonious cut. */
+  if (!fromBeat && !desktop() && window.SphereForge && Scenes.current === 'hub'
+      && ART.cy > 0                                    /* only while the sphere is on stage */
+      && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
+    beatSlug = slug;                                   /* a second tap RE-AIMS the pending beat */
+    SphereForge.setSkin(slug);
+    SphereForge.ping();
+    if (!skyTask) Orrery.startAmbient();
+    clearTimeout(beatTimer);
+    beatTimer = setTimeout(() => {
+      beatTimer = null;
+      const s = beatSlug; beatSlug = null;
+      travel(s, true);
+    }, 300);
+    return;
+  }
+
   Scenes.transitioning = true;
-  /* aim the flood at the planet's live position */
-  const i = WORLDS.indexOf(w);
-  const p = desktop() ? planetPos(i, Ticker.clock) : { x: W / 2, y: H / 2 };
+  /* aim the flood at the planet's live position — on the phone, at the
+     tapped row itself, so the warp blooms from under the finger (M2);
+     clamped into the viewport for rows below the fold (the tour taps
+     rows the reset scroll has not revealed) */
+  let p;
+  if (desktop()) {
+    p = planetPos(WORLDS.indexOf(w), Ticker.clock);
+  } else {
+    const a = anchors.get(slug);
+    const r = a && a.getBoundingClientRect();
+    p = r && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: W / 2, y: H / 2 };
+    p.x = Math.max(0, Math.min(W, p.x));
+    p.y = Math.max(0, Math.min(H, p.y));
+  }
   html.style.setProperty('--wx', (p.x / W * 100).toFixed(1) + '%');
   html.style.setProperty('--wy', (p.y / H * 100).toFixed(1) + '%');
   html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
@@ -2670,8 +3153,10 @@ function route(instant = false) {
   setScene(slug || 'hub', { instant });
 }
 addEventListener('hashchange', () => {
-  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4) */
+  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4)
+     — and a pending departure beat dies with it (M2) */
   if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
+  if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; beatSlug = null; }
   route(false);
 });
 
@@ -2713,7 +3198,23 @@ const TourController = (() => {
                                                            null = between legs, accept any land */
   const onHash = () => { if (running && expectedHash !== null && (location.hash || '#/') !== expectedHash) stop(); };
 
-  const onInput = () => { if (running) stop(); };       /* ANY input ends the tour immediately */
+  /* input ends the tour — EXCEPT the cockpit (M3): the tour's own control and
+     the score toggle are part of driving the demo, not leaving it; and the
+     arrow keys STEER the tour (→ next world, ← previous) instead of killing
+     it. Everything else is a cancel, as before. */
+  const onInput = (e) => {
+    if (!running) return;
+    if (e && e.type === 'keydown') {
+      /* arrows only: Space can't be claimed from a passive listener (its
+         default scroll still fires, and its keyup re-activates a focused
+         tour button — a cancel disguised as a steer) */
+      if (e.key === 'ArrowRight') { stepWorld(1); return; }
+      if (e.key === 'ArrowLeft') { stepWorld(-1); return; }
+    }
+    const t = e && e.target;
+    if (t && t.closest && t.closest('#tour-toggle, #audio-toggle')) return;   /* cockpit: no cancel */
+    stop();
+  };
   function addCancel() { for (const e of CANCEL) addEventListener(e, onInput, OPTS); }
   function rmCancel()  { for (const e of CANCEL) removeEventListener(e, onInput, OPTS); }
 
@@ -2742,11 +3243,21 @@ const TourController = (() => {
     const leg = legs[ix];
     if (!leg || leg.t === 'closing') { finish(); return; }
     if (leg.t === 'world') {
-      expectedHash = '#/world/' + WORLDS[leg.i].slug;
-      plateSay('Stop ' + (leg.i + 1) + ' of ' + N);
-      travel(WORLDS[leg.i].slug);
+      const w = WORLDS[leg.i];
+      expectedHash = '#/world/' + w.slug;
+      /* the tour speaks the world's own poem now, not 'Stop 3 of 11' (M3) —
+         WORLDS.poem is the single source the orbit em-lines also draw from */
+      plateSay('Stop ' + (leg.i + 1) + ' of ' + N + ' · ' + w.label + ' — ' + w.poem);
+      travel(w.slug);
     }
     else { expectedHash = '#/'; location.hash = '#/'; } /* orbit breather: home via the router */
+  }
+  /* arrow-key steering: jump to the next/previous WORLD leg (skip breathers) */
+  function stepWorld(dir) {
+    let j = legIx;
+    do { j += dir; } while (j > 0 && j < legs.length - 1 && legs[j].t !== 'world');
+    j = Math.max(0, Math.min(legs.length - 1, j));
+    if (legs[j] && legs[j].t === 'world') enterLeg(j);
   }
 
   function tick(dt) {
@@ -2804,16 +3315,42 @@ const TourController = (() => {
     start();
   });
 
-  return { start, stop, advance, get running() { return running; } };
+  /* the discovery nudge (M3): one beckon pulse of the footer control after a
+     stretch of untouched hub, so the best demo feature is actually found.
+     Fires at most once per visit; any real interaction cancels the arming. */
+  let beckoned = false;
+  function beckon() {
+    if (beckoned || running || Scenes.current !== 'hub') return;
+    beckoned = true;
+    btn.classList.add('tour-beckon');
+    setTimeout(() => btn.classList.remove('tour-beckon'), 3200);
+  }
+
+  return { start, stop, advance, beckon, get running() { return running; } };
 })();
 
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
    ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
+/* frame budget steering (M2): phones cap at ~30fps always; desktop demotes
+   after a minute of untouched hub (any input restores full rate next tick) */
+let lastInput = performance.now();
+['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(tp =>
+  addEventListener(tp, () => { lastInput = performance.now(); }, { passive: true, capture: true }));
 function tickClock() {
   if (!document.hidden) {
     clockEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+  /* ~22s of untouched hub → beckon the Tour once (the feature most likely to
+     run in front of a client, findable by nobody in a 0.72rem footer) */
+  if (TourController && Scenes.current === 'hub' && performance.now() - lastInput > 22000) {
+    TourController.beckon();
+  }
+  /* phones run budgeted EXCEPT while the visitor is actively touching or
+     scrolling — the scroll-glued sphere must track the stage at full rate */
+  const busy = performance.now() - lastInput < 1500;
+  const idle = Scenes.current === 'hub' && performance.now() - lastInput > 60000;
+  Ticker.setBudget((!desktop() && !busy) || idle ? 33 : 0);
 }
 setInterval(tickClock, 1000);
 tickClock();
@@ -2822,10 +3359,42 @@ tickClock();
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
-  PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
+  /* staged bake (M2): the sphere owns frame 0; the eleven worlds land one
+     per idle slice and announce themselves everywhere they appear */
+  PlanetForge.init(WORLDS, (slug) => {
+    paintMedallion(slug);
+    paintMini(slug);
+    if (!skyTask) requestStatic();                     /* rm / idle: the newcomer still shows up */
+  });
   if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
+  /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
+     a thumb. TourController's parse-time stash has already claimed the one
+     true resting line (dataset.home), so re-point BOTH — otherwise the tour
+     or the survey honor would restore keyboard wording onto a touch screen */
+  const bootHint = document.querySelector('.hub-hint');
+  if (bootHint && matchMedia('(pointer: coarse)').matches) {
+    bootHint.textContent = 'Tap a world to travel · it holds the center';
+    bootHint.dataset.home = bootHint.textContent;
+  }
+  /* one source of truth for the poems: app mode re-syncs the orbit em-lines
+     from the registry (the HTML copies serve the no-JS brochure only) */
+  anchors.forEach((a, slug) => {
+    const em = a.querySelector('.pa-label em');
+    if (em && bySlug[slug] && bySlug[slug].poem) em.textContent = bySlug[slug].poem;
+  });
   sizeSky();
   setRM();
+  /* the pocket stage scrolls with the hub column: keep the sphere glued to
+     it (one rect read per scroll event; the ambient loop paints the move,
+     and rm gets its coalesced repaint) */
+  const hubEl = Scenes.els.get('hub');
+  if (hubEl) hubEl.addEventListener('scroll', () => {
+    if (desktop()) return;
+    lastInput = performance.now();
+    Ticker.setBudget(0);                               /* full rate NOW; tickClock re-budgets later */
+    measureOrbit();
+    if (!skyTask) requestStatic();
+  }, { passive: true });
   route(true);
   if (!reduced()) Orrery.startAmbient();
   runApproach();                                     /* first-visit arrival cinematic */
@@ -2836,19 +3405,34 @@ function bootOrrery() {
 }
 
 /* the brass card medallions: one small spinning-world portrait per card,
-   painted at boot and refreshed on each arrival (static between visits) */
-function paintMedallions() {
-  document.querySelectorAll('.card-planet').forEach(c => {
-    const sec = c.closest('.scene');
-    if (!sec || !window.PlanetForge) return;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    const size = 72;
-    c.width = size * dpr; c.height = size * dpr;
-    const g = c.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
-  });
+   painted as each world bakes and refreshed on each arrival */
+function paintMedallion(slug) {
+  const sec = Scenes.els.get(slug);
+  if (!sec || !window.PlanetForge) return;
+  const c = sec.querySelector('.card-planet'); if (!c) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const size = 72;
+  c.width = size * dpr; c.height = size * dpr;
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  PlanetForge.drawMini(g, slug, size, Ticker.clock);
 }
+function paintMedallions() { WORLDS.forEach(w => paintMedallion(w.slug)); }
+
+/* the phone list shows the REAL worlds (M2): each row's dot wears a baked
+   PlanetForge portrait — one 68px offscreen bake per world, zero per-frame */
+function paintMini(slug) {
+  if (desktop() || !window.PlanetForge) return;
+  if (PlanetForge.progress && !PlanetForge.progress(slug)) return;   /* still in the oven */
+  const a = anchors.get(slug); if (!a) return;
+  const dot = a.querySelector('.pa-dot'); if (!dot) return;
+  const c = document.createElement('canvas');
+  c.width = c.height = 68;
+  PlanetForge.drawMini(c.getContext('2d'), slug, 68, Ticker.clock);
+  dot.style.backgroundImage = `url(${c.toDataURL()})`;
+  dot.classList.add('pa-mini');
+}
+function bakeMinis() { WORLDS.forEach(w => paintMini(w.slug)); }
 
 /* ---------- THE APPROACH: the once-per-session arrival cinematic ----------
    First hub visit only. You drift in from the dark and the instruments wake.
@@ -2906,7 +3490,9 @@ function runApproach() {
 
 const PlanetForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 512, TEX_H = 256;          /* 2:1 -> drawn width is always 4r */
+  /* 2:1 -> drawn width is always 4r. Halved on phones (M2): no planet there
+     is ever drawn past ~68px, and the bake is per-pixel fBm on the main thread */
+  let TEX_W = 512, TEX_H = 256;
   const RIM_S = 176, RIM_PR = 60;          /* rim sprite canvas / planet radius baked in it */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = r * RIM_DRAW */
   const docEl = document.documentElement;
@@ -3369,11 +3955,49 @@ const PlanetForge = (() => {
 
   /* ---------- API ---------- */
   return {
-    init(worlds) {
+    /* staged bake (M2): the boot used to run ~12M synchronous noise evals at
+       the exact brochure→app flip. Now the shared sprites bake at once and
+       the eleven worlds land one per idle slice — draw() no-ops for a world
+       still in the oven, and progress() lets the sky materialize it. */
+    init(worlds, onReady) {
       if (inited) return;
       inited = true;
+      /* hover:none keeps half-res to true touch devices: a 680px desktop
+         window maximized later must not live with a mushy upscale all
+         session (rotated phones stay sharp — short viewports cap R low) */
+      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 256; TEX_H = 128; }
       buildShared();
-      for (const w of worlds) P[w.slug] = buildWorld(w);
+      const queue = worlds.slice();
+      /* the timeout matters: the ambient rAF loop never leaves true idle
+         time, so an unbounded requestIdleCallback would starve forever */
+      const later = window.requestIdleCallback
+        ? (f) => requestIdleCallback(f, { timeout: 90 })
+        : (f) => setTimeout(f, 16);
+      const bakeNext = () => {
+        const w = queue.shift();
+        if (!w) return;
+        if (!P[w.slug]) {
+          P[w.slug] = buildWorld(w);
+          P[w.slug].born = performance.now();
+          if (onReady) onReady(w.slug);
+        }
+        later(bakeNext);
+      };
+      later(bakeNext);
+    },
+    /* 0 = not baked yet · (0,1] = materializing → settled.
+       Never returns exactly 0 for a BAKED world (coarse timers would read
+       "same-millisecond" as "still in the oven"), and under reduced motion
+       a baked world is simply THERE — no half-materialized ghosts with no
+       animation loop to finish them. */
+    progress(slug) {
+      const p = P[slug];
+      if (!p) return 0;
+      if (!p.born) return 1;
+      if (docEl.classList.contains('rm')) { p.born = 0; return 1; }
+      const k = (performance.now() - p.born) / 500;
+      if (k >= 1) { p.born = 0; return 1; }
+      return Math.max(k, 0.002);
     },
     draw(ctx2, slug, x, y, r, clockMs, opts) {
       if (!inited || r <= 0) return;
@@ -3389,6 +4013,9 @@ const PlanetForge = (() => {
     },
   };
 })();
+/* the engine guards its calls with `window.PlanetForge` (mirrors SphereForge/
+   WorldFX): expose it, or the medallions and phone minis silently no-op */
+window.PlanetForge = PlanetForge;
 
 
 /* ============================================================
@@ -3407,9 +4034,11 @@ const PlanetForge = (() => {
 
 const SphereForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 768, TEX_H = 288;          /* gen size; baked doubled to 1536 —
+  let TEX_W = 768, TEX_H = 288;            /* gen size; baked doubled to 1536 —
                                               near-1:1 texel:pixel at hub R, so the
-                                              hammered grain stays CRISP (metal, not cloud) */
+                                              hammered grain stays CRISP (metal, not cloud).
+                                              Halved on phones (M2): R caps ~150 there and
+                                              the bake is 4 fBm fields per pixel */
   const NS = 24;                           /* fixed slice count */
   const RIM_S = 224, RIM_PR = 80;          /* rim sprite canvas / baked radius */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = R * 2.8 */
@@ -3653,40 +4282,38 @@ const SphereForge = (() => {
   const SKIN_OF = {
     hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine',
     abyssal: 'veins', arcadia: 'arcadia', aurora: 'aurora', uncharted: 'uncharted',
+    /* the v6 worlds borrow the nearest face until their own renders land:
+       the Artifact must never go mute when a world is considered (M1) */
+    archive: 'uncharted', drillyard: 'machine', stormwall: 'veins', beacons: 'molten',
   };
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
   const skins = {};                        /* key -> { img, ready } */
-  const bands = {};                        /* key -> mirror-wrapped equatorial band canvas */
   let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
   let revealReq = 0, revealUntil = -1;
-  const SKIN_SPD = 1 / 92000;              /* the Artifact turns: one revolution ~92s */
 
-  /* a render is a photo OF a sphere; to ROTATE it like a real planet we
-     strip its equatorial band (limb regions dropped: our own limb/gloss
-     lighting stays pinned on top) and mirror-wrap it into a seamless
-     scroll texture. Baked once per skin, on first use. */
-  function bandFor(key) {
+  /* the renders are COMPOSED faces — a dial, a city, a lattice. v6 stripped
+     them into a scrolling equatorial band to fake rotation, and the band
+     shredded every composition into anonymous gold streaks (art-direction
+     kill, M2). The face is now drawn PINNED at SKIN_COVER, sliced with the
+     liquid warp so the metal still lives; rotation retires for skins (the
+     zero-request base gold beneath keeps its flow). */
+  const skinRec = (key) => {
     const rec = skins[key];
-    if (!rec || !rec.ready) return null;
-    let b = bands[key];
-    if (b) return b;
-    const iw = rec.img.naturalWidth || rec.img.width, ih = rec.img.naturalHeight || rec.img.height;
-    const c = cv(2048, 512), g2 = c.getContext('2d');
-    const sx = iw * 0.10, sw = iw * 0.80, sy = ih * 0.14, sh2 = ih * 0.72;
-    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
-    g2.save(); g2.translate(2048, 0); g2.scale(-1, 1);   /* mirror half: seamless wrap */
-    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
-    g2.restore();
-    b = bands[key] = c;
-    return b;
-  }
+    return rec && rec.ready ? rec : null;
+  };
   function loadSkin(k) {
     if (skins[k] || !SKIN_SRC[k]) return;
     const img = new Image();
     const rec = { img, ready: false };
     skins[k] = rec;
-    img.onload = () => { rec.ready = true; };
+    img.onload = () => {
+      rec.ready = true;
+      /* rm has no ambient loop: if a hover is still waiting on this face,
+         ask the engine for its one designed repaint — otherwise the swap
+         is silently lost until some unrelated redraw */
+      if (rm() && wantSkin === k && window.Orrery && window.Orrery.requestStatic) window.Orrery.requestStatic();
+    };
     img.onerror = () => { delete skins[k]; };          /* a 404 must not wedge the want-latch */
     img.src = SKIN_SRC[k];
   }
@@ -3701,6 +4328,10 @@ const SphereForge = (() => {
     init() {
       if (inited) return;
       inited = true;
+      /* true-touch phone: half-res gold — R caps ~150 there, and this bake
+         sits on the critical brochure→app flip (M2 boot-cost pass).
+         hover:none, so a small desktop window never latches the mush. */
+      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 384; TEX_H = 144; }
       const rnd = mulberry(seedOf('artifact'));
       baseTex = buildBase(rnd);
       flowTex = buildFlow(rnd);
@@ -3721,13 +4352,23 @@ const SphereForge = (() => {
       }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
-      /* skins: the hub face loads first (it is the marquee); the rest arrive
-         on a lazy stagger so boot paint never waits on a network byte */
+      /* skins: the hub face loads first (it is the marquee). The rest arrive
+         on a lazy stagger ONLY where hover exists and data isn't precious —
+         a phone was eating every skin it could never hover (M2); there,
+         setSkin lazy-loads the one face a tap actually asks for */
       loadSkin('orrery');
-      let di = 0;
-      for (const k in SKIN_SRC) {
-        if (k === 'orrery') continue;
-        setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+      const eager = matchMedia('(hover: hover)').matches
+        && !(navigator.connection && navigator.connection.saveData);
+      if (eager) {
+        let di = 0;
+        for (const k in SKIN_SRC) {
+          if (k === 'orrery') continue;
+          setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+        }
+      } else {
+        /* even on the lazy path, the reveal's face rides along late: its
+           2.6s window must never burn down waiting on a first fetch */
+        setTimeout(() => loadSkin('biomech'), 4000);
       }
     },
 
@@ -3766,39 +4407,45 @@ const SphereForge = (() => {
       if (nxtSkin) {
         if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
       }
-      const bandCur = bandFor(revealing ? 'biomech' : curSkin);
-      const skinOn = !!bandCur;
+      const recCur = skinRec(revealing ? 'biomech' : curSkin);
+      const skinOn = !!recCur;
 
       g.save();
       g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
 
       if (skinOn) {
-        /* TRUE ROTATION: the skin's equatorial band scrolls under our pinned
-           lighting, sliced with a two-wave liquid warp: the surface turns
-           like a planet AND morphs like something alive under the metal */
-        const sscroll = ((t * SKIN_SPD) % 1) * half;
+        /* THE FACE, PINNED: the render's disc seats over the clip at
+           SKIN_COVER, sliced with the two-wave liquid warp so the metal
+           still breathes — the composition finally survives to the screen */
         const A2 = R * 0.042;              /* morph amplitude, stronger than v5 */
-        const BS = 24, bsh = 512 / BS, bdh = D / BS;
-        const bandNxt = (!revealing && nxtSkin) ? bandFor(nxtSkin) : null;
-        const fp = bandNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
+        const BS = 24;
+        const S = R * SKIN_COVER, sy0 = y - S / 2, sdh = S / BS;
+        const iw = recCur.img.naturalWidth || recCur.img.width;
+        const ih = recCur.img.naturalHeight || recCur.img.height;
+        const ish = ih / BS;
+        const recNxt = (!revealing && nxtSkin) ? skinRec(nxtSkin) : null;
+        const fp = recNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
         for (let i = 0; i < BS; i++) {
           let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
                   + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
-          if (rippling) {                  /* the ripple surges the warp locally */
-            const sd = ((i + 0.5) * bdh) - R - ringR;
+          if (rippling) {                  /* the ripple surges the warp locally
+                                              (abs: BOTH hemispheres answer, like the base gold) */
+            const sd = Math.abs(sy0 + (i + 0.5) * sdh - y) - ringR;
             off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
                  * Math.sin(t * 0.012 + i * 1.3);
           }
-          g.drawImage(bandCur, 0, i * bsh, 2048, bsh,
-            x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
-          if (bandNxt && fp > 0) {
+          g.drawImage(recCur.img, 0, i * ish, iw, ish,
+            x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
+          if (recNxt && fp > 0) {
+            const iw2 = recNxt.img.naturalWidth || recNxt.img.width;
+            const ish2 = (recNxt.img.naturalHeight || recNxt.img.height) / BS;
             g.globalAlpha = fp;
-            g.drawImage(bandNxt, 0, i * bsh, 2048, bsh,
-              x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+            g.drawImage(recNxt.img, 0, i * ish2, iw2, ish2,
+              x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
             g.globalAlpha = 1;
           }
         }
-        /* the liquid sheen rides the turning surface, counter-drifting */
+        /* the liquid sheen keeps drifting over the pinned face: living light */
         g.globalCompositeOperation = 'screen';
         g.globalAlpha = reduced2 ? 0.09 : 0.08 + 0.03 * Math.sin(t * 0.0004);
         g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
@@ -4770,11 +5417,30 @@ const WorldFX = (() => {
   /* ============================================================
      UNCHARTED: the survey drafts where you look
      ============================================================ */
+  /* one painter serves the live frame AND the rm pose (a drifted copy is a
+     differently-styled world nobody notices): litAt(c, r) supplies the charge */
+  function draftPaint(g, cols, rows, litAt) {
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const v = litAt(c, r);
+      if (v <= 0.02) continue;
+      const x = c * 56, y = r * 56;
+      g.strokeStyle = `rgba(100,213,245,${v * 0.5})`;
+      g.lineWidth = 1;
+      g.strokeRect(x + 3, y + 3, 50, 50);
+      if (v > 0.65) {
+        g.strokeStyle = `rgba(100,213,245,${(v - 0.65) * 0.9})`;
+        g.beginPath();
+        g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
+        g.stroke();
+      }
+    }
+  }
   fx.draft = {
     init(s) {
       const cols = Math.ceil(s.w / 56), rows = Math.ceil(s.h / 56);
       const lit = new Float32Array(cols * rows);
       const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
+      st.litAt = (c, r) => st.lit[c + r * st.cols];     /* bound once: zero per-frame alloc */
       const move = (e) => { st.px = e.clientX; st.py = e.clientY; };
       s.c.parentElement.parentElement.addEventListener('pointermove', move, { passive: true });
       st.cleanup = () => s.c.parentElement.parentElement.removeEventListener('pointermove', move);
@@ -4795,20 +5461,23 @@ const WorldFX = (() => {
         }
       }
       s.g.clearRect(0, 0, s.w, s.h);
-      for (let r = 0; r < st.rows; r++) for (let c = 0; c < st.cols; c++) {
-        const v = st.lit[c + r * st.cols];
-        if (v <= 0.02) continue;
-        const x = c * 56, y = r * 56;
-        s.g.strokeStyle = `rgba(100,213,245,${v * 0.5})`;
-        s.g.lineWidth = 1;
-        s.g.strokeRect(x + 3, y + 3, 50, 50);
-        if (v > 0.65) {
-          s.g.strokeStyle = `rgba(100,213,245,${(v - 0.65) * 0.9})`;
-          s.g.beginPath();
-          s.g.arc(x + 28, y + 28, 12 + ((c * 7 + r * 13) % 9), 0.4, 2.6);
-          s.g.stroke();
-        }
-      }
+      draftPaint(s.g, st.cols, st.rows, st.litAt);
+    },
+    rm() {                                     /* designed static pose: a survey abandoned mid-draft —
+                                                  a diagonal swath of charted cells, densest where the
+                                                  pen last worked (archive idiom; was a blank canvas) */
+      const c = document.querySelector('[data-canvas="draft"]');
+      if (!c || !c.parentElement) return;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const cols = Math.ceil(r.width / 56), rows = Math.ceil(r.height / 56);
+      g.clearRect(0, 0, r.width, r.height);
+      draftPaint(g, cols, rows, (ci, ri) => {
+        const u = ci / cols, w2 = ri / rows;
+        return Math.max(0, 1 - Math.abs(u + w2 - 1.1) * 2.4) * (0.35 + ((ci * 7 + ri * 13) % 5) * 0.16);
+      });
     },
   };
 
@@ -5291,6 +5960,9 @@ const WorldFX = (() => {
       if (dyLive) {                                    /* live arena: the next drill starts now */
         dySetForm(dyLive, (dyLive.form + 1) & 3);
         dyLive.nextForm = window.Orrery.ticker.clock + 8500;
+        const now = window.Orrery.ticker.clock;        /* the squads snap-acknowledge the order —
+                                                          the timer's automatic cycle never does this */
+        for (let i = 0; i < 21; i++) dyLive.L[i].flash = now + 400;
       } else if (window.Orrery.reduced()) {            /* rm: swap the held pose, one repaint, no motion */
         dyRmForm = (dyRmForm + 1) & 3;
         fx.drillyard.rm();
@@ -5317,7 +5989,7 @@ const WorldFX = (() => {
     const x = c.getContext('2d');
     const g = x.createRadialGradient(128, 128, 8, 128, 128, 128);
     g.addColorStop(0, 'rgba(226,236,255,0.85)');
-    g.addColorStop(0.3, 'rgba(185,169,255,0.42)');
+    g.addColorStop(0.3, 'rgba(201,182,255,0.42)');
     g.addColorStop(0.7, 'rgba(150,140,235,0.12)');
     g.addColorStop(1, 'rgba(150,140,235,0)');
     x.fillStyle = g; x.fillRect(0, 0, 256, 256);
@@ -5426,7 +6098,7 @@ const WorldFX = (() => {
           g.lineTo(tx, hY); g.lineTo(tx, -6);
           g.closePath(); g.fill();
           if (L === 0) {                               /* pale light rides the leading face */
-            g.strokeStyle = 'rgba(185,169,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
+            g.strokeStyle = 'rgba(201,182,255,' + (0.10 + st.flashGlow * 0.22).toFixed(3) + ')';
             g.lineWidth = 2;
             g.beginPath();
             g.moveTo(E[0], -6);
@@ -5539,7 +6211,10 @@ const WorldFX = (() => {
            1 prebaked glow sprite (no per-frame gradients)
      ============================================================ */
   const BCN_N = 7, BCN_STAGGER = 900, BCN_RISE = 260, BCN_HOLD = 3200,
-        BCN_SETTLE = 2600, BCN_GAP = 22000, BCN_EMBER = 0.14;
+        BCN_SETTLE = 2600, BCN_GAP = 45000, BCN_EMBER = 0.14,
+        BCN_RUN = (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;   /* one full signal run */
+  /* GAP 45s, not 22s (council ruling 10): manual kindling is the primary
+     path — idle spectacle must never preempt the player's version of it */
   let beaconTrigger = null;   /* the active FX sets this; the toy button calls it */
 
   function bcnRun(st, clock) { st.sig.on = true; st.sig.t0 = clock; for (let i = 0; i < BCN_N; i++) st.burst[i] = 0; }
@@ -5636,23 +6311,42 @@ const WorldFX = (() => {
         ridges, pyres, glow: oc, embers, smoke, stars,
         inten: new Float32Array(BCN_N), rdrift: new Float32Array(ridges.length),
         sig: { on: false, t0: 0 }, burst: new Uint8Array(BCN_N),
-        next: null, trigger: false, lastEnd: -99999, calm: 1,
+        next: null, lastEnd: -99999, calm: 1, btnOn: false,
         emberAcc: 0, smokeAcc: 0, gust: 0, gustNext: 0,
       };
-      st.cleanup = () => { beaconTrigger = null; };               /* Smaug kill 7: drop the toy hook */
-      beaconTrigger = () => { st.trigger = true; };
+      st.cleanup = () => {                                        /* Smaug kill 7: drop the toy hook */
+        beaconTrigger = null;
+        if (beaconToy) { beaconToy.classList.remove('is-running'); beaconToy.removeAttribute('aria-disabled'); }
+      };
+      beaconTrigger = () => {                                     /* one guard, one place: starts the
+                                                                     run now, or reports it is busy */
+        const clock = window.Orrery.ticker.clock;
+        if (st.sig.on || clock - st.lastEnd <= 800) return false;
+        bcnRun(st, clock);
+        return true;
+      };
       return st;
     },
     frame(s, st, dt, clock) {
       const g = s.g, W = s.w, H = s.h;
       g.clearRect(0, 0, W, H);
-      if (st.next === null) st.next = clock + 4200;
+      if (st.next === null) st.next = clock + 14000;   /* the player gets first strike at the flint */
 
-      /* the signal run: auto on a ~22s cadence, or the toy fires it now (no stacking) */
-      if (st.trigger) { st.trigger = false; if (!st.sig.on && clock - st.lastEnd > 800) bcnRun(st, clock); }
+      /* the signal run: auto on a slow cadence (the toy starts its own via beaconTrigger) */
       if (!st.sig.on && clock >= st.next) bcnRun(st, clock);
+      /* the button wears the run state — the FX owns it on the shared clock,
+         so auto-runs and frozen hidden tabs stay truthful (no wall timers).
+         The 800ms post-run cooldown counts as busy: no press is ever eaten
+         by a state the button isn't showing. */
+      const busy = st.sig.on || clock - st.lastEnd <= 800;
+      if (beaconToy && st.btnOn !== busy) {
+        st.btnOn = busy;
+        beaconToy.classList.toggle('is-running', busy);
+        if (busy) beaconToy.setAttribute('aria-disabled', 'true');
+        else beaconToy.removeAttribute('aria-disabled');
+      }
       if (st.sig.on) {
-        const runEnd = st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;
+        const runEnd = st.sig.t0 + BCN_RUN;
         if (clock >= runEnd) { st.sig.on = false; st.lastEnd = clock; st.next = st.sig.t0 + BCN_GAP + Math.random() * 4000; }
       }
 
@@ -5736,15 +6430,22 @@ const WorldFX = (() => {
     },
     rm() { /* intentional no-op: the frozen mid-burn pose is the .beacon-static SVG (see 03-worlds.css) */ },
   };
-  /* the toy: light the chain now. Cooldown lives in bcnRun's guard (no stacked runs). */
+  /* the toy: light the chain now. The FX owns the run + the button's busy
+     state; the score's horns take their cadence FROM the event so the two
+     files can never disagree about the chain's tempo. */
   const beaconToy = document.getElementById('light-beacons');
+  const beaconEvent = () => window.Orrery.events.dispatchEvent(
+    new CustomEvent('beacon', { detail: { n: BCN_N, stagger: BCN_STAGGER } }));
   if (beaconToy) beaconToy.addEventListener('click', () => {
     if (window.Orrery.reduced()) {
       /* rm answer: a one-shot flare of the static SVG pyres (user-initiated) */
       const sec = document.getElementById('world-beacons');
       if (sec) { sec.classList.remove('is-signaled'); void sec.offsetWidth; sec.classList.add('is-signaled'); }
-    } else if (beaconTrigger) beaconTrigger();
-    window.Orrery.events.dispatchEvent(new CustomEvent('beacon'));
+      beaconEvent();
+      return;
+    }
+    /* no live FX hook (init failed?) → the horns still answer the press */
+    if (!beaconTrigger || beaconTrigger()) beaconEvent();
   });
 
   return { start, stopAll };
@@ -5887,6 +6588,16 @@ const Score = (() => {
   let schedTimer = null, nextNote = 0, stepIdx = 0, holdUntil = 0, nextCallAt = 0, lastFanfare = -9;
   let nextGroanAt = 0, lastAnswer = -9, armed = false;
   let on = false, cfg = ARR.hub, rig = null;
+  /* the beacon horns schedule ~5s ahead — track their gains so a scene
+     change or a re-strike can mute the run mid-flight (declared here, with
+     the rest of the state, so no listener races its initialization) */
+  let hornGains = [];
+  function muteHorns() {
+    if (!hornGains.length) return;
+    const t = ctx.currentTime;
+    hornGains.forEach(g => { try { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.05); } catch (_) {} });
+    hornGains = [];
+  }
 
   const btn = document.getElementById('audio-toggle');
   const label = btn.querySelector('.audio-label');
@@ -6027,6 +6738,7 @@ const Score = (() => {
     if (wetAmt > 0) { const s = ctx.createGain(); s.gain.value = wetAmt; g.connect(s).connect(verb); }
     o.start(when); o2.start(when); o.stop(when + dur + 0.1); o2.stop(when + dur + 0.1);
     o.onended = () => g.disconnect();
+    return g;                        /* callers that schedule far ahead can mute a run mid-flight */
   }
   function playLead(v, st, when) {
     const L = v.lead;
@@ -6123,18 +6835,29 @@ const Score = (() => {
     o.start(when); o.stop(when + 0.14);
     o.onended = () => g.disconnect();
   }
-  function artifactAnswer(when) {                    /* the reply is slightly wrong: 196 sagging to 185 */
+  /* the reply is slightly WRONG: 196 sagging to 185, all visit long — until
+     the survey completes, when the wrong note finally comes true and RISES
+     185→196, fuller and longer. The whole arc lands on this one interval.
+     Restored from localStorage: a master surveyor's return visit must not
+     regress to the wrong tone (the rite fires once, ever). */
+  let artifactTrue = false;
+  try { artifactTrue = localStorage.getItem('orrery-survey-complete') === '1'; } catch (_) {}
+  function artifactAnswer(when) {
     const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(196, when);
-    o.frequency.linearRampToValueAtTime(185, when + 1.2);
+    const dur = artifactTrue ? 2.2 : 1.2;
+    if (artifactTrue) { o.frequency.setValueAtTime(185, when); o.frequency.linearRampToValueAtTime(196, when + dur); }
+    else { o.frequency.setValueAtTime(196, when); o.frequency.linearRampToValueAtTime(185, when + dur); }
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(0.07, when + 0.25);
-    g.gain.setTargetAtTime(0.0001, when + 1.2, 0.5);
+    g.gain.linearRampToValueAtTime(artifactTrue ? 0.09 : 0.07, when + 0.25);
+    g.gain.setTargetAtTime(0.0001, when + dur, artifactTrue ? 0.7 : 0.5);
     o.connect(g); g.connect(bus);
     const w = ctx.createGain(); w.gain.value = 0.8; g.connect(w).connect(verb);
-    o.start(when); o.stop(when + 3.4);
+    o.start(when); o.stop(when + dur + 2.2);
     o.onended = () => g.disconnect();
+    if (artifactTrue) {                             /* a bloomed fifth crowns the resolved tone */
+      note(294, when + 0.12, 0.05, dur, 'sine', bus, 0, 0.7);
+    }
   }
   function riser(when) {                               /* pre-warp reverse-swell into the arrival */
     const n = noiseSrc();
@@ -6215,6 +6938,7 @@ const Score = (() => {
   function setWorld(name) {
     const next = ARR[name] || ARR.hub;
     if (next === cfg) return;
+    muteHorns();                      /* the horns must not follow the traveler off-world */
     cfg = next;
     stepIdx = 0;
     if (!ready()) return;                              /* rig is built on the next turnOn */
@@ -6227,12 +6951,30 @@ const Score = (() => {
 
   const ready = () => on && ctx && ctx.state === 'running';
 
-  /* two-note preview of a world's scale on hover, sent through the hall */
+  /* hover preview in the world's OWN voice (wave / delay / hall — the ARR
+     table's character, not a shared doorbell), quantized to the running
+     score's half-step grid so sweeping the ring plays in time with it */
+  let lastPreview = -9, lastPreviewAt = -9;
   window.Orrery.events.addEventListener('preview', (e) => {
     if (!ready()) return;
+    /* a fast sweep across the ring must not stack eleven riffs on one grid
+       line (same-sample chord blast); one voice per 150ms reads as intended */
+    if (ctx.currentTime - lastPreview < 0.15) return;
+    lastPreview = ctx.currentTime;
     const v = ARR[e.detail.slug] || ARR.hub;
-    note(v.root * 2, ctx.currentTime + 0.02, 0.06, 0.3, 'sine', bus, 0, 0.45);
-    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, ctx.currentTime + 0.14, 0.05, 0.35, 'sine', bus, 0, 0.45);
+    const L = v.lead, dest = L.dry ? dry : bus;
+    const now = ctx.currentTime;
+    const sub = Math.max(0.12, cfg.step / 2000);       /* the active grid's half-step */
+    let at = nextNote;
+    while (at - sub > now + 0.02) at -= sub;           /* nearest upcoming grid line */
+    if (at < now + 0.02) at = now + 0.02;
+    if (at <= lastPreviewAt + 0.001) at = lastPreviewAt + sub;   /* two riffs never share one line */
+    lastPreviewAt = at;
+    const m0 = v.motif.find(Boolean) || { d: 0 };      /* the motif's opening degree */
+    const gapN = Math.min(0.16, v.step / 2000);        /* the riff paces to its world's own step */
+    note(v.root * 2, at, 0.06, 0.3, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, at + gapN, 0.05, 0.35, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[m0.d % v.scale.length] / 12) * 2, at + gapN * 2, 0.045, 0.4, L.wave, dest, L.dly, L.wet);
   });
 
   /* the warp: riser swells into the whoosh, which blooms in the hall */
@@ -6247,6 +6989,66 @@ const Score = (() => {
     const v = ARR.aurora;
     v.scale.slice(0, 4).forEach((deg, i) =>
       note(v.root * Math.pow(2, deg / 12) * 2, ctx.currentTime + i * 0.09, 0.07, 0.32, 'triangle', bus, 0.2, 0.3));
+  });
+  /* the other four toys: their events were dispatched into a void (M1).
+     Each answers in its world's own voice, gated PER TOY like the artifact's
+     reply (a shared timestamp would let one world's toy mute another's
+     across an rm-instant world hop). */
+  const toyLast = { consult: -9, drill: -9, storm: -9 };
+  let lastBeacon = -9;
+  const toyGate = (k) => {
+    if (!ready()) return false;
+    if (ctx.currentTime - toyLast[k] < 1) return false;
+    toyLast[k] = ctx.currentTime;
+    return true;
+  };
+  window.Orrery.events.addEventListener('consult', () => {  /* the dice-cascade: futures reshuffling */
+    if (!toyGate('consult')) return;
+    const v = ARR.archive, t = ctx.currentTime + 0.03;
+    [6, 4, 2, 1, 0].forEach((d, i) =>
+      note(v.root * Math.pow(2, v.scale[d] / 12) * 2 * (i === 2 ? 1.012 : 1),  /* one lands wrong */
+           t + i * 0.07, 0.055, 0.5, 'triangle', bus, 0.5, 0.3));
+  });
+  window.Orrery.events.addEventListener('drill', () => {    /* boatswain call; the squads answer */
+    if (!toyGate('drill')) return;
+    const v = ARR.drillyard, t = ctx.currentTime + 0.03;
+    note(v.root * 2, t, 0.07, 0.16, 'triangle', bus, 0.3, 0.22);
+    note(v.root * 2 * Math.pow(2, 5 / 12), t + 0.15, 0.07, 0.3, 'triangle', bus, 0.3, 0.22);
+    [7, 12, 7].forEach((s, i) =>
+      note(v.root * Math.pow(2, s / 12), t + 0.45 + i * 0.09, 0.045, 0.2, 'triangle', bus, 0.3, 0.22));
+    taiko(t + 0.45, 0.3);
+  });
+  window.Orrery.events.addEventListener('storm', () => {    /* the front called in early */
+    if (!toyGate('storm')) return;
+    const t = ctx.currentTime + 0.03;
+    groan(t);                                               /* reads as far thunder in this voicing */
+    const n = noiseSrc();
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(2200, t);
+    bp.frequency.exponentialRampToValueAtTime(240, t + 0.5); /* the gust sweeps DOWN into the wall */
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    n.connect(bp); bp.connect(g); g.connect(bus);
+    n.start(t); n.stop(t + 0.6);
+    n.onended = () => g.disconnect();
+    taiko(t + 0.5, 0.5);
+  });
+  window.Orrery.events.addEventListener('beacon', (e) => {  /* horns at the pyres' own cadence —
+                                                               the EVENT carries the chain's tempo,
+                                                               so sound and fire can never disagree */
+    if (!ready()) return;
+    const n = (e.detail && e.detail.n) || 7;
+    const stg = ((e.detail && e.detail.stagger) || 900) / 1000;
+    if (ctx.currentTime - lastBeacon < (n - 1) * stg + 0.9) return;  /* the full chain, last ring included */
+    lastBeacon = ctx.currentTime;
+    muteHorns();                                            /* a re-strike silences any leftover run */
+    const v = ARR.beacons, t = ctx.currentTime + 0.05;
+    for (let i = 0; i < n; i++) {                           /* each horn wetter than the last */
+      const d = v.scale[i % v.scale.length] + 12 * Math.floor(i / v.scale.length);
+      hornGains.push(note(v.root * Math.pow(2, d / 12), t + i * stg, 0.06, 0.9, 'sawtooth', bus, 0.28, 0.25 + i * 0.06));
+    }
   });
   window.Orrery.events.addEventListener('konami', () => {
     if (!ready()) return;
@@ -6270,6 +7072,16 @@ const Score = (() => {
     if (ctx.currentTime - lastAnswer < 2) return;
     lastAnswer = ctx.currentTime;
     artifactAnswer(ctx.currentTime + 0.03);
+  });
+
+  /* the survey is complete: the wrong note comes true from here on, and the
+     rite sounds it in full — a swelled, resolved answer over the fanfare */
+  window.Orrery.events.addEventListener('mastery', () => {
+    artifactTrue = true;
+    if (!ready()) return;
+    lastAnswer = ctx.currentTime;
+    artifactAnswer(ctx.currentTime + 0.1);
+    fanfare(ctx.currentTime + 0.7);
   });
 
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */
@@ -6563,13 +7375,18 @@ catch (e) { document.documentElement.classList.remove('js'); }
     let taps = 0, firstT = 0, idle = null;
     brand.addEventListener('click', (e) => {
       if (e.detail === 0) return;                       /* keyboard activation → let the link navigate normally */
+      /* a modified click means "new tab / window" — the browser owns it, and
+         it never counts toward the seven (re-navigating the CURRENT tab after
+         preventDefault destroyed the user's intent) */
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       e.preventDefault();                               /* pointer taps are held on-page so we can count them */
       const now = performance.now();
       if (taps === 0 || now - firstT > 4000) { taps = 0; firstT = now; }
       taps++;
       clearTimeout(idle);
       if (taps >= 7) { taps = 0; unlock(); return; }
-      idle = setTimeout(() => {                          /* a lone tap was a real click → honor the link (slight delay) */
+      idle = setTimeout(() => {                          /* a lone tap was a real click → honor the link (slight delay).
+                                                            480ms, not shorter: the rite's tap cadence must fit inside it */
         const lone = taps === 1; taps = 0;
         if (lone) { try { location.href = brand.href; } catch (_) {} }
       }, 480);

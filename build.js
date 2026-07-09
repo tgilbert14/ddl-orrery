@@ -45,6 +45,7 @@ const page = `<!doctype html>
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">
 <meta name="theme-color" content="#060a18">
+<link rel="preload" href="assets/cinzel-subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='14' fill='%23f97366'/%3E%3Cellipse cx='32' cy='32' rx='26' ry='8' fill='none' stroke='%234af3ff' stroke-width='3' transform='rotate(-18 32 32)'/%3E%3C/svg%3E">
 </head>
 <body>

@@ -66,15 +66,18 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --w-un-ground: #0f141c;
 
   /* -- Sector 11 · The Beacons: dusk indigo range · firelight gold · cold star-white -- */
-  --w-beacon-a: #ffa53a;      --w-beacon-a-rgb: 255, 165, 58;    /* firelight gold (the signature accent) */
+  /* hue audit (M3): the four v6 worlds shared one indigo cluster with two
+     near-identical light blues. Beacons commits to ember, Stormwall to
+     violet — so the orbit ring passes the one-second read. */
+  --w-beacon-a: #ff7a3c;      --w-beacon-a-rgb: 255, 122, 60;    /* ember (was firelight gold, too near dust) */
   --w-beacon-b: #dfe9ff;      --w-beacon-b-rgb: 223, 233, 255;   /* cold star-white */
-  --w-beacon-glow: #ff7e33;   --w-beacon-glow-rgb: 255, 126, 51; /* ember bloom / slope-glow */
-  --w-beacon-ground: #0b1230;                                    /* dusk indigo deep */
+  --w-beacon-glow: #ff6428;   --w-beacon-glow-rgb: 255, 100, 40; /* ember bloom / slope-glow */
+  --w-beacon-ground: #1a1024;                                    /* dusk ember-indigo */
 
-  --w-storm-a: #7fb3ff;       --w-storm-a-rgb: 127, 179, 255;
+  --w-storm-a: #b29eff;       --w-storm-a-rgb: 178, 158, 255;    /* stormlight violet (promoted from glow) */
   --w-storm-b: #cfe6ff;       --w-storm-b-rgb: 207, 230, 255;
-  --w-storm-glow: #b9a9ff;    --w-storm-glow-rgb: 185, 169, 255;
-  --w-storm-ground: #131022;
+  --w-storm-glow: #c9b6ff;    --w-storm-glow-rgb: 201, 182, 255;
+  --w-storm-ground: #191030;                                     /* bruised violet */
 
   --w-drill-a: #7fb2e5;       --w-drill-a-rgb: 127, 178, 229;
   --w-drill-b: #66ff9e;       --w-drill-b-rgb: 102, 255, 158;
@@ -94,6 +97,10 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 
   /* -- type scale (names kept; hub display duty moves to the plaque rules) -- */
   --font-display: ui-sans-serif, system-ui, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+  /* the engraved display face: Cinzel SemiBold, subset to caps+digits (9.5KB).
+     The whole brass fiction was a per-OS weight-300 lottery before (M3). Only
+     the three display surfaces wear it; body copy keeps the system stack. */
+  --font-engraved: "Cinzel", "Trajan Pro", Georgia, var(--font-display);
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
   --fs-hero: clamp(1.9rem, 1.1rem + 4.2vw, 4.2rem);
   --fs-h2: clamp(2.2rem, 1.4rem + 4.6vw, 4.8rem);
@@ -110,6 +117,22 @@ html { transition: --acc 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --spring: linear(0, 0.32, 0.72, 1.03, 1.01, 0.99, 1);
   --warp-ms: 1100ms;
+}
+
+/* the engraved face. font-display:swap = the LCP headline paints in the
+   fallback the same frame and swaps when the 9.5KB subset lands (never
+   gated). The metric overrides lock the line box to the fallback's, so the
+   swap causes no vertical shift (CLS-safe) — ascent/descent from the subset,
+   size-adjust tuned so Cinzel's caps sit at the fallback's cap height. */
+@font-face {
+  font-family: "Cinzel";
+  src: url("assets/cinzel-subset.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+  ascent-override: 97%;
+  descent-override: 37%;
+  line-gap-override: 0%;
+  size-adjust: 108%;
 }
 
 /* ============ reset + base ============ */
@@ -144,6 +167,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   transition: top 0.2s var(--ease-out);
 }
 .skip-link:focus-visible { top: 1rem; }
+
+/* screen-reader-only: real words for AT where the visual page speaks in art.
+   Hidden entirely without JS: the copy documents app-mode behavior (Enter
+   travels, Escape returns) that the scriptless brochure does not have */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+html:not(.js) .sr-only { display: none; }
 
 /* small-caps micro-typography (house vocabulary) */
 .microlabel {

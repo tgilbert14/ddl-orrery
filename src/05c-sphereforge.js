@@ -14,9 +14,11 @@
 
 const SphereForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 768, TEX_H = 288;          /* gen size; baked doubled to 1536 —
+  let TEX_W = 768, TEX_H = 288;            /* gen size; baked doubled to 1536 —
                                               near-1:1 texel:pixel at hub R, so the
-                                              hammered grain stays CRISP (metal, not cloud) */
+                                              hammered grain stays CRISP (metal, not cloud).
+                                              Halved on phones (M2): R caps ~150 there and
+                                              the bake is 4 fBm fields per pixel */
   const NS = 24;                           /* fixed slice count */
   const RIM_S = 224, RIM_PR = 80;          /* rim sprite canvas / baked radius */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = R * 2.8 */
@@ -260,40 +262,38 @@ const SphereForge = (() => {
   const SKIN_OF = {
     hub: 'orrery', 'dust-sea': 'molten', velocity: 'deco', grid: 'machine',
     abyssal: 'veins', arcadia: 'arcadia', aurora: 'aurora', uncharted: 'uncharted',
+    /* the v6 worlds borrow the nearest face until their own renders land:
+       the Artifact must never go mute when a world is considered (M1) */
+    archive: 'uncharted', drillyard: 'machine', stormwall: 'veins', beacons: 'molten',
   };
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
   const skins = {};                        /* key -> { img, ready } */
-  const bands = {};                        /* key -> mirror-wrapped equatorial band canvas */
   let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
   let revealReq = 0, revealUntil = -1;
-  const SKIN_SPD = 1 / 92000;              /* the Artifact turns: one revolution ~92s */
 
-  /* a render is a photo OF a sphere; to ROTATE it like a real planet we
-     strip its equatorial band (limb regions dropped: our own limb/gloss
-     lighting stays pinned on top) and mirror-wrap it into a seamless
-     scroll texture. Baked once per skin, on first use. */
-  function bandFor(key) {
+  /* the renders are COMPOSED faces — a dial, a city, a lattice. v6 stripped
+     them into a scrolling equatorial band to fake rotation, and the band
+     shredded every composition into anonymous gold streaks (art-direction
+     kill, M2). The face is now drawn PINNED at SKIN_COVER, sliced with the
+     liquid warp so the metal still lives; rotation retires for skins (the
+     zero-request base gold beneath keeps its flow). */
+  const skinRec = (key) => {
     const rec = skins[key];
-    if (!rec || !rec.ready) return null;
-    let b = bands[key];
-    if (b) return b;
-    const iw = rec.img.naturalWidth || rec.img.width, ih = rec.img.naturalHeight || rec.img.height;
-    const c = cv(2048, 512), g2 = c.getContext('2d');
-    const sx = iw * 0.10, sw = iw * 0.80, sy = ih * 0.14, sh2 = ih * 0.72;
-    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
-    g2.save(); g2.translate(2048, 0); g2.scale(-1, 1);   /* mirror half: seamless wrap */
-    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
-    g2.restore();
-    b = bands[key] = c;
-    return b;
-  }
+    return rec && rec.ready ? rec : null;
+  };
   function loadSkin(k) {
     if (skins[k] || !SKIN_SRC[k]) return;
     const img = new Image();
     const rec = { img, ready: false };
     skins[k] = rec;
-    img.onload = () => { rec.ready = true; };
+    img.onload = () => {
+      rec.ready = true;
+      /* rm has no ambient loop: if a hover is still waiting on this face,
+         ask the engine for its one designed repaint — otherwise the swap
+         is silently lost until some unrelated redraw */
+      if (rm() && wantSkin === k && window.Orrery && window.Orrery.requestStatic) window.Orrery.requestStatic();
+    };
     img.onerror = () => { delete skins[k]; };          /* a 404 must not wedge the want-latch */
     img.src = SKIN_SRC[k];
   }
@@ -308,6 +308,10 @@ const SphereForge = (() => {
     init() {
       if (inited) return;
       inited = true;
+      /* true-touch phone: half-res gold — R caps ~150 there, and this bake
+         sits on the critical brochure→app flip (M2 boot-cost pass).
+         hover:none, so a small desktop window never latches the mush. */
+      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 384; TEX_H = 144; }
       const rnd = mulberry(seedOf('artifact'));
       baseTex = buildBase(rnd);
       flowTex = buildFlow(rnd);
@@ -328,13 +332,23 @@ const SphereForge = (() => {
       }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
-      /* skins: the hub face loads first (it is the marquee); the rest arrive
-         on a lazy stagger so boot paint never waits on a network byte */
+      /* skins: the hub face loads first (it is the marquee). The rest arrive
+         on a lazy stagger ONLY where hover exists and data isn't precious —
+         a phone was eating every skin it could never hover (M2); there,
+         setSkin lazy-loads the one face a tap actually asks for */
       loadSkin('orrery');
-      let di = 0;
-      for (const k in SKIN_SRC) {
-        if (k === 'orrery') continue;
-        setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+      const eager = matchMedia('(hover: hover)').matches
+        && !(navigator.connection && navigator.connection.saveData);
+      if (eager) {
+        let di = 0;
+        for (const k in SKIN_SRC) {
+          if (k === 'orrery') continue;
+          setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+        }
+      } else {
+        /* even on the lazy path, the reveal's face rides along late: its
+           2.6s window must never burn down waiting on a first fetch */
+        setTimeout(() => loadSkin('biomech'), 4000);
       }
     },
 
@@ -373,39 +387,45 @@ const SphereForge = (() => {
       if (nxtSkin) {
         if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
       }
-      const bandCur = bandFor(revealing ? 'biomech' : curSkin);
-      const skinOn = !!bandCur;
+      const recCur = skinRec(revealing ? 'biomech' : curSkin);
+      const skinOn = !!recCur;
 
       g.save();
       g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
 
       if (skinOn) {
-        /* TRUE ROTATION: the skin's equatorial band scrolls under our pinned
-           lighting, sliced with a two-wave liquid warp: the surface turns
-           like a planet AND morphs like something alive under the metal */
-        const sscroll = ((t * SKIN_SPD) % 1) * half;
+        /* THE FACE, PINNED: the render's disc seats over the clip at
+           SKIN_COVER, sliced with the two-wave liquid warp so the metal
+           still breathes — the composition finally survives to the screen */
         const A2 = R * 0.042;              /* morph amplitude, stronger than v5 */
-        const BS = 24, bsh = 512 / BS, bdh = D / BS;
-        const bandNxt = (!revealing && nxtSkin) ? bandFor(nxtSkin) : null;
-        const fp = bandNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
+        const BS = 24;
+        const S = R * SKIN_COVER, sy0 = y - S / 2, sdh = S / BS;
+        const iw = recCur.img.naturalWidth || recCur.img.width;
+        const ih = recCur.img.naturalHeight || recCur.img.height;
+        const ish = ih / BS;
+        const recNxt = (!revealing && nxtSkin) ? skinRec(nxtSkin) : null;
+        const fp = recNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
         for (let i = 0; i < BS; i++) {
           let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
                   + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
-          if (rippling) {                  /* the ripple surges the warp locally */
-            const sd = ((i + 0.5) * bdh) - R - ringR;
+          if (rippling) {                  /* the ripple surges the warp locally
+                                              (abs: BOTH hemispheres answer, like the base gold) */
+            const sd = Math.abs(sy0 + (i + 0.5) * sdh - y) - ringR;
             off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
                  * Math.sin(t * 0.012 + i * 1.3);
           }
-          g.drawImage(bandCur, 0, i * bsh, 2048, bsh,
-            x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
-          if (bandNxt && fp > 0) {
+          g.drawImage(recCur.img, 0, i * ish, iw, ish,
+            x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
+          if (recNxt && fp > 0) {
+            const iw2 = recNxt.img.naturalWidth || recNxt.img.width;
+            const ish2 = (recNxt.img.naturalHeight || recNxt.img.height) / BS;
             g.globalAlpha = fp;
-            g.drawImage(bandNxt, 0, i * bsh, 2048, bsh,
-              x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+            g.drawImage(recNxt.img, 0, i * ish2, iw2, ish2,
+              x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
             g.globalAlpha = 1;
           }
         }
-        /* the liquid sheen rides the turning surface, counter-drifting */
+        /* the liquid sheen keeps drifting over the pinned face: living light */
         g.globalCompositeOperation = 'screen';
         g.globalAlpha = reduced2 ? 0.09 : 0.08 + 0.03 * Math.sin(t * 0.0004);
         g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);

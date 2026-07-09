@@ -34,11 +34,14 @@
                      calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
 }
 .hub-h1 {
-  font-size: clamp(1.1rem, 0.95rem + 0.8vw, 1.35rem);
-  font-weight: 300;
-  letter-spacing: var(--track-deco);
+  /* the engraved face lets the hero stand up (was a 1.35rem weight-300
+     whisper): Cinzel caps carry a bigger scale without shouting (M3) */
+  font-family: var(--font-engraved);
+  font-size: clamp(1.35rem, 1.05rem + 1.5vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  line-height: 1.4;
+  line-height: 1.32;
   color: var(--cream);
   text-wrap: balance;
 }
@@ -87,7 +90,7 @@
                      calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
 }
 .brand b { color: var(--brass); }          /* coral leaves the masthead; brass takes it */
-.hud-title { color: var(--brass); font-weight: 600; }
+.hud-title { color: var(--brass); font-weight: 600; font-family: var(--font-engraved); letter-spacing: 0.28em; }
 #hud-clock { font-variant-numeric: tabular-nums; }
 
 .return-orbit, .audio-toggle {
@@ -104,6 +107,21 @@
 /* clip-path swallows an OUTSIDE outline: chamfered controls get an inner focus ring */
 .brand:focus-visible, .return-orbit:focus-visible, .audio-toggle:focus-visible,
 .w-return:focus-visible, .w-toy:focus-visible { outline-offset: -4px; }
+
+/* phone HUD (M2): the brass plates were colliding at 390px — tighter bars,
+   smaller chips, and the score toggle speaks through its EQ bars alone
+   (the full label + aria state stay for AT; the pressed state never lies) */
+@media (max-width: 700px) {
+  .hud { padding: 0.55rem 0.7rem; gap: 0.5rem; }
+  .hud-loc { top: 2.9rem; }
+  .brand { padding: 0.3rem 0.5rem; letter-spacing: 0.12em; }
+  .audio-toggle, .return-orbit { padding: 0.35rem 0.55rem; white-space: nowrap; }
+  .audio-toggle .audio-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+  #hud-loc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+}
 
 /* ---------- 4 · the porthole + film grain (NEW elements) ---------- */
 /* z-order: scenes 10 < warpfx 90 < porthole 110 < grain 111 < HUD 120 < skip-link 300.
@@ -160,11 +178,14 @@
 /* keep the eyebrow and the engraved name clear of the medallion */
 .world-card .w-eyebrow, .world-card h2 { padding-right: 62px; }
 
-/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css */
+/* engraved plate type: REPLACES the 800-weight tight h2 in 03-worlds.css.
+   The Cinzel face is the point — a real engraved monument cap, not a
+   weight-300 system-stack costume (M3) */
 .world-card h2 {
+  font-family: var(--font-engraved);
   font-size: clamp(1.7rem, 1.2rem + 2.4vw, 3.1rem);
-  font-weight: 300;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.12;
   color: var(--cream);
@@ -174,6 +195,14 @@
   border-radius: 0;
   clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px),
                      calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+}
+
+/* the press frame itself answers: every control acknowledges the finger
+   before its effect lands (user-initiated, so rm-safe by definition) */
+.w-toy:active, .w-return:active, .cta-btn:active,
+.audio-toggle:active, .tour-toggle:active, .return-orbit:active {
+  transform: translateY(1px) scale(0.97);
+  transition-duration: 0.05s;
 }
 
 /* ---------- 6 · brochure list chrome (mobile / no-JS planet index) ----------
@@ -304,9 +333,12 @@ html.js .artifact-label { display: block; }
   background: transparent; border: 0; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc */
+/* the chamfered-control law: the ring lives INSIDE, gold, so it reads on the disc.
+   The transparent outline is real to forced-colors mode, which strips the
+   box-shadow and repaints the outline in Highlight — the ring never vanishes. */
 #artifact-hit:focus-visible {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: -4px;
   box-shadow: 0 0 0 2px rgba(var(--brass-rgb), 0.9),
               0 0 22px 4px rgba(255, 205, 90, 0.5) inset;
 }
@@ -323,11 +355,26 @@ html.js .artifact-label { display: block; }
   html:not(.rm) .artifact-label { animation: hint-breathe 8s ease-in-out infinite 1.4s; }
 }
 
-/* the phone keeps the Artifact as ambient art only: the invisible hit target
-   would otherwise sit over the world column and steal its taps + scroll. The
-   canvas still paints the dim sphere and the sonar ring behind everything. */
+/* the pocket orrery (M2): the Artifact is TOUCHABLE on phones now — it seats
+   in the .hub-stage spacer, below the world rows (z20), so it can never steal
+   a row's tap. ABSOLUTE, not fixed, on phones: the disc and plate live in the
+   hub scene's scroll flow (05-core writes content-space coords), so they
+   scroll away with the stage AND a swipe that starts on the gold chains to
+   the scene scroller like any other content. */
 @media (max-width: 700px) {
-  #artifact-hit, .artifact-label { display: none !important; }
+  #artifact-hit, .artifact-label { position: absolute; }
+}
+
+/* phone compositing cuts (M2): a live canvas under a backdrop-filter card
+   plus a blended grain layer is a real slice of a mid-phone's frame budget.
+   The card plate is already 80% opaque — nobody can see the refraction. */
+@media (max-width: 700px) {
+  .world-card.glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: rgba(6, 22, 18, 0.9);
+  }
+  .grain { mix-blend-mode: normal; opacity: 0.035; }
 }
 
 /* reduced-motion: the dust, flicker, breathe all hold still (the dark and the
@@ -382,6 +429,18 @@ html.js #tour-toggle {
   50%      { opacity: 1;   transform: scale(1.12); }
 }
 
+/* the discovery nudge (M3): after a stretch of idle hub, the footer Tour
+   control pulses ONCE so the best demo feature is actually found. The
+   engine adds .tour-beckon; rm shows a static lifted border instead. */
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.rm) #tour-toggle.tour-beckon { animation: tour-beckon 1.5s var(--ease-out) 2; }
+}
+@keyframes tour-beckon {
+  0%, 100% { border-color: rgba(var(--brass-rgb), 0.45); box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22); }
+  50%      { border-color: rgba(255, 205, 90, 0.95); box-shadow: inset 0 0 0 2px var(--plaque), inset 0 0 0 3px rgba(var(--brass-rgb), 0.22), 0 0 22px rgba(255, 205, 90, 0.5); }
+}
+html.rm #tour-toggle.tour-beckon { border-color: rgba(255, 205, 90, 0.8); }
+
 /* the progress plate: engraved brass readout, announced politely */
 .tour-plate {
   color: var(--brass);
@@ -433,6 +492,12 @@ html.js .survey-log {
   border-color: rgba(var(--brass-rgb), 0.9);
   box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
 }
+/* forced-colors strips gradients and shadows: state must survive on borders */
+@media (forced-colors: active) {
+  .survey-dot { border: 1px solid CanvasText; }
+  .survey-dot.is-surveyed { border: 4px solid CanvasText; }
+  html.js .planet-anchor { border: 1px solid CanvasText; }
+}
 /* the fill eases only where motion is welcome (konami-ring precedent); rm snaps */
 @media (prefers-reduced-motion: no-preference) {
   html:not(.rm) .survey-dot {
@@ -480,6 +545,12 @@ html.js .survey-log {
    is (0,4,1) so it still wins WHILE drifting. Order-independent. */
 html.js.approached .hub-sub,
 html.js.approached .hub-hint { animation: none; }
+
+/* invisible is untouchable: while the cinematic runs, the fading-in anchors
+   and the artifact disc take no clicks — a stray early click aborts the
+   cinematic (window capture) without also warping the visitor blind */
+html.approaching .planet-anchor,
+html.approaching #artifact-hit { pointer-events: none; }
 
 @media (prefers-reduced-motion: no-preference) {
 
