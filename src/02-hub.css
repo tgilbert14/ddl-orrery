@@ -152,10 +152,18 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
 }
 
-/* mobile app-mode: the star-chart column (big targets, tells intact) */
+/* mobile app-mode: the pocket orrery (M2) — the Artifact seats in a real
+   stage under the plaque, and the star-chart column begins below its limb */
+.hub-stage { display: none; }
 @media (max-width: 700px) {
-  html.js .orbits { position: relative; z-index: 20; }
+  html.js .hub-stage { display: block; width: 100%; height: clamp(150px, 36svh, 340px); flex: none; }
+  html.js .orbits { position: relative; z-index: 20; margin-top: 0; }
   html.js .planet-anchor { min-height: 64px; }
+  /* each row's dot wears its baked PlanetForge portrait (05-core paintMini) */
+  html.js .pa-dot.pa-mini {
+    background-size: 100% 100%;
+    box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35);
+  }
 }
 
 /* ---------- pre-boot / no-JS planet drift (negative-delay ensemble, §2.7) ---------- */

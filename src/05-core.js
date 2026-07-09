@@ -38,7 +38,12 @@ const finePointer = matchMedia('(pointer: fine)').matches;
 const Ticker = (() => {
   const tasks = new Set();
   let rafId = null, last = 0, clock = 0, running = false;
+  let budget = 0, lastRun = -1e9;          /* frame budget (M2): 0 = every vsync */
   function frame(now) {
+    /* budgeted skip: a 120Hz phone must not pay double for a 10Hz twinkle —
+       keep the rAF alive, run the tasks no oftener than the budget allows */
+    if (budget && now - lastRun < budget) { rafId = requestAnimationFrame(frame); return; }
+    lastRun = now;
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
@@ -51,6 +56,7 @@ const Ticker = (() => {
     add(t) { tasks.add(t); if (!running) { running = true; last = performance.now(); rafId = requestAnimationFrame(frame); } },
     remove(t) { tasks.delete(t); },
     get clock() { return clock; },
+    setBudget(ms) { budget = ms || 0; },
   };
 })();
 
@@ -74,20 +80,38 @@ const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
 const sky = document.getElementById('sky');
 const ctx = sky.getContext('2d');
 let W = 0, H = 0, DPR = 1;
-function sizeSky() {
+function sizeSkyCanvas() {
   DPR = Math.min(devicePixelRatio || 1, 2);           /* the phone-cook cap */
   W = innerWidth; H = innerHeight;
   sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+function sizeSky() {
+  sizeSkyCanvas();
   buildStars();
   measureOrbit();
   drawStatic();                                        /* rm / idle repaint */
 }
-let resizeT = null;
+let resizeT = null, settledH = 0;                      /* height baseline: set by FULL passes only */
 addEventListener('resize', () => {
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
+    /* a phone URL bar collapsing is not a rotation: a small height-only
+       delta refreshes the surface but must NOT re-roll the starfield or
+       restart the world mid-scroll (M2 — the dunes kept re-rolling).
+       Measured against the last SETTLED height (not the previous debounce
+       step) so a slow continuous drag cannot creep past the guard, and
+       phone-only: desktop window resizes always take the full path. */
+    const heightOnly = !desktop() && innerWidth === W && Math.abs(innerHeight - settledH) < 160;
+    if (heightOnly) {
+      sizeSkyCanvas();
+      measureOrbit();
+      drawStatic();
+      return;
+    }
     sizeSky();
+    settledH = H;
+    if (!desktop()) bakeMinis();                       /* breakpoint may have flipped */
     /* a rotated phone inside a world gets a fresh FX surface (Smaug kill 8) */
     if (Scenes.current && Scenes.current !== 'hub' && window.WorldFX) WorldFX.start(Scenes.current);
   }, 120);
@@ -181,10 +205,26 @@ function measureOrbit() {
     ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
     ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
   } else {
-    /* phone: the Artifact is a presence low in the deep, under the chart column */
-    ART.cx = W / 2;
-    ART.cy = H * 0.72;
-    ART.r  = Math.min(W * 0.34, 150);
+    /* the pocket orrery (M2): the Artifact seats IN the .hub-stage spacer
+       and belongs to the scroll flow — its live rect places the sphere, so
+       scrolling the world list carries the Artifact away with the stage
+       instead of leaving a gold ghost fixed under the rows. The hub scene's
+       scroll listener re-runs this measure. */
+    const stage = document.querySelector('.hub-stage');
+    const sr = stage && html.classList.contains('js') ? stage.getBoundingClientRect() : null;
+    if (sr && sr.height > 0) {
+      ART.fb = false;
+      ART.cx = W / 2;
+      ART.cy = sr.top + sr.height * 0.52;
+      ART.r  = Math.min(W * 0.36, sr.height * 0.42, 150);
+    } else {
+      /* no stage laid out (boot edge / viewport disagreement): the old
+         deep-presence fallback — drawn DIM, since it sits under the rows */
+      ART.fb = true;
+      ART.cx = W / 2;
+      ART.cy = H * 0.72;
+      ART.r  = Math.min(W * 0.34, 150);
+    }
     ART.rx = 0; ART.ry = 0;
   }
   placeArtifactDom();
@@ -275,13 +315,21 @@ function drawSky(dt, clockMs) {
         a.style.zIndex = p.depth > 0 ? 22 : 14;
       }
       const hov = hovered === w.slug;
-      ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
-      /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.74 * p.sc * (hov ? 1.18 : 1), clockMs, { hover: hov, rm: reduced() });
-      ctx.globalAlpha = 1;
+      /* staged bake (M2): a world still in the oven draws nothing; a fresh
+         one materializes — grows in over half a second as the orrery wakes */
+      const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
+      if (mat > 0) {
+        ctx.globalAlpha = (hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2) * mat;
+        /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
+        PlanetForge.draw(ctx, w.slug, p.x, p.y,
+          w.size * 0.74 * p.sc * (hov ? 1.18 : 1) * (0.72 + 0.28 * mat),
+          clockMs, { hover: hov, rm: reduced() });
+        ctx.globalAlpha = 1;
+      }
 
-      if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${0.55 * (0.5 + 0.5 * dim)})`;
+      if (w.tell === 'dashed' && mat > 0) {            /* the unknown keeps its survey ring —
+                                                          but not before the world itself exists */
+        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${(0.55 * (0.5 + 0.5 * dim) * mat).toFixed(3)})`;
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
@@ -296,11 +344,18 @@ function drawSky(dt, clockMs) {
       SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
     }
     for (const e of ps) if (e.p.depth > 0) drawWorld(e);
-  } else if (Scenes.current === 'hub' && window.SphereForge) {
-    /* phone: the Artifact holds the deep beneath the chart column, dim and vast */
-    ctx.globalAlpha = 0.5;
-    SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
-    ctx.globalAlpha = 1;
+  } else if (Scenes.current === 'hub' && window.SphereForge && ART.cy > -ART.r * 1.6) {
+    /* the pocket orrery (M2): full presence — seated, shadowed, answerable,
+       and gone with its stage once the list scrolls past it. The stageless
+       fallback keeps v6's dim ambient presence under the rows instead. */
+    if (ART.fb) {
+      ctx.globalAlpha = 0.5;
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      ctx.globalAlpha = 1;
+    } else {
+      SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+    }
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
@@ -387,14 +442,21 @@ function stopSonar() { clearTimeout(sonarTimer); sonarTimer = null; }
 const artHit = document.getElementById('artifact-hit');
 const artLabel = document.getElementById('artifact-label');
 function placeArtifactDom() {
+  /* phone: the disc/plate are position:absolute INSIDE the scrolling hub
+     scene (03b) — write content-space coords (viewport + scrollTop) once
+     and the browser scrolls them natively with the stage */
+  const hubEl = Scenes.els.get('hub');
+  const sTop = !desktop() && hubEl ? hubEl.scrollTop : 0;
   if (artHit) {
     artHit.style.setProperty('--ax', ART.cx + 'px');
-    artHit.style.setProperty('--ay', ART.cy + 'px');
+    artHit.style.setProperty('--ay', (ART.cy + sTop) + 'px');
     artHit.style.setProperty('--ar', Math.round(ART.r * 2) + 'px');
   }
   if (artLabel) {
     artLabel.style.setProperty('--ax', ART.cx + 'px');
-    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
+    /* phone: the plate tucks close under the limb so it stays inside the
+       stage instead of colliding with the first world row */
+    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + (desktop() ? 30 : 10) + sTop) + 'px');
   }
 }
 let artLast = 0, artTouches = 0, artRmT = null;
@@ -577,6 +639,9 @@ function setScene(name, { instant = false } = {}) {
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
+    /* homecoming resets the Artifact's face: the departure beat set a skin
+       and a tap never blurs on iOS, so untint alone cannot be trusted */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
     Orrery.startAmbient();
     scheduleSonar();                                   /* home again: the call resumes */
     WorldFX.stopAll();
@@ -594,9 +659,11 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
-    /* refresh this card's medallion so the little world advanced since last visit */
+    /* refresh this card's medallion so the little world advanced since last
+       visit (skip while it bakes: wiping the canvas before a no-op drawMini
+       would blank it — onReady paints it the moment it lands) */
     const med = next.querySelector('.card-planet');
-    if (med && window.PlanetForge) {
+    if (med && window.PlanetForge && (!PlanetForge.progress || PlanetForge.progress(name) > 0)) {
       const g2 = med.getContext('2d');
       const dpr2 = Math.min(devicePixelRatio || 1, 2);
       med.width = 72 * dpr2; med.height = 72 * dpr2;
@@ -615,21 +682,52 @@ function setScene(name, { instant = false } = {}) {
    animationend is the fast path; a deterministic timer is the guarantee it
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
+let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
 
-function travel(slug) {
+function travel(slug, fromBeat) {
   if (Scenes.transitioning || Scenes.current === slug) return;
   const w = bySlug[slug];
   if (!w) return;
 
   if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
 
+  /* the phone departure beat (M2): the orrery acknowledges the choice —
+     the sphere considers the world and a sonar ring answers — THEN the
+     warp fires. 300ms of anticipation instead of an unceremonious cut. */
+  if (!fromBeat && !desktop() && window.SphereForge && Scenes.current === 'hub'
+      && ART.cy > 0                                    /* only while the sphere is on stage */
+      && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
+    beatSlug = slug;                                   /* a second tap RE-AIMS the pending beat */
+    SphereForge.setSkin(slug);
+    SphereForge.ping();
+    if (!skyTask) Orrery.startAmbient();
+    clearTimeout(beatTimer);
+    beatTimer = setTimeout(() => {
+      beatTimer = null;
+      const s = beatSlug; beatSlug = null;
+      travel(s, true);
+    }, 300);
+    return;
+  }
+
   Scenes.transitioning = true;
-  /* aim the flood at the planet's live position */
-  const i = WORLDS.indexOf(w);
-  const p = desktop() ? planetPos(i, Ticker.clock) : { x: W / 2, y: H / 2 };
+  /* aim the flood at the planet's live position — on the phone, at the
+     tapped row itself, so the warp blooms from under the finger (M2);
+     clamped into the viewport for rows below the fold (the tour taps
+     rows the reset scroll has not revealed) */
+  let p;
+  if (desktop()) {
+    p = planetPos(WORLDS.indexOf(w), Ticker.clock);
+  } else {
+    const a = anchors.get(slug);
+    const r = a && a.getBoundingClientRect();
+    p = r && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: W / 2, y: H / 2 };
+    p.x = Math.max(0, Math.min(W, p.x));
+    p.y = Math.max(0, Math.min(H, p.y));
+  }
   html.style.setProperty('--wx', (p.x / W * 100).toFixed(1) + '%');
   html.style.setProperty('--wy', (p.y / H * 100).toFixed(1) + '%');
   html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
@@ -677,8 +775,10 @@ function route(instant = false) {
   setScene(slug || 'hub', { instant });
 }
 addEventListener('hashchange', () => {
-  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4) */
+  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4)
+     — and a pending departure beat dies with it (M2) */
   if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
+  if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; beatSlug = null; }
   route(false);
 });
 
@@ -817,10 +917,20 @@ const TourController = (() => {
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
    ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
+/* frame budget steering (M2): phones cap at ~30fps always; desktop demotes
+   after a minute of untouched hub (any input restores full rate next tick) */
+let lastInput = performance.now();
+['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(tp =>
+  addEventListener(tp, () => { lastInput = performance.now(); }, { passive: true, capture: true }));
 function tickClock() {
   if (!document.hidden) {
     clockEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+  /* phones run budgeted EXCEPT while the visitor is actively touching or
+     scrolling — the scroll-glued sphere must track the stage at full rate */
+  const busy = performance.now() - lastInput < 1500;
+  const idle = Scenes.current === 'hub' && performance.now() - lastInput > 60000;
+  Ticker.setBudget((!desktop() && !busy) || idle ? 33 : 0);
 }
 setInterval(tickClock, 1000);
 tickClock();
@@ -829,7 +939,13 @@ tickClock();
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
-  PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
+  /* staged bake (M2): the sphere owns frame 0; the eleven worlds land one
+     per idle slice and announce themselves everywhere they appear */
+  PlanetForge.init(WORLDS, (slug) => {
+    paintMedallion(slug);
+    paintMini(slug);
+    if (!skyTask) requestStatic();                     /* rm / idle: the newcomer still shows up */
+  });
   if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
   /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
      a thumb. TourController's parse-time stash has already claimed the one
@@ -842,6 +958,17 @@ function bootOrrery() {
   }
   sizeSky();
   setRM();
+  /* the pocket stage scrolls with the hub column: keep the sphere glued to
+     it (one rect read per scroll event; the ambient loop paints the move,
+     and rm gets its coalesced repaint) */
+  const hubEl = Scenes.els.get('hub');
+  if (hubEl) hubEl.addEventListener('scroll', () => {
+    if (desktop()) return;
+    lastInput = performance.now();
+    Ticker.setBudget(0);                               /* full rate NOW; tickClock re-budgets later */
+    measureOrbit();
+    if (!skyTask) requestStatic();
+  }, { passive: true });
   route(true);
   if (!reduced()) Orrery.startAmbient();
   runApproach();                                     /* first-visit arrival cinematic */
@@ -852,19 +979,34 @@ function bootOrrery() {
 }
 
 /* the brass card medallions: one small spinning-world portrait per card,
-   painted at boot and refreshed on each arrival (static between visits) */
-function paintMedallions() {
-  document.querySelectorAll('.card-planet').forEach(c => {
-    const sec = c.closest('.scene');
-    if (!sec || !window.PlanetForge) return;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    const size = 72;
-    c.width = size * dpr; c.height = size * dpr;
-    const g = c.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
-  });
+   painted as each world bakes and refreshed on each arrival */
+function paintMedallion(slug) {
+  const sec = Scenes.els.get(slug);
+  if (!sec || !window.PlanetForge) return;
+  const c = sec.querySelector('.card-planet'); if (!c) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const size = 72;
+  c.width = size * dpr; c.height = size * dpr;
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  PlanetForge.drawMini(g, slug, size, Ticker.clock);
 }
+function paintMedallions() { WORLDS.forEach(w => paintMedallion(w.slug)); }
+
+/* the phone list shows the REAL worlds (M2): each row's dot wears a baked
+   PlanetForge portrait — one 68px offscreen bake per world, zero per-frame */
+function paintMini(slug) {
+  if (desktop() || !window.PlanetForge) return;
+  if (PlanetForge.progress && !PlanetForge.progress(slug)) return;   /* still in the oven */
+  const a = anchors.get(slug); if (!a) return;
+  const dot = a.querySelector('.pa-dot'); if (!dot) return;
+  const c = document.createElement('canvas');
+  c.width = c.height = 68;
+  PlanetForge.drawMini(c.getContext('2d'), slug, 68, Ticker.clock);
+  dot.style.backgroundImage = `url(${c.toDataURL()})`;
+  dot.classList.add('pa-mini');
+}
+function bakeMinis() { WORLDS.forEach(w => paintMini(w.slug)); }
 
 /* ---------- THE APPROACH: the once-per-session arrival cinematic ----------
    First hub visit only. You drift in from the dark and the instruments wake.

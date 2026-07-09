@@ -37,6 +37,11 @@
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
 
+      <!-- the pocket orrery's stage (M2): on phones this spacer holds open
+           the scroll flow where the sky canvas seats the Artifact, so the
+           world list begins below the limb. Display:none everywhere else. -->
+      <div class="hub-stage" aria-hidden="true"></div>
+
       <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
            sphere; this button is its keyboard/AT presence and the ripple trigger.
            JS positions both over the sphere center via --ax / --ay. -->

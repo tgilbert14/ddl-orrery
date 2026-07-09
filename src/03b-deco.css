@@ -105,6 +105,21 @@
 .brand:focus-visible, .return-orbit:focus-visible, .audio-toggle:focus-visible,
 .w-return:focus-visible, .w-toy:focus-visible { outline-offset: -4px; }
 
+/* phone HUD (M2): the brass plates were colliding at 390px — tighter bars,
+   smaller chips, and the score toggle speaks through its EQ bars alone
+   (the full label + aria state stay for AT; the pressed state never lies) */
+@media (max-width: 700px) {
+  .hud { padding: 0.55rem 0.7rem; gap: 0.5rem; }
+  .hud-loc { top: 2.9rem; }
+  .brand { padding: 0.3rem 0.5rem; letter-spacing: 0.12em; }
+  .audio-toggle, .return-orbit { padding: 0.35rem 0.55rem; white-space: nowrap; }
+  .audio-toggle .audio-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+  #hud-loc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+}
+
 /* ---------- 4 · the porthole + film grain (NEW elements) ---------- */
 /* z-order: scenes 10 < warpfx 90 < porthole 110 < grain 111 < HUD 120 < skip-link 300.
    The warp flood blooms BEHIND the ring: the journey reads through-the-window. */
@@ -334,11 +349,26 @@ html.js .artifact-label { display: block; }
   html:not(.rm) .artifact-label { animation: hint-breathe 8s ease-in-out infinite 1.4s; }
 }
 
-/* the phone keeps the Artifact as ambient art only: the invisible hit target
-   would otherwise sit over the world column and steal its taps + scroll. The
-   canvas still paints the dim sphere and the sonar ring behind everything. */
+/* the pocket orrery (M2): the Artifact is TOUCHABLE on phones now — it seats
+   in the .hub-stage spacer, below the world rows (z20), so it can never steal
+   a row's tap. ABSOLUTE, not fixed, on phones: the disc and plate live in the
+   hub scene's scroll flow (05-core writes content-space coords), so they
+   scroll away with the stage AND a swipe that starts on the gold chains to
+   the scene scroller like any other content. */
 @media (max-width: 700px) {
-  #artifact-hit, .artifact-label { display: none !important; }
+  #artifact-hit, .artifact-label { position: absolute; }
+}
+
+/* phone compositing cuts (M2): a live canvas under a backdrop-filter card
+   plus a blended grain layer is a real slice of a mid-phone's frame budget.
+   The card plate is already 80% opaque — nobody can see the refraction. */
+@media (max-width: 700px) {
+  .world-card.glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: rgba(6, 22, 18, 0.9);
+  }
+  .grain { mix-blend-mode: normal; opacity: 0.035; }
 }
 
 /* reduced-motion: the dust, flicker, breathe all hold still (the dark and the

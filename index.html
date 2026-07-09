@@ -416,10 +416,18 @@ html.js .hub-hint { animation-delay: 0.55s; }
   }
 }
 
-/* mobile app-mode: the star-chart column (big targets, tells intact) */
+/* mobile app-mode: the pocket orrery (M2) — the Artifact seats in a real
+   stage under the plaque, and the star-chart column begins below its limb */
+.hub-stage { display: none; }
 @media (max-width: 700px) {
-  html.js .orbits { position: relative; z-index: 20; }
+  html.js .hub-stage { display: block; width: 100%; height: clamp(150px, 36svh, 340px); flex: none; }
+  html.js .orbits { position: relative; z-index: 20; margin-top: 0; }
   html.js .planet-anchor { min-height: 64px; }
+  /* each row's dot wears its baked PlanetForge portrait (05-core paintMini) */
+  html.js .pa-dot.pa-mini {
+    background-size: 100% 100%;
+    box-shadow: 0 0 18px rgba(var(--pa-rgb, var(--acc-rgb)), 0.35);
+  }
 }
 
 /* ---------- pre-boot / no-JS planet drift (negative-delay ensemble, §2.7) ---------- */
@@ -1006,6 +1014,21 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
 .brand:focus-visible, .return-orbit:focus-visible, .audio-toggle:focus-visible,
 .w-return:focus-visible, .w-toy:focus-visible { outline-offset: -4px; }
 
+/* phone HUD (M2): the brass plates were colliding at 390px — tighter bars,
+   smaller chips, and the score toggle speaks through its EQ bars alone
+   (the full label + aria state stay for AT; the pressed state never lies) */
+@media (max-width: 700px) {
+  .hud { padding: 0.55rem 0.7rem; gap: 0.5rem; }
+  .hud-loc { top: 2.9rem; }
+  .brand { padding: 0.3rem 0.5rem; letter-spacing: 0.12em; }
+  .audio-toggle, .return-orbit { padding: 0.35rem 0.55rem; white-space: nowrap; }
+  .audio-toggle .audio-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+  #hud-loc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+}
+
 /* ---------- 4 · the porthole + film grain (NEW elements) ---------- */
 /* z-order: scenes 10 < warpfx 90 < porthole 110 < grain 111 < HUD 120 < skip-link 300.
    The warp flood blooms BEHIND the ring: the journey reads through-the-window. */
@@ -1235,11 +1258,26 @@ html.js .artifact-label { display: block; }
   html:not(.rm) .artifact-label { animation: hint-breathe 8s ease-in-out infinite 1.4s; }
 }
 
-/* the phone keeps the Artifact as ambient art only: the invisible hit target
-   would otherwise sit over the world column and steal its taps + scroll. The
-   canvas still paints the dim sphere and the sonar ring behind everything. */
+/* the pocket orrery (M2): the Artifact is TOUCHABLE on phones now — it seats
+   in the .hub-stage spacer, below the world rows (z20), so it can never steal
+   a row's tap. ABSOLUTE, not fixed, on phones: the disc and plate live in the
+   hub scene's scroll flow (05-core writes content-space coords), so they
+   scroll away with the stage AND a swipe that starts on the gold chains to
+   the scene scroller like any other content. */
 @media (max-width: 700px) {
-  #artifact-hit, .artifact-label { display: none !important; }
+  #artifact-hit, .artifact-label { position: absolute; }
+}
+
+/* phone compositing cuts (M2): a live canvas under a backdrop-filter card
+   plus a blended grain layer is a real slice of a mid-phone's frame budget.
+   The card plate is already 80% opaque — nobody can see the refraction. */
+@media (max-width: 700px) {
+  .world-card.glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: rgba(6, 22, 18, 0.9);
+  }
+  .grain { mix-blend-mode: normal; opacity: 0.035; }
 }
 
 /* reduced-motion: the dust, flicker, breathe all hold still (the dark and the
@@ -1514,6 +1552,11 @@ html.approaching #artifact-hit { pointer-events: none; }
         <p class="hub-sub">Eleven hand-built worlds hold their orbits around something older, and unsurveyed. Choose one, and go.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel &middot; it holds the center</p>
       </div>
+
+      <!-- the pocket orrery's stage (M2): on phones this spacer holds open
+           the scroll flow where the sky canvas seats the Artifact, so the
+           world list begins below the limb. Display:none everywhere else. -->
+      <div class="hub-stage" aria-hidden="true"></div>
 
       <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
            sphere; this button is its keyboard/AT presence and the ripple trigger.
@@ -2138,7 +2181,12 @@ const finePointer = matchMedia('(pointer: fine)').matches;
 const Ticker = (() => {
   const tasks = new Set();
   let rafId = null, last = 0, clock = 0, running = false;
+  let budget = 0, lastRun = -1e9;          /* frame budget (M2): 0 = every vsync */
   function frame(now) {
+    /* budgeted skip: a 120Hz phone must not pay double for a 10Hz twinkle —
+       keep the rAF alive, run the tasks no oftener than the budget allows */
+    if (budget && now - lastRun < budget) { rafId = requestAnimationFrame(frame); return; }
+    lastRun = now;
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
@@ -2151,6 +2199,7 @@ const Ticker = (() => {
     add(t) { tasks.add(t); if (!running) { running = true; last = performance.now(); rafId = requestAnimationFrame(frame); } },
     remove(t) { tasks.delete(t); },
     get clock() { return clock; },
+    setBudget(ms) { budget = ms || 0; },
   };
 })();
 
@@ -2174,20 +2223,38 @@ const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
 const sky = document.getElementById('sky');
 const ctx = sky.getContext('2d');
 let W = 0, H = 0, DPR = 1;
-function sizeSky() {
+function sizeSkyCanvas() {
   DPR = Math.min(devicePixelRatio || 1, 2);           /* the phone-cook cap */
   W = innerWidth; H = innerHeight;
   sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+function sizeSky() {
+  sizeSkyCanvas();
   buildStars();
   measureOrbit();
   drawStatic();                                        /* rm / idle repaint */
 }
-let resizeT = null;
+let resizeT = null, settledH = 0;                      /* height baseline: set by FULL passes only */
 addEventListener('resize', () => {
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
+    /* a phone URL bar collapsing is not a rotation: a small height-only
+       delta refreshes the surface but must NOT re-roll the starfield or
+       restart the world mid-scroll (M2 — the dunes kept re-rolling).
+       Measured against the last SETTLED height (not the previous debounce
+       step) so a slow continuous drag cannot creep past the guard, and
+       phone-only: desktop window resizes always take the full path. */
+    const heightOnly = !desktop() && innerWidth === W && Math.abs(innerHeight - settledH) < 160;
+    if (heightOnly) {
+      sizeSkyCanvas();
+      measureOrbit();
+      drawStatic();
+      return;
+    }
     sizeSky();
+    settledH = H;
+    if (!desktop()) bakeMinis();                       /* breakpoint may have flipped */
     /* a rotated phone inside a world gets a fresh FX surface (Smaug kill 8) */
     if (Scenes.current && Scenes.current !== 'hub' && window.WorldFX) WorldFX.start(Scenes.current);
   }, 120);
@@ -2281,10 +2348,26 @@ function measureOrbit() {
     ART.rx = Math.min(W * 0.44, ART.r * 2.9);          /* wider ring: the bigger worlds need room */
     ART.ry = Math.max(ART.r * 0.54, Math.min(room * 0.32, ART.r * 0.78));
   } else {
-    /* phone: the Artifact is a presence low in the deep, under the chart column */
-    ART.cx = W / 2;
-    ART.cy = H * 0.72;
-    ART.r  = Math.min(W * 0.34, 150);
+    /* the pocket orrery (M2): the Artifact seats IN the .hub-stage spacer
+       and belongs to the scroll flow — its live rect places the sphere, so
+       scrolling the world list carries the Artifact away with the stage
+       instead of leaving a gold ghost fixed under the rows. The hub scene's
+       scroll listener re-runs this measure. */
+    const stage = document.querySelector('.hub-stage');
+    const sr = stage && html.classList.contains('js') ? stage.getBoundingClientRect() : null;
+    if (sr && sr.height > 0) {
+      ART.fb = false;
+      ART.cx = W / 2;
+      ART.cy = sr.top + sr.height * 0.52;
+      ART.r  = Math.min(W * 0.36, sr.height * 0.42, 150);
+    } else {
+      /* no stage laid out (boot edge / viewport disagreement): the old
+         deep-presence fallback — drawn DIM, since it sits under the rows */
+      ART.fb = true;
+      ART.cx = W / 2;
+      ART.cy = H * 0.72;
+      ART.r  = Math.min(W * 0.34, 150);
+    }
     ART.rx = 0; ART.ry = 0;
   }
   placeArtifactDom();
@@ -2375,13 +2458,21 @@ function drawSky(dt, clockMs) {
         a.style.zIndex = p.depth > 0 ? 22 : 14;
       }
       const hov = hovered === w.slug;
-      ctx.globalAlpha = hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2;
-      /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
-      PlanetForge.draw(ctx, w.slug, p.x, p.y, w.size * 0.74 * p.sc * (hov ? 1.18 : 1), clockMs, { hover: hov, rm: reduced() });
-      ctx.globalAlpha = 1;
+      /* staged bake (M2): a world still in the oven draws nothing; a fresh
+         one materializes — grows in over half a second as the orrery wakes */
+      const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
+      if (mat > 0) {
+        ctx.globalAlpha = (hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2) * mat;
+        /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
+        PlanetForge.draw(ctx, w.slug, p.x, p.y,
+          w.size * 0.74 * p.sc * (hov ? 1.18 : 1) * (0.72 + 0.28 * mat),
+          clockMs, { hover: hov, rm: reduced() });
+        ctx.globalAlpha = 1;
+      }
 
-      if (w.tell === 'dashed') {                       /* the unknown keeps its survey ring */
-        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${0.55 * (0.5 + 0.5 * dim)})`;
+      if (w.tell === 'dashed' && mat > 0) {            /* the unknown keeps its survey ring —
+                                                          but not before the world itself exists */
+        ctx.strokeStyle = `rgba(${w.a[0]},${w.a[1]},${w.a[2]},${(0.55 * (0.5 + 0.5 * dim) * mat).toFixed(3)})`;
         ctx.setLineDash([5, 7]);
         ctx.lineDashOffset = reduced() ? 0 : -t * 8;
         ctx.lineWidth = 1.4;
@@ -2396,11 +2487,18 @@ function drawSky(dt, clockMs) {
       SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
     }
     for (const e of ps) if (e.p.depth > 0) drawWorld(e);
-  } else if (Scenes.current === 'hub' && window.SphereForge) {
-    /* phone: the Artifact holds the deep beneath the chart column, dim and vast */
-    ctx.globalAlpha = 0.5;
-    SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
-    ctx.globalAlpha = 1;
+  } else if (Scenes.current === 'hub' && window.SphereForge && ART.cy > -ART.r * 1.6) {
+    /* the pocket orrery (M2): full presence — seated, shadowed, answerable,
+       and gone with its stage once the list scrolls past it. The stageless
+       fallback keeps v6's dim ambient presence under the rows instead. */
+    if (ART.fb) {
+      ctx.globalAlpha = 0.5;
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      ctx.globalAlpha = 1;
+    } else {
+      SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+    }
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
   }
 
@@ -2487,14 +2585,21 @@ function stopSonar() { clearTimeout(sonarTimer); sonarTimer = null; }
 const artHit = document.getElementById('artifact-hit');
 const artLabel = document.getElementById('artifact-label');
 function placeArtifactDom() {
+  /* phone: the disc/plate are position:absolute INSIDE the scrolling hub
+     scene (03b) — write content-space coords (viewport + scrollTop) once
+     and the browser scrolls them natively with the stage */
+  const hubEl = Scenes.els.get('hub');
+  const sTop = !desktop() && hubEl ? hubEl.scrollTop : 0;
   if (artHit) {
     artHit.style.setProperty('--ax', ART.cx + 'px');
-    artHit.style.setProperty('--ay', ART.cy + 'px');
+    artHit.style.setProperty('--ay', (ART.cy + sTop) + 'px');
     artHit.style.setProperty('--ar', Math.round(ART.r * 2) + 'px');
   }
   if (artLabel) {
     artLabel.style.setProperty('--ax', ART.cx + 'px');
-    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + 30) + 'px');
+    /* phone: the plate tucks close under the limb so it stays inside the
+       stage instead of colliding with the first world row */
+    artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + (desktop() ? 30 : 10) + sTop) + 'px');
   }
 }
 let artLast = 0, artTouches = 0, artRmT = null;
@@ -2677,6 +2782,9 @@ function setScene(name, { instant = false } = {}) {
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
+    /* homecoming resets the Artifact's face: the departure beat set a skin
+       and a tap never blurs on iOS, so untint alone cannot be trusted */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
     Orrery.startAmbient();
     scheduleSonar();                                   /* home again: the call resumes */
     WorldFX.stopAll();
@@ -2694,9 +2802,11 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
-    /* refresh this card's medallion so the little world advanced since last visit */
+    /* refresh this card's medallion so the little world advanced since last
+       visit (skip while it bakes: wiping the canvas before a no-op drawMini
+       would blank it — onReady paints it the moment it lands) */
     const med = next.querySelector('.card-planet');
-    if (med && window.PlanetForge) {
+    if (med && window.PlanetForge && (!PlanetForge.progress || PlanetForge.progress(name) > 0)) {
       const g2 = med.getContext('2d');
       const dpr2 = Math.min(devicePixelRatio || 1, 2);
       med.width = 72 * dpr2; med.height = 72 * dpr2;
@@ -2715,21 +2825,52 @@ function setScene(name, { instant = false } = {}) {
    animationend is the fast path; a deterministic timer is the guarantee it
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
+let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
 
-function travel(slug) {
+function travel(slug, fromBeat) {
   if (Scenes.transitioning || Scenes.current === slug) return;
   const w = bySlug[slug];
   if (!w) return;
 
   if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
 
+  /* the phone departure beat (M2): the orrery acknowledges the choice —
+     the sphere considers the world and a sonar ring answers — THEN the
+     warp fires. 300ms of anticipation instead of an unceremonious cut. */
+  if (!fromBeat && !desktop() && window.SphereForge && Scenes.current === 'hub'
+      && ART.cy > 0                                    /* only while the sphere is on stage */
+      && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
+    beatSlug = slug;                                   /* a second tap RE-AIMS the pending beat */
+    SphereForge.setSkin(slug);
+    SphereForge.ping();
+    if (!skyTask) Orrery.startAmbient();
+    clearTimeout(beatTimer);
+    beatTimer = setTimeout(() => {
+      beatTimer = null;
+      const s = beatSlug; beatSlug = null;
+      travel(s, true);
+    }, 300);
+    return;
+  }
+
   Scenes.transitioning = true;
-  /* aim the flood at the planet's live position */
-  const i = WORLDS.indexOf(w);
-  const p = desktop() ? planetPos(i, Ticker.clock) : { x: W / 2, y: H / 2 };
+  /* aim the flood at the planet's live position — on the phone, at the
+     tapped row itself, so the warp blooms from under the finger (M2);
+     clamped into the viewport for rows below the fold (the tour taps
+     rows the reset scroll has not revealed) */
+  let p;
+  if (desktop()) {
+    p = planetPos(WORLDS.indexOf(w), Ticker.clock);
+  } else {
+    const a = anchors.get(slug);
+    const r = a && a.getBoundingClientRect();
+    p = r && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: W / 2, y: H / 2 };
+    p.x = Math.max(0, Math.min(W, p.x));
+    p.y = Math.max(0, Math.min(H, p.y));
+  }
   html.style.setProperty('--wx', (p.x / W * 100).toFixed(1) + '%');
   html.style.setProperty('--wy', (p.y / H * 100).toFixed(1) + '%');
   html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
@@ -2777,8 +2918,10 @@ function route(instant = false) {
   setScene(slug || 'hub', { instant });
 }
 addEventListener('hashchange', () => {
-  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4) */
+  /* a Back press mid-warp always wins: cancel the pending land (Smaug kill 4)
+     — and a pending departure beat dies with it (M2) */
   if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
+  if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; beatSlug = null; }
   route(false);
 });
 
@@ -2917,10 +3060,20 @@ const TourController = (() => {
 /* ---------- HUD clock: a wall clock lives on a wall timer, not the animation
    ticker — so the rAF loop can genuinely drain and stop (Smaug kill 5) ---------- */
 const clockEl = document.getElementById('hud-clock');
+/* frame budget steering (M2): phones cap at ~30fps always; desktop demotes
+   after a minute of untouched hub (any input restores full rate next tick) */
+let lastInput = performance.now();
+['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(tp =>
+  addEventListener(tp, () => { lastInput = performance.now(); }, { passive: true, capture: true }));
 function tickClock() {
   if (!document.hidden) {
     clockEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+  /* phones run budgeted EXCEPT while the visitor is actively touching or
+     scrolling — the scroll-glued sphere must track the stage at full rate */
+  const busy = performance.now() - lastInput < 1500;
+  const idle = Scenes.current === 'hub' && performance.now() - lastInput > 60000;
+  Ticker.setBudget((!desktop() && !busy) || idle ? 33 : 0);
 }
 setInterval(tickClock, 1000);
 tickClock();
@@ -2929,7 +3082,13 @@ tickClock();
    WorldFX and Score exist — a TDZ on a later-fragment const killed setScene
    mid-flight when this ran inline; concatenation builds boot LAST) ---------- */
 function bootOrrery() {
-  PlanetForge.init(WORLDS);                            /* textures must exist before first draw */
+  /* staged bake (M2): the sphere owns frame 0; the eleven worlds land one
+     per idle slice and announce themselves everywhere they appear */
+  PlanetForge.init(WORLDS, (slug) => {
+    paintMedallion(slug);
+    paintMini(slug);
+    if (!skyTask) requestStatic();                     /* rm / idle: the newcomer still shows up */
+  });
   if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
   /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
      a thumb. TourController's parse-time stash has already claimed the one
@@ -2942,6 +3101,17 @@ function bootOrrery() {
   }
   sizeSky();
   setRM();
+  /* the pocket stage scrolls with the hub column: keep the sphere glued to
+     it (one rect read per scroll event; the ambient loop paints the move,
+     and rm gets its coalesced repaint) */
+  const hubEl = Scenes.els.get('hub');
+  if (hubEl) hubEl.addEventListener('scroll', () => {
+    if (desktop()) return;
+    lastInput = performance.now();
+    Ticker.setBudget(0);                               /* full rate NOW; tickClock re-budgets later */
+    measureOrbit();
+    if (!skyTask) requestStatic();
+  }, { passive: true });
   route(true);
   if (!reduced()) Orrery.startAmbient();
   runApproach();                                     /* first-visit arrival cinematic */
@@ -2952,19 +3122,34 @@ function bootOrrery() {
 }
 
 /* the brass card medallions: one small spinning-world portrait per card,
-   painted at boot and refreshed on each arrival (static between visits) */
-function paintMedallions() {
-  document.querySelectorAll('.card-planet').forEach(c => {
-    const sec = c.closest('.scene');
-    if (!sec || !window.PlanetForge) return;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    const size = 72;
-    c.width = size * dpr; c.height = size * dpr;
-    const g = c.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    PlanetForge.drawMini(g, sec.dataset.scene, size, Ticker.clock);
-  });
+   painted as each world bakes and refreshed on each arrival */
+function paintMedallion(slug) {
+  const sec = Scenes.els.get(slug);
+  if (!sec || !window.PlanetForge) return;
+  const c = sec.querySelector('.card-planet'); if (!c) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const size = 72;
+  c.width = size * dpr; c.height = size * dpr;
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  PlanetForge.drawMini(g, slug, size, Ticker.clock);
 }
+function paintMedallions() { WORLDS.forEach(w => paintMedallion(w.slug)); }
+
+/* the phone list shows the REAL worlds (M2): each row's dot wears a baked
+   PlanetForge portrait — one 68px offscreen bake per world, zero per-frame */
+function paintMini(slug) {
+  if (desktop() || !window.PlanetForge) return;
+  if (PlanetForge.progress && !PlanetForge.progress(slug)) return;   /* still in the oven */
+  const a = anchors.get(slug); if (!a) return;
+  const dot = a.querySelector('.pa-dot'); if (!dot) return;
+  const c = document.createElement('canvas');
+  c.width = c.height = 68;
+  PlanetForge.drawMini(c.getContext('2d'), slug, 68, Ticker.clock);
+  dot.style.backgroundImage = `url(${c.toDataURL()})`;
+  dot.classList.add('pa-mini');
+}
+function bakeMinis() { WORLDS.forEach(w => paintMini(w.slug)); }
 
 /* ---------- THE APPROACH: the once-per-session arrival cinematic ----------
    First hub visit only. You drift in from the dark and the instruments wake.
@@ -3022,7 +3207,9 @@ function runApproach() {
 
 const PlanetForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 512, TEX_H = 256;          /* 2:1 -> drawn width is always 4r */
+  /* 2:1 -> drawn width is always 4r. Halved on phones (M2): no planet there
+     is ever drawn past ~68px, and the bake is per-pixel fBm on the main thread */
+  let TEX_W = 512, TEX_H = 256;
   const RIM_S = 176, RIM_PR = 60;          /* rim sprite canvas / planet radius baked in it */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = r * RIM_DRAW */
   const docEl = document.documentElement;
@@ -3485,11 +3672,49 @@ const PlanetForge = (() => {
 
   /* ---------- API ---------- */
   return {
-    init(worlds) {
+    /* staged bake (M2): the boot used to run ~12M synchronous noise evals at
+       the exact brochure→app flip. Now the shared sprites bake at once and
+       the eleven worlds land one per idle slice — draw() no-ops for a world
+       still in the oven, and progress() lets the sky materialize it. */
+    init(worlds, onReady) {
       if (inited) return;
       inited = true;
+      /* hover:none keeps half-res to true touch devices: a 680px desktop
+         window maximized later must not live with a mushy upscale all
+         session (rotated phones stay sharp — short viewports cap R low) */
+      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 256; TEX_H = 128; }
       buildShared();
-      for (const w of worlds) P[w.slug] = buildWorld(w);
+      const queue = worlds.slice();
+      /* the timeout matters: the ambient rAF loop never leaves true idle
+         time, so an unbounded requestIdleCallback would starve forever */
+      const later = window.requestIdleCallback
+        ? (f) => requestIdleCallback(f, { timeout: 90 })
+        : (f) => setTimeout(f, 16);
+      const bakeNext = () => {
+        const w = queue.shift();
+        if (!w) return;
+        if (!P[w.slug]) {
+          P[w.slug] = buildWorld(w);
+          P[w.slug].born = performance.now();
+          if (onReady) onReady(w.slug);
+        }
+        later(bakeNext);
+      };
+      later(bakeNext);
+    },
+    /* 0 = not baked yet · (0,1] = materializing → settled.
+       Never returns exactly 0 for a BAKED world (coarse timers would read
+       "same-millisecond" as "still in the oven"), and under reduced motion
+       a baked world is simply THERE — no half-materialized ghosts with no
+       animation loop to finish them. */
+    progress(slug) {
+      const p = P[slug];
+      if (!p) return 0;
+      if (!p.born) return 1;
+      if (docEl.classList.contains('rm')) { p.born = 0; return 1; }
+      const k = (performance.now() - p.born) / 500;
+      if (k >= 1) { p.born = 0; return 1; }
+      return Math.max(k, 0.002);
     },
     draw(ctx2, slug, x, y, r, clockMs, opts) {
       if (!inited || r <= 0) return;
@@ -3505,6 +3730,9 @@ const PlanetForge = (() => {
     },
   };
 })();
+/* the engine guards its calls with `window.PlanetForge` (mirrors SphereForge/
+   WorldFX): expose it, or the medallions and phone minis silently no-op */
+window.PlanetForge = PlanetForge;
 
 
 /* ============================================================
@@ -3523,9 +3751,11 @@ const PlanetForge = (() => {
 
 const SphereForge = (() => {
   const TAU = Math.PI * 2;
-  const TEX_W = 768, TEX_H = 288;          /* gen size; baked doubled to 1536 —
+  let TEX_W = 768, TEX_H = 288;            /* gen size; baked doubled to 1536 —
                                               near-1:1 texel:pixel at hub R, so the
-                                              hammered grain stays CRISP (metal, not cloud) */
+                                              hammered grain stays CRISP (metal, not cloud).
+                                              Halved on phones (M2): R caps ~150 there and
+                                              the bake is 4 fBm fields per pixel */
   const NS = 24;                           /* fixed slice count */
   const RIM_S = 224, RIM_PR = 80;          /* rim sprite canvas / baked radius */
   const RIM_DRAW = RIM_S / RIM_PR;         /* drawn rim size = R * 2.8 */
@@ -3776,30 +4006,19 @@ const SphereForge = (() => {
   const SKIN_COVER = 2.4;                  /* drawn size = R*2.4: the render's disc (~84% of frame) covers the clip */
   const FADE_MS = 650;
   const skins = {};                        /* key -> { img, ready } */
-  const bands = {};                        /* key -> mirror-wrapped equatorial band canvas */
   let curSkin = 'orrery', nxtSkin = null, fadeT0 = 0, wantSkin = 'orrery';
   let revealReq = 0, revealUntil = -1;
-  const SKIN_SPD = 1 / 92000;              /* the Artifact turns: one revolution ~92s */
 
-  /* a render is a photo OF a sphere; to ROTATE it like a real planet we
-     strip its equatorial band (limb regions dropped: our own limb/gloss
-     lighting stays pinned on top) and mirror-wrap it into a seamless
-     scroll texture. Baked once per skin, on first use. */
-  function bandFor(key) {
+  /* the renders are COMPOSED faces — a dial, a city, a lattice. v6 stripped
+     them into a scrolling equatorial band to fake rotation, and the band
+     shredded every composition into anonymous gold streaks (art-direction
+     kill, M2). The face is now drawn PINNED at SKIN_COVER, sliced with the
+     liquid warp so the metal still lives; rotation retires for skins (the
+     zero-request base gold beneath keeps its flow). */
+  const skinRec = (key) => {
     const rec = skins[key];
-    if (!rec || !rec.ready) return null;
-    let b = bands[key];
-    if (b) return b;
-    const iw = rec.img.naturalWidth || rec.img.width, ih = rec.img.naturalHeight || rec.img.height;
-    const c = cv(2048, 512), g2 = c.getContext('2d');
-    const sx = iw * 0.10, sw = iw * 0.80, sy = ih * 0.14, sh2 = ih * 0.72;
-    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
-    g2.save(); g2.translate(2048, 0); g2.scale(-1, 1);   /* mirror half: seamless wrap */
-    g2.drawImage(rec.img, sx, sy, sw, sh2, 0, 0, 1024, 512);
-    g2.restore();
-    b = bands[key] = c;
-    return b;
-  }
+    return rec && rec.ready ? rec : null;
+  };
   function loadSkin(k) {
     if (skins[k] || !SKIN_SRC[k]) return;
     const img = new Image();
@@ -3826,6 +4045,10 @@ const SphereForge = (() => {
     init() {
       if (inited) return;
       inited = true;
+      /* true-touch phone: half-res gold — R caps ~150 there, and this bake
+         sits on the critical brochure→app flip (M2 boot-cost pass).
+         hover:none, so a small desktop window never latches the mush. */
+      if (matchMedia('(max-width: 700px) and (hover: none)').matches) { TEX_W = 384; TEX_H = 144; }
       const rnd = mulberry(seedOf('artifact'));
       baseTex = buildBase(rnd);
       flowTex = buildFlow(rnd);
@@ -3846,13 +4069,23 @@ const SphereForge = (() => {
       }
       su = rnd();
       frozenT = 40000 + su * 90000;        /* a sculpted mid-flow pose, seeded */
-      /* skins: the hub face loads first (it is the marquee); the rest arrive
-         on a lazy stagger so boot paint never waits on a network byte */
+      /* skins: the hub face loads first (it is the marquee). The rest arrive
+         on a lazy stagger ONLY where hover exists and data isn't precious —
+         a phone was eating every skin it could never hover (M2); there,
+         setSkin lazy-loads the one face a tap actually asks for */
       loadSkin('orrery');
-      let di = 0;
-      for (const k in SKIN_SRC) {
-        if (k === 'orrery') continue;
-        setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+      const eager = matchMedia('(hover: hover)').matches
+        && !(navigator.connection && navigator.connection.saveData);
+      if (eager) {
+        let di = 0;
+        for (const k in SKIN_SRC) {
+          if (k === 'orrery') continue;
+          setTimeout(() => loadSkin(k), 1400 + di++ * 650);
+        }
+      } else {
+        /* even on the lazy path, the reveal's face rides along late: its
+           2.6s window must never burn down waiting on a first fetch */
+        setTimeout(() => loadSkin('biomech'), 4000);
       }
     },
 
@@ -3891,39 +4124,45 @@ const SphereForge = (() => {
       if (nxtSkin) {
         if ((clockMs - fadeT0) / FADE_MS >= 1) { curSkin = nxtSkin; nxtSkin = null; }
       }
-      const bandCur = bandFor(revealing ? 'biomech' : curSkin);
-      const skinOn = !!bandCur;
+      const recCur = skinRec(revealing ? 'biomech' : curSkin);
+      const skinOn = !!recCur;
 
       g.save();
       g.beginPath(); g.arc(x, y, R, 0, TAU); g.clip();
 
       if (skinOn) {
-        /* TRUE ROTATION: the skin's equatorial band scrolls under our pinned
-           lighting, sliced with a two-wave liquid warp: the surface turns
-           like a planet AND morphs like something alive under the metal */
-        const sscroll = ((t * SKIN_SPD) % 1) * half;
+        /* THE FACE, PINNED: the render's disc seats over the clip at
+           SKIN_COVER, sliced with the two-wave liquid warp so the metal
+           still breathes — the composition finally survives to the screen */
         const A2 = R * 0.042;              /* morph amplitude, stronger than v5 */
-        const BS = 24, bsh = 512 / BS, bdh = D / BS;
-        const bandNxt = (!revealing && nxtSkin) ? bandFor(nxtSkin) : null;
-        const fp = bandNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
+        const BS = 24;
+        const S = R * SKIN_COVER, sy0 = y - S / 2, sdh = S / BS;
+        const iw = recCur.img.naturalWidth || recCur.img.width;
+        const ih = recCur.img.naturalHeight || recCur.img.height;
+        const ish = ih / BS;
+        const recNxt = (!revealing && nxtSkin) ? skinRec(nxtSkin) : null;
+        const fp = recNxt ? Math.min(1, Math.max(0, (clockMs - fadeT0) / FADE_MS)) : 0;
         for (let i = 0; i < BS; i++) {
           let off = A2 * Math.sin(t * 0.00071 + i * 0.48)
                   + A2 * 0.7 * Math.sin(t * 0.00043 - i * 0.22 + 1.7);
-          if (rippling) {                  /* the ripple surges the warp locally */
-            const sd = ((i + 0.5) * bdh) - R - ringR;
+          if (rippling) {                  /* the ripple surges the warp locally
+                                              (abs: BOTH hemispheres answer, like the base gold) */
+            const sd = Math.abs(sy0 + (i + 0.5) * sdh - y) - ringR;
             off += A2 * 2.4 * env * Math.exp(-(sd * sd) / (2 * SIG2 * R * R))
                  * Math.sin(t * 0.012 + i * 1.3);
           }
-          g.drawImage(bandCur, 0, i * bsh, 2048, bsh,
-            x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
-          if (bandNxt && fp > 0) {
+          g.drawImage(recCur.img, 0, i * ish, iw, ish,
+            x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
+          if (recNxt && fp > 0) {
+            const iw2 = recNxt.img.naturalWidth || recNxt.img.width;
+            const ish2 = (recNxt.img.naturalHeight || recNxt.img.height) / BS;
             g.globalAlpha = fp;
-            g.drawImage(bandNxt, 0, i * bsh, 2048, bsh,
-              x - R - pad - sscroll + off, y - R + i * bdh, dw, bdh + 0.5);
+            g.drawImage(recNxt.img, 0, i * ish2, iw2, ish2,
+              x - S / 2 + off, sy0 + i * sdh, S, sdh + 0.5);
             g.globalAlpha = 1;
           }
         }
-        /* the liquid sheen rides the turning surface, counter-drifting */
+        /* the liquid sheen keeps drifting over the pinned face: living light */
         g.globalCompositeOperation = 'screen';
         g.globalAlpha = reduced2 ? 0.09 : 0.08 + 0.03 * Math.sin(t * 0.0004);
         g.drawImage(flowTex, x - R - pad - fscroll, y - R, dw, D);
