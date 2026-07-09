@@ -277,8 +277,14 @@ function armGrabPhysics() {
   if (!finePointer) return;
   anchors.forEach((a, slug) => {
     const i = WORLDS.indexOf(bySlug[slug]);
+    /* anchors are LINKS: the browser starts a native link-drag on them,
+       which swallows every pointermove and cancels the grab — the throw
+       never worked on a real mouse until this was cut off */
+    a.draggable = false;
+    a.addEventListener('dragstart', (e) => e.preventDefault());
     a.addEventListener('pointerdown', (e) => {
       if (!desktop() || reduced() || Scenes.current !== 'hub' || e.button !== 0) return;
+      e.preventDefault();                              /* no text-selection ride-along */
       grabIx = i; grabPX = e.clientX; grabPY = e.clientY;
       grabDist = 0; grabVX = 0; grabVY = 0;
       try { a.setPointerCapture(e.pointerId); } catch (_) {}
@@ -895,9 +901,7 @@ function setScene(name, { instant = false } = {}) {
 
   const isHub = name === 'hub';
   returnBtn.hidden = isHub;
-  if (prev) prev.classList.remove('card-away');        /* the sink never follows you out */
   if (isHub) {
-    clearTimeout(cardAwayT);
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
@@ -921,17 +925,6 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
-    /* the card sinks after a breath so the WORLD owns the stage (spectacle
-       pass) — hover/focus/tap brings it straight back (CSS + the delegate) */
-    clearTimeout(cardAwayT);
-    next.classList.remove('card-away');
-    if (!reduced()) cardAwayT = setTimeout(() => {
-      /* the ARRIVAL landing (h2 focus, for AT) must not pin the card awake
-         through :focus-within — release it; a real control focus still holds */
-      const h2 = next.querySelector('h2');
-      if (h2 && document.activeElement === h2) h2.blur();
-      next.classList.add('card-away');
-    }, 5200);
     /* refresh this card's medallion so the little world advanced since last
        visit (skip while it bakes: wiping the canvas before a no-op drawMini
        would blank it — onReady paints it the moment it lands) */
@@ -943,9 +936,14 @@ function setScene(name, { instant = false } = {}) {
       g2.setTransform(dpr2, 0, 0, dpr2, 0, 0);
       PlanetForge.drawMini(g2, name, 72, Ticker.clock);
     }
-    /* move focus to the world heading for keyboard/AT travelers */
+    /* move focus for keyboard/AT travelers: the heading when it is shown
+       (brochure), else the scene itself (the visual cut hides the h2) */
     const h = next.querySelector('h2');
-    if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+    if (h && getComputedStyle(h).display !== 'none') {
+      h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true });
+    } else {
+      next.setAttribute('tabindex', '-1'); next.focus({ preventScroll: true });
+    }
   }
   Orrery.events.dispatchEvent(new CustomEvent('scene', { detail: { name, instant } }));
 }
@@ -956,7 +954,6 @@ function setScene(name, { instant = false } = {}) {
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
 let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
-let cardAwayT = null;                                  /* the world-card's sink timer */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
@@ -1279,28 +1276,6 @@ function bootOrrery() {
   anchors.forEach((a, slug) => {
     const em = a.querySelector('.pa-label em');
     if (em && bySlug[slug] && bySlug[slug].poem) em.textContent = bySlug[slug].poem;
-  });
-  /* a tap anywhere in a sunk-card scene surfaces the card again (touch has
-     no hover); the sink re-arms after the same breath */
-  addEventListener('pointerdown', (e) => {
-    const sec = e.target && e.target.closest && e.target.closest('.scene.card-away');
-    if (!sec) return;
-    sec.classList.remove('card-away');
-    clearTimeout(cardAwayT);
-    cardAwayT = setTimeout(() => { if (Scenes.els.get(Scenes.current) === sec) sec.classList.add('card-away'); }, 5200);
-  }, { passive: true });
-  /* the plates tilt under a fine pointer (awwwards idiom, rm-gated) */
-  if (finePointer) document.querySelectorAll('.world-card').forEach(card => {
-    card.addEventListener('pointermove', (e) => {
-      if (reduced() || !desktop()) return;
-      const r = card.getBoundingClientRect();
-      card.style.setProperty('--tiltY', (((e.clientX - r.left) / r.width - 0.5) * 5).toFixed(2) + 'deg');
-      card.style.setProperty('--tiltX', ((0.5 - (e.clientY - r.top) / r.height) * 4).toFixed(2) + 'deg');
-    }, { passive: true });
-    card.addEventListener('pointerleave', () => {
-      card.style.setProperty('--tiltY', '0deg');
-      card.style.setProperty('--tiltX', '0deg');
-    }, { passive: true });
   });
   sizeSky();
   setRM();

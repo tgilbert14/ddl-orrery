@@ -643,12 +643,12 @@ const Score = (() => {
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
-  /* localStorage, deliberately: under DEFAULT-ON, an opt-out that lasts one
-     tab is a hostile default — "off" must survive new tabs and return visits
-     (Smaug kill: the opt-out evaporated in sessionStorage) */
+  /* sessionStorage, by the founder's order: every fresh visit is DEFAULT-ON
+     again — the score ignites on the first activation-bearing gesture, and
+     an opt-out holds for the tab you turned it off in, no longer */
   const safeStore = {
-    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
   };
   async function turnOn() {
     if (!ctx) buildGraph();

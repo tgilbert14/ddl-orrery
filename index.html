@@ -1154,29 +1154,41 @@ html.rm [data-scene="beacons"].is-signaled .beacon-pyres { animation: bcn-flare-
               0 0 30px rgba(var(--wa-rgb, var(--acc-rgb)), 0.16);
   clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px),
                      calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
-  transform: perspective(1000px) rotateX(var(--tiltX, 0deg)) rotateY(var(--tiltY, 0deg));
-  transition: opacity 0.6s var(--ease-out), transform 0.18s ease-out;
-}
-/* the plate glint: a light bar sweeps the card every ~9s while its world
-   plays (rm holds still; the clip-path contains it) */
-@media (prefers-reduced-motion: no-preference) {
-  html:not(.rm) .world.is-active .world-card::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(105deg, transparent 42%, rgba(255, 248, 224, 0.07) 50%, transparent 58%);
-    transform: translateX(-130%);
-    animation: plate-sheen 9s ease-in-out infinite 1.2s;
-  }
-}
-/* the card SINKS after a few seconds so the world owns the stage (JS arms
-   .card-away on arrival); pointer or focus brings it straight back */
-html.js .world.card-away .world-card:not(:hover):not(:focus-within) {
-  opacity: 0.13;
 }
 .world-card h2 {
   /* neon signage: the world's own light haloes its name */
   text-shadow: 0 0 18px rgba(var(--wa-rgb, var(--acc-rgb)), 0.55),
                0 0 52px rgba(var(--wa-rgb, var(--acc-rgb)), 0.25);
 }
+
+/* ============================================================
+   THE VISUAL CUT (founder's order): app mode shows WORLDS, not
+   plates. The whole hub lockup and every world card vanish; what
+   survives of each card is its one INTERACTIVE control, pinned as
+   a floating chip under the location strip, top-left. The no-JS
+   brochure below all these html.js rules keeps every word.
+   ============================================================ */
+html.js .hub-copy { display: none; }
+
+html.js .world-card,
+html.js .world-card.glass {                            /* .glass specificity: the plate skin,
+                                                          rivets, blur and phone overrides all
+                                                          stand down with it */
+  position: fixed; top: 5.6rem; left: 1.4rem; z-index: 30;
+  width: auto; max-width: 20rem; padding: 0; margin: 0;
+  background: none; border: 0; box-shadow: none; clip-path: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  animation: none;
+}
+/* only the controls survive: the toy row (button) and Uncharted's contact
+   note. Everything else on the plate — name, copy, lore, captions, the
+   in-card return link (the HUD already carries one) — stands down. */
+html.js .world-card > :not(.w-note):not(.w-cta) { display: none; }
+html.js .world-card .w-note { margin: 0 0 0.5rem; }
+html.js .world-card .w-note--live { display: none; }   /* caption-only notes go too */
+html.js .world-card .w-note .microlabel { display: none; }
+html.js .world-card .w-cta { margin: 0; }
+html.js .world-card .w-proof { display: none; }
 /* the medallion slot: integrator wires PlanetForge.drawMini into it */
 .card-planet {
   position: absolute;
@@ -2558,8 +2570,14 @@ function armGrabPhysics() {
   if (!finePointer) return;
   anchors.forEach((a, slug) => {
     const i = WORLDS.indexOf(bySlug[slug]);
+    /* anchors are LINKS: the browser starts a native link-drag on them,
+       which swallows every pointermove and cancels the grab — the throw
+       never worked on a real mouse until this was cut off */
+    a.draggable = false;
+    a.addEventListener('dragstart', (e) => e.preventDefault());
     a.addEventListener('pointerdown', (e) => {
       if (!desktop() || reduced() || Scenes.current !== 'hub' || e.button !== 0) return;
+      e.preventDefault();                              /* no text-selection ride-along */
       grabIx = i; grabPX = e.clientX; grabPY = e.clientY;
       grabDist = 0; grabVX = 0; grabVY = 0;
       try { a.setPointerCapture(e.pointerId); } catch (_) {}
@@ -3176,9 +3194,7 @@ function setScene(name, { instant = false } = {}) {
 
   const isHub = name === 'hub';
   returnBtn.hidden = isHub;
-  if (prev) prev.classList.remove('card-away');        /* the sink never follows you out */
   if (isHub) {
-    clearTimeout(cardAwayT);
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
@@ -3202,17 +3218,6 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
-    /* the card sinks after a breath so the WORLD owns the stage (spectacle
-       pass) — hover/focus/tap brings it straight back (CSS + the delegate) */
-    clearTimeout(cardAwayT);
-    next.classList.remove('card-away');
-    if (!reduced()) cardAwayT = setTimeout(() => {
-      /* the ARRIVAL landing (h2 focus, for AT) must not pin the card awake
-         through :focus-within — release it; a real control focus still holds */
-      const h2 = next.querySelector('h2');
-      if (h2 && document.activeElement === h2) h2.blur();
-      next.classList.add('card-away');
-    }, 5200);
     /* refresh this card's medallion so the little world advanced since last
        visit (skip while it bakes: wiping the canvas before a no-op drawMini
        would blank it — onReady paints it the moment it lands) */
@@ -3224,9 +3229,14 @@ function setScene(name, { instant = false } = {}) {
       g2.setTransform(dpr2, 0, 0, dpr2, 0, 0);
       PlanetForge.drawMini(g2, name, 72, Ticker.clock);
     }
-    /* move focus to the world heading for keyboard/AT travelers */
+    /* move focus for keyboard/AT travelers: the heading when it is shown
+       (brochure), else the scene itself (the visual cut hides the h2) */
     const h = next.querySelector('h2');
-    if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+    if (h && getComputedStyle(h).display !== 'none') {
+      h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true });
+    } else {
+      next.setAttribute('tabindex', '-1'); next.focus({ preventScroll: true });
+    }
   }
   Orrery.events.dispatchEvent(new CustomEvent('scene', { detail: { name, instant } }));
 }
@@ -3237,7 +3247,6 @@ function setScene(name, { instant = false } = {}) {
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
 let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
-let cardAwayT = null;                                  /* the world-card's sink timer */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
@@ -3560,28 +3569,6 @@ function bootOrrery() {
   anchors.forEach((a, slug) => {
     const em = a.querySelector('.pa-label em');
     if (em && bySlug[slug] && bySlug[slug].poem) em.textContent = bySlug[slug].poem;
-  });
-  /* a tap anywhere in a sunk-card scene surfaces the card again (touch has
-     no hover); the sink re-arms after the same breath */
-  addEventListener('pointerdown', (e) => {
-    const sec = e.target && e.target.closest && e.target.closest('.scene.card-away');
-    if (!sec) return;
-    sec.classList.remove('card-away');
-    clearTimeout(cardAwayT);
-    cardAwayT = setTimeout(() => { if (Scenes.els.get(Scenes.current) === sec) sec.classList.add('card-away'); }, 5200);
-  }, { passive: true });
-  /* the plates tilt under a fine pointer (awwwards idiom, rm-gated) */
-  if (finePointer) document.querySelectorAll('.world-card').forEach(card => {
-    card.addEventListener('pointermove', (e) => {
-      if (reduced() || !desktop()) return;
-      const r = card.getBoundingClientRect();
-      card.style.setProperty('--tiltY', (((e.clientX - r.left) / r.width - 0.5) * 5).toFixed(2) + 'deg');
-      card.style.setProperty('--tiltX', ((0.5 - (e.clientY - r.top) / r.height) * 4).toFixed(2) + 'deg');
-    }, { passive: true });
-    card.addEventListener('pointerleave', () => {
-      card.style.setProperty('--tiltY', '0deg');
-      card.style.setProperty('--tiltX', '0deg');
-    }, { passive: true });
   });
   sizeSky();
   setRM();
@@ -7299,12 +7286,12 @@ const Score = (() => {
   });
 
   /* ---------- the toggle: state-verified, never a lying label ---------- */
-  /* localStorage, deliberately: under DEFAULT-ON, an opt-out that lasts one
-     tab is a hostile default — "off" must survive new tabs and return visits
-     (Smaug kill: the opt-out evaporated in sessionStorage) */
+  /* sessionStorage, by the founder's order: every fresh visit is DEFAULT-ON
+     again — the score ignites on the first activation-bearing gesture, and
+     an opt-out holds for the tab you turned it off in, no longer */
   const safeStore = {
-    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+    get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) {} },
   };
   async function turnOn() {
     if (!ctx) buildGraph();
