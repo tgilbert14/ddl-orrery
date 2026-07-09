@@ -1961,7 +1961,8 @@ const WorldFX = (() => {
   /* ============================================================
      THE BEACONS: alpine dusk range + a 7-pyre signal chain
      caps: 5 precomputed ridges + snow Path2Ds · embers 96 · smoke 26 ·
-           stars <=90 · mist 18 · 3 prebaked sprites: glow, moon, mist
+           ash 8 · stars <=90 · mist 18 · clouds 8 · 1 fell shadow ·
+           prebaked sprites: glow, moon, mist, cloud, eye
            (no per-frame gradients)
      ============================================================ */
   const BCN_N = 7, BCN_STAGGER = 900, BCN_RISE = 260, BCN_HOLD = 3200,
@@ -2060,18 +2061,17 @@ const WorldFX = (() => {
         }
         return { xs, ys, fill, driftA, driftS, phase: rnd(0, 7), baseY, amp };
       }
-      /* alpenglow dusk: violet-slate silhouettes against the last amber light */
+      /* Mordor dusk: ash-grey charcoal silhouettes under a stormlit rack */
       const ridges = [
-        ridge(H * 0.40, 54,  'rgba(64,48,96,1)', 8,  0.000026),    /* farthest, still holding the glow */
-        ridge(H * 0.50, 72,  'rgba(47,36,78,1)', 13, 0.000036),
-        ridge(H * 0.61, 92,  'rgba(32,25,58,1)', 19, 0.000048),
-        ridge(H * 0.73, 112, 'rgba(19,15,40,1)', 26, 0.000060),
-        ridge(H * 0.85, 130, 'rgba(9,7,22,1)',   34, 0.000072),    /* nearest apron (no pyres) */
+        ridge(H * 0.40, 54,  'rgba(62,50,72,1)', 8,  0.000026),    /* farthest, stormlight grey */
+        ridge(H * 0.50, 72,  'rgba(46,37,56,1)', 13, 0.000036),
+        ridge(H * 0.61, 92,  'rgba(32,26,42,1)', 19, 0.000048),
+        ridge(H * 0.73, 112, 'rgba(19,16,28,1)', 26, 0.000060),
+        ridge(H * 0.85, 130, 'rgba(9,8,15,1)',   34, 0.000072),    /* nearest apron (no pyres) */
       ];
-      /* snow caps, precomputed once as Path2D bands hugging each crest —
-         the far caps still blush alpenglow rose, the near ones have gone cold */
-      const SNOWC = ['rgba(226,170,172,0.75)', 'rgba(196,152,182,0.62)',
-                     'rgba(146,124,176,0.55)', 'rgba(102,92,148,0.48)', 'rgba(64,60,108,0.42)'];
+      /* snow caps gone cold under the storm; the far ones keep one ember kiss */
+      const SNOWC = ['rgba(192,162,168,0.68)', 'rgba(160,142,162,0.58)',
+                     'rgba(122,110,138,0.52)', 'rgba(86,80,108,0.45)', 'rgba(56,54,78,0.40)'];
       for (let k = 0; k < ridges.length; k++) {
         ridges[k].snow = bcnSnowPath(ridges[k]);
         ridges[k].snowFill = SNOWC[k];
@@ -2133,12 +2133,115 @@ const WorldFX = (() => {
           seed: rnd(0, 7),
         });
       }
-      /* the 8th light: where the answer will rise, just past the far line */
-      const gA = Math.max(0, Math.min(Nr - 1, Math.round((W * 0.965 - x0) / STEP)));
+      /* THE LOTR RETHEME (the owner's pin brief): storm clouds the fires
+         underlight, Mount Doom smoldering in the west, two river-kings in
+         the mist gorge, a fell shadow across the moon — and past the last
+         ridge, the black tower. The oldest fire on the range does not need
+         lighting: when the 7th pyre catches, the Eye opens. */
+      /* one dark storm cloud, baked once */
+      const cc = document.createElement('canvas'); cc.width = 200; cc.height = 64;
+      const cg = cc.getContext('2d');
+      cg.setTransform(1, 0, 0, 0.32, 0, 0);
+      const cgr = cg.createRadialGradient(100, 100, 6, 100, 100, 96);
+      cgr.addColorStop(0, 'rgba(15,12,20,0.85)');
+      cgr.addColorStop(0.6, 'rgba(17,14,24,0.5)');
+      cgr.addColorStop(1, 'rgba(19,15,26,0)');
+      cg.fillStyle = cgr; cg.beginPath(); cg.arc(100, 100, 96, 0, 7); cg.fill();
+      const clouds = [];
+      for (let i = 0; i < 8; i++) clouds.push({
+        x: Math.random() * W, y: H * rnd(0.03, 0.26),
+        w: rnd(280, 640), v: rnd(0.004, 0.011) * (Math.random() < 0.7 ? 1 : -1),
+        a: rnd(0.5, 0.95), seed: rnd(0, 7),
+      });
+      /* the Eye, baked once as a flame ring (its slit roves live, per frame) */
+      const ec = document.createElement('canvas'); ec.width = ec.height = 96;
+      const eg = ec.getContext('2d');
+      const egr = eg.createRadialGradient(48, 48, 6, 48, 48, 48);
+      egr.addColorStop(0, 'rgba(255,238,180,0.9)');
+      egr.addColorStop(0.34, 'rgba(255,170,60,0.95)');
+      egr.addColorStop(0.62, 'rgba(214,80,20,0.5)');
+      egr.addColorStop(1, 'rgba(160,40,10,0)');
+      eg.fillStyle = egr;
+      eg.save(); eg.translate(48, 48); eg.scale(1, 0.62);
+      eg.beginPath(); eg.arc(0, 0, 46, 0, 7); eg.restore(); eg.fill();
+      /* the black tower, one Path2D: jagged taper up into two crown horns */
+      const gA = Math.max(0, Math.min(Nr - 1, Math.round((W * 0.885 - x0) / STEP)));
+      const towX = W * 0.885, towBase = Math.min(ridges[0].ys[gA], ridges[1].ys[gA]) + 26;
+      const eyeY = H * 0.145, tw2 = Math.max(18, Math.min(30, W * 0.024));
+      const th = towBase - (eyeY + tw2 * 0.45);
+      const tower = new Path2D();
+      tower.moveTo(towX - tw2 * 1.8, towBase);
+      tower.lineTo(towX - tw2 * 1.0, towBase - th * 0.30);
+      tower.lineTo(towX - tw2 * 1.25, towBase - th * 0.34);
+      tower.lineTo(towX - tw2 * 0.7, towBase - th * 0.62);
+      tower.lineTo(towX - tw2 * 0.85, towBase - th * 0.66);
+      tower.lineTo(towX - tw2 * 0.62, eyeY + tw2 * 0.5);
+      tower.lineTo(towX - tw2 * 0.85, eyeY - tw2 * 0.5);
+      tower.lineTo(towX - tw2 * 0.45, eyeY - tw2 * 1.35);
+      tower.lineTo(towX - tw2 * 0.28, eyeY + tw2 * 0.15);
+      tower.lineTo(towX - tw2 * 0.16, eyeY + tw2 * 0.45);
+      tower.lineTo(towX + tw2 * 0.16, eyeY + tw2 * 0.45);
+      tower.lineTo(towX + tw2 * 0.28, eyeY + tw2 * 0.15);
+      tower.lineTo(towX + tw2 * 0.45, eyeY - tw2 * 1.35);
+      tower.lineTo(towX + tw2 * 0.85, eyeY - tw2 * 0.5);
+      tower.lineTo(towX + tw2 * 0.62, eyeY + tw2 * 0.5);
+      tower.lineTo(towX + tw2 * 0.85, towBase - th * 0.66);
+      tower.lineTo(towX + tw2 * 0.7, towBase - th * 0.62);
+      tower.lineTo(towX + tw2 * 1.25, towBase - th * 0.34);
+      tower.lineTo(towX + tw2 * 1.0, towBase - th * 0.30);
+      tower.lineTo(towX + tw2 * 1.8, towBase);
+      tower.closePath();
+      /* Mount Doom in the west + its lava threads */
+      const doomX = W * 0.135, doomY = H * 0.265, doomW = W * 0.16;
+      const doom = new Path2D();
+      doom.moveTo(doomX - doomW, H * 0.44);
+      doom.lineTo(doomX - doomW * 0.16, doomY);
+      doom.lineTo(doomX - doomW * 0.05, doomY + 6);
+      doom.lineTo(doomX + doomW * 0.07, doomY + 2);
+      doom.lineTo(doomX + doomW * 0.18, doomY + 10);
+      doom.lineTo(doomX + doomW, H * 0.44);
+      doom.closePath();
+      const lava = new Path2D();
+      lava.moveTo(doomX - doomW * 0.04, doomY + 6);
+      lava.quadraticCurveTo(doomX - doomW * 0.07, doomY + 34, doomX - doomW * 0.10, H * 0.40 - 10);
+      lava.moveTo(doomX + doomW * 0.05, doomY + 4);
+      lava.quadraticCurveTo(doomX + doomW * 0.10, doomY + 36, doomX + doomW * 0.14, H * 0.40 - 6);
+      const ashes = new Array(8);
+      for (let i = 0; i < ashes.length; i++) ashes[i] = { on: false, x: 0, y: 0, vy: 0, life: 0, max: 1, sc: 1, seed: 0 };
+      /* the river-kings: two colossi flanking the gorge in mist band 1 */
+      function king(bx, by, sc, m) {
+        /* an A-line robe, one slim arm held out, a neck notch, a crown:
+           enough grammar to read as a figure at 100px in the mist */
+        const p = new Path2D();
+        const X = (x) => bx + x * sc * m, Y = (y) => by - y * sc;
+        p.moveTo(X(-14), Y(0));
+        p.lineTo(X(-9), Y(14));                                  /* robe hem tapers up */
+        p.lineTo(X(-9), Y(40));
+        p.lineTo(X(-20), Y(40)); p.lineTo(X(-20), Y(44.5));      /* the slim out-held arm */
+        p.lineTo(X(-8), Y(44));
+        p.lineTo(X(-7), Y(50));                                  /* shoulder */
+        p.lineTo(X(-3.5), Y(53));                                /* neck */
+        p.lineTo(X(-4.5), Y(58));
+        p.lineTo(X(-5), Y(63)); p.lineTo(X(-2), Y(59));          /* crown spikes */
+        p.lineTo(X(0), Y(64)); p.lineTo(X(2), Y(59)); p.lineTo(X(5), Y(63));
+        p.lineTo(X(4.5), Y(58)); p.lineTo(X(3.5), Y(53));
+        p.lineTo(X(7), Y(50));                                   /* far shoulder */
+        p.lineTo(X(9), Y(38));
+        p.lineTo(X(9), Y(14)); p.lineTo(X(14), Y(0));
+        p.closePath();
+        return p;
+      }
+      const kSc = H * 0.0028 * Math.min(1, W / 640);   /* portrait phones: smaller kings, same gorge */
+      const kingL = king(W * 0.45, H * 0.575, kSc, -1);
+      const kingR = king(W * 0.578, H * 0.595, kSc * 0.92, 1);   /* staggered: brothers, not gateposts */
       const st = {
         ridges, pyres, glow: oc, embers, smoke, stars, moon: mc, mistS: fc, mist,
         moonX: W * 0.20, moonY: H * 0.15,
-        ans: 0, ansX: W * 0.965, ansY: Math.min(ridges[0].ys[gA], ridges[1].ys[gA]) - 10,
+        clouds, cloudS: cc, eyeS: ec, tower, tw2, eyeX: towX, eyeY,
+        doom, lava, doomX, doomY, ashes, ashAcc: 0,
+        kingL, kingR, fell: { on: false, next: 0, t0: 0, dir: 1, sp: 0.09, y0: 0, ph: 0 },
+        fire: 0.1,
+        ans: 0,
         inten: new Float32Array(BCN_N), rdrift: new Float32Array(ridges.length),
         sig: { on: false, t0: 0 }, burst: new Uint8Array(BCN_N),
         next: null, lastEnd: -99999, calm: 1, btnOn: false,
@@ -2202,17 +2305,54 @@ const WorldFX = (() => {
       st.gust *= Math.pow(0.9995, dt);
       const wind = 0.25 + 0.18 * Math.sin(clock * 0.0003) + st.gust * 0.5;
 
-      g.globalAlpha = 0.92 + 0.08 * Math.sin(clock * 0.0006);    /* the moon rides the dusk */
-      g.drawImage(st.moon, st.moonX - 56, st.moonY - 56);
-      g.globalAlpha = 1;
-      for (const sp of st.stars) {                               /* stars behind the range */
+      for (const sp of st.stars) {                               /* a few stars through the storm rack */
         const tw = 0.55 + 0.45 * Math.sin(clock * 0.0016 + sp.tw);
-        g.fillStyle = `rgba(223,233,255,${(0.25 + 0.6 * tw) * st.calm})`;
+        g.fillStyle = `rgba(223,233,255,${(0.25 + 0.6 * tw) * st.calm * 0.6})`;
         g.beginPath(); g.arc(sp.x, sp.y, sp.r, 0, 7); g.fill();
       }
+      g.globalAlpha = 0.72 + 0.08 * Math.sin(clock * 0.0006);    /* the moon, storm-veiled */
+      g.drawImage(st.moon, st.moonX - 56, st.moonY - 56);
+      g.globalAlpha = 1;
 
-      /* the answer beyond the range: past the 7th fire, an 8th light rises
-         far off — someone on a colder peak saw, and lit theirs */
+      /* Mount Doom smolders in the west; its ash climbs across the moon */
+      const dflick = 0.6 + 0.4 * Math.abs(Math.sin(clock * 0.0021 + 2) * Math.sin(clock * 0.0006));
+      g.fillStyle = 'rgba(24,17,26,1)';
+      g.fill(st.doom);
+      const dw = 90 * (0.8 + 0.3 * dflick);
+      g.globalAlpha = 0.26 + 0.16 * dflick;
+      g.drawImage(st.glow, st.doomX - dw / 2, st.doomY - dw * 0.42, dw, dw * 0.8);
+      g.globalAlpha = 1;
+      g.strokeStyle = `rgba(255,120,44,${0.30 + 0.28 * dflick})`;
+      g.lineWidth = 1.6;
+      g.stroke(st.lava);
+      st.ashAcc += dt;
+      if (st.ashAcc > 520) { st.ashAcc = 0;
+        for (const a2 of st.ashes) if (!a2.on) {
+          a2.on = true; a2.x = st.doomX; a2.y = st.doomY + 4;
+          a2.vy = -(0.010 + Math.random() * 0.010);
+          a2.life = 0; a2.max = 5200 + Math.random() * 3600;
+          a2.sc = 0.8 + Math.random() * 1.3; a2.seed = Math.random() * 7;
+          break;
+        }
+      }
+      g.fillStyle = 'rgba(30,22,30,1)';
+      for (const a2 of st.ashes) {
+        if (!a2.on) continue;
+        a2.life += dt; const k2 = a2.life / a2.max;
+        if (k2 >= 1) { a2.on = false; continue; }
+        a2.y += a2.vy * dt;
+        a2.x += (0.006 + wind * 0.004) * dt;
+        g.globalAlpha = (k2 < 0.15 ? k2 / 0.15 : 1 - (k2 - 0.15) / 0.85) * 0.16;
+        g.beginPath(); g.arc(a2.x, a2.y, (5 + 16 * k2) * a2.sc, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
+
+      /* the black tower past the range (its Eye answers in the additive pass) */
+      g.fillStyle = 'rgba(9,7,13,0.96)';
+      g.fill(st.tower);
+
+      /* the Eye's envelope: past the 7th fire, something far off opens.
+         The oldest fire on the range does not need lighting. */
       let ansT = 0;
       if (st.sig.on) {
         const ag = clock - (st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + 1300);
@@ -2220,6 +2360,56 @@ const WorldFX = (() => {
         if (clock > settleStart) ansT *= Math.max(0, 1 - (clock - settleStart) / BCN_SETTLE);
       }
       st.ans += (ansT - st.ans) * Math.min(1, dt / 380);
+
+      /* the storm rack: dark bellies that catch the fire when the chain runs
+         (eased, so run start/end never pops the whole sky in one frame) */
+      st.fire += (Math.min(1, (st.sig.on ? 0.55 : 0.10) + st.ans * 0.5) - st.fire) * Math.min(1, dt / 600);
+      const fireLvl = st.fire;
+      for (const cl of st.clouds) {
+        cl.x += cl.v * (0.5 + wind * 0.5) * dt;
+        const hw2 = cl.w / 2, ch2 = cl.w * 0.32;
+        if (cl.x > W + hw2) cl.x = -hw2; else if (cl.x < -hw2) cl.x = W + hw2;
+        g.globalAlpha = cl.a * (0.75 + 0.25 * Math.sin(clock * 0.0003 + cl.seed));
+        g.drawImage(st.cloudS, cl.x - hw2, cl.y - ch2 / 2, cl.w, ch2);
+        g.globalAlpha = (0.04 + 0.22 * fireLvl) * cl.a;
+        g.drawImage(st.glow, cl.x - hw2 * 0.7, cl.y + ch2 * 0.08, cl.w * 0.7, ch2 * 0.5);
+      }
+      g.globalAlpha = 1;
+
+      /* a fell shadow crosses, now and then */
+      const fb2 = st.fell;
+      if (fb2.next === 0) fb2.next = clock + 8000 + Math.random() * 8000;
+      if (!fb2.on && clock >= fb2.next) {
+        fb2.on = true; fb2.t0 = clock;
+        fb2.dir = Math.random() < 0.5 ? 1 : -1;
+        fb2.sp = 0.075 + Math.random() * 0.035;
+        fb2.y0 = H * (0.10 + Math.random() * 0.12);
+        fb2.ph = Math.random() * 7;
+      }
+      if (fb2.on) {
+        const age = clock - fb2.t0;
+        const bx2 = fb2.dir > 0 ? -40 + fb2.sp * age : W + 40 - fb2.sp * age;
+        if (bx2 < -60 || bx2 > W + 60) { fb2.on = false; fb2.next = clock + 24000 + Math.random() * 22000; }
+        else {
+          const by2 = fb2.y0 + Math.sin(age * 0.0012 + fb2.ph) * 12;
+          const flap = Math.sin(age * 0.013);
+          g.fillStyle = 'rgba(10,8,14,0.92)';
+          g.beginPath();                                          /* body, head, tail */
+          g.moveTo(bx2 - 11 * fb2.dir, by2 + 1);
+          g.quadraticCurveTo(bx2, by2 - 2.5, bx2 + 11 * fb2.dir, by2 - 1.5);
+          g.lineTo(bx2 + 16 * fb2.dir, by2 + 0.5);
+          g.quadraticCurveTo(bx2, by2 + 3, bx2 - 11 * fb2.dir, by2 + 1);
+          g.fill();
+          g.beginPath();                                          /* the wings, mid-flap */
+          g.moveTo(bx2 - 2 * fb2.dir, by2 - 1);
+          g.quadraticCurveTo(bx2 - 10 * fb2.dir, by2 - 8 - 12 * flap, bx2 - 22 * fb2.dir, by2 - 3 - 18 * flap);
+          g.quadraticCurveTo(bx2 - 11 * fb2.dir, by2 - 12 * flap * 0.3, bx2 - 2 * fb2.dir, by2 + 1.5);
+          g.moveTo(bx2 + 3 * fb2.dir, by2 - 1);
+          g.quadraticCurveTo(bx2 + 10 * fb2.dir, by2 - 8 - 12 * flap, bx2 + 20 * fb2.dir, by2 - 3 - 18 * flap);
+          g.quadraticCurveTo(bx2 + 12 * fb2.dir, by2 - 12 * flap * 0.3, bx2 + 3 * fb2.dir, by2 + 1.5);
+          g.fill();
+        }
+      }
 
       for (let k = 0; k < st.ridges.length; k++) {               /* ridges far->near: rock, snow, pyres, valley mist */
         const r = st.ridges[k], d = st.rdrift[k], xs = r.xs, ys = r.ys, n = xs.length;
@@ -2231,6 +2421,11 @@ const WorldFX = (() => {
         g.fillStyle = r.snowFill; g.fill(r.snow);                /* the caps catch the last light */
         g.restore();
         for (let i = 0; i < BCN_N; i++) { const p = st.pyres[i]; if (p.ridge === k) bcnPyre(g, p.baseX + d, p.y, p.scale, st.inten[i], clock, i); }
+        if (k === 1) {                                           /* the river-kings stand in the gorge */
+          g.fillStyle = 'rgba(62,56,80,0.92)';
+          g.fill(st.kingL);
+          g.fill(st.kingR);
+        }
         for (const m of st.mist) {                               /* the mist sea in this ridge's valley */
           if (m.band !== k) continue;
           m.x += m.v * (0.6 + wind) * dt;
@@ -2251,13 +2446,14 @@ const WorldFX = (() => {
         const bw = (52 + 120 * it) * sc;                             /* the pyre bloom */
         g.globalAlpha = 0.16 + 0.58 * it; g.drawImage(st.glow, x - bw / 2, y - bw * 0.62, bw, bw);
       }
-      if (st.ans > 0.02) {                                       /* the 8th light, small and far */
-        const aw = 22 + 42 * st.ans;
-        g.globalAlpha = 0.55 * st.ans;
-        g.drawImage(st.glow, st.ansX - aw / 2, st.ansY - aw * 0.6, aw, aw);
-        g.globalAlpha = 0.9 * st.ans;
-        g.fillStyle = 'rgba(255,238,196,1)';
-        g.beginPath(); g.arc(st.ansX, st.ansY, 1.4, 0, 7); g.fill();
+      {                                                          /* the Eye: an ember asleep, a furnace awake */
+        const ei = Math.max(st.ans, 0.06);                       /* it never fully sleeps */
+        const er = st.tw2 * (0.85 + 0.55 * st.ans);
+        const bw2 = er * (3.5 + 3 * st.ans);
+        g.globalAlpha = 0.30 * ei + 0.45 * st.ans;
+        g.drawImage(st.glow, st.eyeX - bw2 / 2, st.eyeY - bw2 / 2, bw2, bw2);
+        g.globalAlpha = Math.min(1, 0.22 + st.ans * 1.1);
+        g.drawImage(st.eyeS, st.eyeX - er, st.eyeY - er, er * 2, er * 2);
       }
       for (const e of st.embers) {
         if (!e.on) continue;
@@ -2268,6 +2464,14 @@ const WorldFX = (() => {
         g.beginPath(); g.arc(e.x, e.y, e.r * (0.5 + 0.6 * (1 - k)), 0, 7); g.fill();
       }
       g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      if (st.ans > 0.15) {                                       /* the slit roves: it is LOOKING */
+        const er = st.tw2 * (0.85 + 0.55 * st.ans);
+        const sx2 = st.eyeX + Math.sin(clock * 0.00045) * er * 0.34;
+        g.globalAlpha = st.ans;
+        g.fillStyle = 'rgba(6,3,6,0.88)';
+        g.beginPath(); g.ellipse(sx2, st.eyeY, er * 0.16, er * 0.5, 0, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      }
 
       st.emberAcc += dt;                                          /* sparks off the lit pyres */
       if (st.emberAcc > 110) { st.emberAcc = 0;
