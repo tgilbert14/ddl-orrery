@@ -52,7 +52,9 @@ const Ticker = (() => {
     const dt = Math.min(now - last, 48); last = now;
     if (!document.hidden) {
       clock += dt;
-      for (const t of [...tasks]) { if (t(dt, clock) === false) tasks.delete(t); }
+      /* live Set iteration: deleting the current entry mid-walk is spec-safe,
+         and a task added mid-frame simply runs this frame — no per-frame copy */
+      for (const t of tasks) { if (t(dt, clock) === false) tasks.delete(t); }
     }
     if (tasks.size && running) { rafId = requestAnimationFrame(frame); }
     else { running = false; rafId = null; }
@@ -85,7 +87,7 @@ const WORLDS = [
   { slug: 'stormwall', label: 'Stormwall',  size: 56, tell: 'pulse',   a: [178, 158, 255], speed: 0.048, poem: 'the light runs ahead of the weather' },
   { slug: 'beacons',   label: 'The Beacons', size: 52, tell: 'pulse',   a: [255, 122, 60],  speed: 0.05,  poem: 'one fire lights the next' },
 ];
-const bySlug = Object.fromEntries(WORLDS.map(w => [w, w] && [w.slug, w]));
+const bySlug = Object.fromEntries(WORLDS.map(w => [w.slug, w]));
 WORLDS.forEach(w => { w.tellStroke = `rgb(${w.a[0]},${w.a[1]},${w.a[2]})`; });  /* baked draw color */
 
 /* ---------- the sky canvas ---------- */
@@ -395,6 +397,17 @@ function drawSky(dt, clockMs) {
     ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
   }
 
+  /* the flood converges on the destination's accent as the jump builds:
+     streaks lift off star-white and land in the world's own color */
+  let wsc = '';
+  if (warp.active) {
+    const k = warp.p * 0.85;
+    const wr = Math.round(207 + (warp.tint[0] - 207) * k);
+    const wg = Math.round(216 + (warp.tint[1] - 216) * k);
+    const wb = Math.round(255 + (warp.tint[2] - 255) * k);
+    wsc = `rgba(${wr},${wg},${wb},`;
+  }
+
   /* stars */
   for (const s of stars) {
     let x = s.x + par.x * 14 * s.z, y = s.y + par.y * 10 * s.z;
@@ -402,7 +415,7 @@ function drawSky(dt, clockMs) {
       /* stretch into velocity streaks toward the warp origin */
       const dx = x - warp.cx * W, dy = y - warp.cy * H;
       const st = warp.p * 46 * s.z;
-      ctx.strokeStyle = s.hue + (0.5 + warp.p * 0.5) + ')';
+      ctx.strokeStyle = wsc + (0.5 + warp.p * 0.5) + ')';
       ctx.lineWidth = s.r * (0.8 + warp.p);
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -741,7 +754,10 @@ anchors.forEach((a, slug) => {
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
   };
   const untint = () => {
-    if (hovered === slug) hovered = null;
+    /* only the LIVE hover may reset the bridge display: a stale leave/blur
+       arriving after another anchor's enter must not flash it back to hub */
+    if (hovered !== slug) return;
+    hovered = null;
     if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin('hub');
     if (reduced()) requestStatic();            /* rm: return the resting face too */
   };
@@ -1012,6 +1028,7 @@ function travel(slug, fromBeat) {
   html.style.setProperty('--acc-rgb', w.a.join(','));
 
   warp.active = true; warp.p = 0; warp.cx = p.x / W; warp.cy = p.y / H;
+  warp.tint = w.a;                                     /* the streaks arrive INTO this world's color */
   if (!skyTask) Orrery.startAmbient();                 /* streaks need the loop */
   html.classList.remove('warping'); void html.offsetWidth;   /* restartable */
   html.classList.add('warping');

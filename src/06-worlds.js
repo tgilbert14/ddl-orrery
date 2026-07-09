@@ -1194,7 +1194,12 @@ const WorldFX = (() => {
       const lit = new Float32Array(cols * rows);
       const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
       st.litAt = (c, r) => st.lit[c + r * st.cols];     /* bound once: zero per-frame alloc */
-      const move = (e) => { st.px = e.clientX; st.py = e.clientY; };
+      const move = (e) => {
+        /* canvas-local coordinates: the grid math below indexes THIS surface,
+           so a scrolled or offset stage must not skew the survey off-cursor */
+        const r = s.c.getBoundingClientRect();
+        st.px = e.clientX - r.left; st.py = e.clientY - r.top;
+      };
       s.c.parentElement.parentElement.addEventListener('pointermove', move, { passive: true });
       st.cleanup = () => s.c.parentElement.parentElement.removeEventListener('pointermove', move);
       return st;
