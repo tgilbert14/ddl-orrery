@@ -193,12 +193,28 @@ function buildStars() {
   neb2.x = W / 2 + ca * diag * 0.28; neb2.y = H / 2 + sa * diag * 0.28; neb2.s = W * 0.4;
 }
 
-/* pointer parallax: latest target, applied once per frame (never per event) */
-const par = { x: 0, y: 0, tx: 0, ty: 0 };
+/* pointer parallax: latest target, applied once per frame (never per event).
+   px/py carry the raw position for the cursor glow (spectacle pass). */
+const par = { x: 0, y: 0, tx: 0, ty: 0, px: -1e4, py: -1e4, gx: -1e4, gy: -1e4 };
 if (finePointer) {
   addEventListener('pointermove', (e) => {
     par.tx = (e.clientX / W - 0.5) * 2; par.ty = (e.clientY / H - 0.5) * 2;
+    par.px = e.clientX; par.py = e.clientY;
   }, { passive: true });
+}
+/* the cursor's lamp: a soft warm glow trails the pointer across the hub —
+   one baked sprite, one blit, a lerp of lag (awwwards idiom, house price) */
+let glowSpr = null;
+function bakeGlow() {
+  if (glowSpr) return;
+  glowSpr = document.createElement('canvas');
+  glowSpr.width = glowSpr.height = 192;
+  const g = glowSpr.getContext('2d');
+  const gr = g.createRadialGradient(96, 96, 4, 96, 96, 96);
+  gr.addColorStop(0, 'rgba(255,238,200,0.16)');
+  gr.addColorStop(0.4, 'rgba(255,226,170,0.07)');
+  gr.addColorStop(1, 'rgba(255,226,170,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 192, 192);
 }
 
 /* warp state (the streak burst) */
@@ -248,6 +264,68 @@ function bakeDial() {
 /* hoisted draw-loop constants: no arrays or strings minted per frame */
 const DASH_ARC = [3, 5], DASH_TELL = [5, 7], DASH_NONE = [];
 const BRASS_STROKE = 'rgba(201,163,92,1)';
+
+/* ---------- PERTURB THE ORRERY (spectacle pass): the worlds are REAL.
+   Grab one, drag it off its rail, THROW it — it flies with your momentum,
+   then springs home underdamped, wobbling back onto the clockwork. A hard
+   fling rattles the whole instrument: the Artifact ripples and answers.
+   Desktop + fine pointer + motion only; a plain click still travels. ---------- */
+const perturb = WORLDS.map(() => ({ ox: 0, oy: 0, vx: 0, vy: 0 }));
+let grabIx = -1, grabPX = 0, grabPY = 0, grabDist = 0, grabVX = 0, grabVY = 0;
+let grabConsumed = false;
+function armGrabPhysics() {
+  if (!finePointer) return;
+  anchors.forEach((a, slug) => {
+    const i = WORLDS.indexOf(bySlug[slug]);
+    a.addEventListener('pointerdown', (e) => {
+      if (!desktop() || reduced() || Scenes.current !== 'hub' || e.button !== 0) return;
+      grabIx = i; grabPX = e.clientX; grabPY = e.clientY;
+      grabDist = 0; grabVX = 0; grabVY = 0;
+      try { a.setPointerCapture(e.pointerId); } catch (_) {}
+      if (!skyTask) Orrery.startAmbient();
+    });
+    a.addEventListener('pointermove', (e) => {
+      if (grabIx !== i) return;
+      const dx = e.clientX - grabPX, dy = e.clientY - grabPY;
+      grabPX = e.clientX; grabPY = e.clientY;
+      grabDist += Math.abs(dx) + Math.abs(dy);
+      const pt = perturb[i];
+      pt.ox += dx; pt.oy += dy;
+      grabVX = grabVX * 0.6 + dx * 0.4;                /* smoothed fling velocity */
+      grabVY = grabVY * 0.6 + dy * 0.4;
+    });
+    const release = () => {
+      if (grabIx !== i) return;
+      grabIx = -1;
+      const pt = perturb[i];
+      pt.vx = grabVX * 0.9; pt.vy = grabVY * 0.9;      /* the throw carries */
+      if (grabDist > 6) {
+        grabConsumed = true;                           /* this gesture was a drag, not a click */
+        setTimeout(() => { grabConsumed = false; }, 0);
+      }
+      const speed = Math.hypot(pt.vx, pt.vy);
+      if (speed > 14 && window.SphereForge) {          /* a hard fling rattles the instrument */
+        SphereForge.ripple();
+        Orrery.events.dispatchEvent(new CustomEvent('artifact'));
+      }
+    };
+    a.addEventListener('pointerup', release);
+    a.addEventListener('pointercancel', release);
+  });
+}
+/* dt-scaled underdamped spring: the world wobbles home like a real weight */
+function integratePerturb(pt, dt) {
+  if (pt.ox === 0 && pt.oy === 0 && pt.vx === 0 && pt.vy === 0) return;
+  const k = 0.000048 * dt, c = Math.min(0.9, 0.0035 * dt);
+  pt.vx += -pt.ox * k * dt - pt.vx * c;
+  pt.vy += -pt.oy * k * dt - pt.vy * c;
+  pt.ox += pt.vx * dt * 0.06;
+  pt.oy += pt.vy * dt * 0.06;
+  if (Math.abs(pt.ox) < 0.25 && Math.abs(pt.oy) < 0.25 &&
+      Math.abs(pt.vx) < 0.02 && Math.abs(pt.vy) < 0.02) {
+    pt.ox = 0; pt.oy = 0; pt.vx = 0; pt.vy = 0;        /* settled: back on the rail */
+  }
+}
 function measureOrbit() {
   const copy = document.querySelector('.hub-copy');
   const cb = copy ? copy.getBoundingClientRect().bottom : H * 0.34;
@@ -344,12 +422,36 @@ function drawSky(dt, clockMs) {
   if (Scenes.current === 'hub' && desktop()) {
     /* THE DIAL, ENGRAVED (M3): baked once per resize, blitted once per frame */
     if (dialSpr) ctx.drawImage(dialSpr, ART.cx - dialW / 2, ART.cy - dialH / 2, dialW, dialH);
+    /* the sweep (spectacle pass): a bright brass arc rides the dial like a
+       radar trace — a fading tail, a hot head, a bead of light. Two strokes
+       and one dot per frame; rm holds the dial still. */
+    if (!reduced()) {
+      const sw = (clockMs / 9000) * Math.PI * 2;
+      ctx.strokeStyle = BRASS_STROKE;
+      ctx.globalAlpha = 0.16;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, sw - 0.55, sw); ctx.stroke();
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.ellipse(ART.cx, ART.cy, ART.rx, ART.ry, 0, sw - 0.1, sw); ctx.stroke();
+      ctx.fillStyle = '#ffe9b8';
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(ART.cx + Math.cos(sw) * ART.rx, ART.cy + Math.sin(sw) * ART.ry, 1.8, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     /* z-sort: far worlds first, then the Artifact, then near worlds */
-    const ps = WORLDS.map((w, i) => ({ w, p: planetPos(i, clockMs) }));
-    const drawWorld = ({ w, p }) => {
+    const ps = WORLDS.map((w, i) => ({ w, i, p: planetPos(i, clockMs) }));
+    const drawWorld = ({ w, i, p }) => {
       const a = anchors.get(w.slug);
       const dim = 0.45 + 0.55 * (p.depth + 1) / 2;
+      /* the perturbation rides on top of the clockwork: integrate the spring
+         (unless held), then everything that IS the world — planet, anchor,
+         spoke, tell — follows the perturbed point (the survey arc projects
+         to the strayed world's bearing; the rail itself never moves). */
+      const pt = perturb[i];
+      if (grabIx !== i) integratePerturb(pt, dt);
+      p.x += pt.ox; p.y += pt.oy;
       if (a) {
         a.style.setProperty('--pax', p.x.toFixed(1) + 'px');
         a.style.setProperty('--pay', p.y.toFixed(1) + 'px');
@@ -451,6 +553,18 @@ function drawSky(dt, clockMs) {
 
   /* comets, when any are in flight */
   if (cometAlive()) drawComets(dt);
+
+  /* the cursor's lamp: the pointer carries a soft light across the hub */
+  if (Scenes.current === 'hub' && finePointer && !reduced() && par.px > -9999) {
+    bakeGlow();
+    par.gx += (par.px - par.gx) * Math.min(1, dt * 0.012);   /* the light lags, like a lamp on a line */
+    par.gy += (par.py - par.gy) * Math.min(1, dt * 0.012);
+    if (par.gx < -9000) { par.gx = par.px; par.gy = par.py; }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.drawImage(glowSpr, par.gx - 96, par.gy - 96, 192, 192);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   if (warp.active) { warp.p = Math.min(1, warp.p + dt / 700); }
 }
 
@@ -507,7 +621,7 @@ function scheduleComet() {
       showerT2 = setTimeout(launchComet, 1600 + Math.random() * 700);
     }
     scheduleComet();
-  }, 24000 + Math.random() * 26000);
+  }, 13000 + Math.random() * 15000);       /* the sky performs more often (spectacle pass) */
 }
 
 /* ---------- the sonar: the Artifact calls out on its own slow clock.
@@ -781,7 +895,9 @@ function setScene(name, { instant = false } = {}) {
 
   const isHub = name === 'hub';
   returnBtn.hidden = isHub;
+  if (prev) prev.classList.remove('card-away');        /* the sink never follows you out */
   if (isHub) {
+    clearTimeout(cardAwayT);
     locName.textContent = 'Orbit · choose a world';
     html.style.setProperty('--acc', '#64d5f5');
     html.style.setProperty('--acc-rgb', '100, 213, 245');
@@ -805,6 +921,17 @@ function setScene(name, { instant = false } = {}) {
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
     markSurveyed(name);
+    /* the card sinks after a breath so the WORLD owns the stage (spectacle
+       pass) — hover/focus/tap brings it straight back (CSS + the delegate) */
+    clearTimeout(cardAwayT);
+    next.classList.remove('card-away');
+    if (!reduced()) cardAwayT = setTimeout(() => {
+      /* the ARRIVAL landing (h2 focus, for AT) must not pin the card awake
+         through :focus-within — release it; a real control focus still holds */
+      const h2 = next.querySelector('h2');
+      if (h2 && document.activeElement === h2) h2.blur();
+      next.classList.add('card-away');
+    }, 5200);
     /* refresh this card's medallion so the little world advanced since last
        visit (skip while it bakes: wiping the canvas before a no-op drawMini
        would blank it — onReady paints it the moment it lands) */
@@ -829,6 +956,7 @@ function setScene(name, { instant = false } = {}) {
    never sticks (animationend can be missed when scenes toggle mid-flight). */
 let travelTimer = null, warpClearTimer = null;
 let beatTimer = null, beatSlug = null;                 /* the phone departure beat's latch */
+let cardAwayT = null;                                  /* the world-card's sink timer */
 const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
@@ -900,10 +1028,12 @@ function travel(slug, fromBeat) {
 anchors.forEach((a, slug) => {
   a.addEventListener('click', (e) => {
     e.preventDefault();
+    if (grabConsumed) return;                          /* that gesture was a THROW, not a choice */
     if (reduced()) { location.hash = '#/world/' + slug; return; }
     travel(slug);
   });
 });
+armGrabPhysics();
 /* every return link is a document anchor for no-JS; the app routes it home */
 document.querySelectorAll('a[data-return]').forEach(a => {
   a.addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/'; });
@@ -1141,7 +1271,7 @@ function bootOrrery() {
      or the survey honor would restore keyboard wording onto a touch screen */
   const bootHint = document.querySelector('.hub-hint');
   if (bootHint && matchMedia('(pointer: coarse)').matches) {
-    bootHint.textContent = 'Tap a world to travel · it holds the center';
+    bootHint.textContent = 'Tap a world to travel';
     bootHint.dataset.home = bootHint.textContent;
   }
   /* one source of truth for the poems: app mode re-syncs the orbit em-lines
@@ -1149,6 +1279,28 @@ function bootOrrery() {
   anchors.forEach((a, slug) => {
     const em = a.querySelector('.pa-label em');
     if (em && bySlug[slug] && bySlug[slug].poem) em.textContent = bySlug[slug].poem;
+  });
+  /* a tap anywhere in a sunk-card scene surfaces the card again (touch has
+     no hover); the sink re-arms after the same breath */
+  addEventListener('pointerdown', (e) => {
+    const sec = e.target && e.target.closest && e.target.closest('.scene.card-away');
+    if (!sec) return;
+    sec.classList.remove('card-away');
+    clearTimeout(cardAwayT);
+    cardAwayT = setTimeout(() => { if (Scenes.els.get(Scenes.current) === sec) sec.classList.add('card-away'); }, 5200);
+  }, { passive: true });
+  /* the plates tilt under a fine pointer (awwwards idiom, rm-gated) */
+  if (finePointer) document.querySelectorAll('.world-card').forEach(card => {
+    card.addEventListener('pointermove', (e) => {
+      if (reduced() || !desktop()) return;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--tiltY', (((e.clientX - r.left) / r.width - 0.5) * 5).toFixed(2) + 'deg');
+      card.style.setProperty('--tiltX', ((0.5 - (e.clientY - r.top) / r.height) * 4).toFixed(2) + 'deg');
+    }, { passive: true });
+    card.addEventListener('pointerleave', () => {
+      card.style.setProperty('--tiltY', '0deg');
+      card.style.setProperty('--tiltX', '0deg');
+    }, { passive: true });
   });
   sizeSky();
   setRM();
