@@ -466,7 +466,8 @@ function drawSky(dt, clockMs) {
         a.style.setProperty('--psize', Math.round(w.size * 1.5 * p.sc) + 'px');
         /* a far-side world crossing the Artifact's face is OCCLUDED: its name
            must nearly vanish too, not float legible across the gold */
-        const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r + 50;
+        const occluded = p.depth <= 0 && Math.abs(p.x - ART.cx) < ART.r * 1.35 + 30
+        && p.y > ART.cy - ART.r * 0.45;                /* the hull is wide but LOW: open sky stays bright */
         a.style.setProperty('--pdim', (occluded ? 0.12 : dim).toFixed(2));
         /* the DOM mirrors the canvas z-sort: a world occluded BEHIND the
            Artifact must not own the clicks on the sphere's face (its anchor
@@ -965,22 +966,28 @@ function travel(slug, fromBeat) {
 
   if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
 
-  /* the phone departure beat (M2): the orrery acknowledges the choice —
-     the sphere considers the world and a sonar ring answers — THEN the
-     warp fires. 300ms of anticipation instead of an unceremonious cut. */
-  if (!fromBeat && !desktop() && window.SphereForge && Scenes.current === 'hub'
-      && ART.cy > 0                                    /* only while the sphere is on stage */
+  /* the departure (M2, rebuilt for the Derelict): on desktop the SHUTTLE
+     undocks and flies to the chosen world — the warp fires on arrival. On
+     the phone the pocket orrery keeps its 300ms beat: the bridge considers
+     the world and the sonar answers. Either way, a second tap RE-AIMS. */
+  if (!fromBeat && window.SphereForge && Scenes.current === 'hub'
+      && (desktop() || ART.cy > 0)                     /* pocket beat only while on stage */
       && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
-    beatSlug = slug;                                   /* a second tap RE-AIMS the pending beat */
+    const wi = WORLDS.indexOf(w);
+    const flight = desktop() && SphereForge.sortie
+      && SphereForge.sortie(() => planetPos(wi, Ticker.clock), 760);
+    const ms = flight ? 760 : 300;
+    beatSlug = slug;
     SphereForge.setSkin(slug);
-    SphereForge.ping();
+    if (!flight) SphereForge.ping();
+    else Orrery.events.dispatchEvent(new CustomEvent('sortie'));
     if (!skyTask) Orrery.startAmbient();
     clearTimeout(beatTimer);
     beatTimer = setTimeout(() => {
       beatTimer = null;
       const s = beatSlug; beatSlug = null;
       travel(s, true);
-    }, 300);
+    }, ms);
     return;
   }
 

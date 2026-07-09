@@ -34,8 +34,8 @@
       <div class="hub-copy">
         <!-- no hard <br>: text-wrap:balance sets the monument lockup at every
              width; a forced break went ragged under the bigger engraved face -->
-        <h1 class="hub-h1">Eleven worlds. One clock. One artifact, holding the center.</h1>
-        <p class="hub-sub">Eleven hand-built worlds orbit something older. Go and see.</p>
+        <h1 class="hub-h1">Eleven worlds. One clock. One dead ship, holding the center.</h1>
+        <p class="hub-sub">Eleven hand-built worlds orbit a derelict. Go and see.</p>
         <p class="hub-hint microlabel" aria-hidden="true">Choose a world &middot; Tab to cycle &middot; Enter to travel</p>
       </div>
 
@@ -47,7 +47,7 @@
       <!-- the Artifact: focusable, labeled, answerable. The canvas paints the
            sphere; this button is its keyboard/AT presence and the ripple trigger.
            JS positions both over the sphere center via --ax / --ay. -->
-      <button id="artifact-hit" type="button" aria-label="The sphere. Unsurveyed. Activate to sound it."></button>
+      <button id="artifact-hit" type="button" aria-label="Object 0. A derelict ship. Activate to sound it."></button>
       <p id="artifact-label" class="artifact-label microlabel" aria-hidden="true">Object 0 &middot; unsurveyed</p>
 
       <nav class="orbits" id="worlds-index" aria-label="The eleven worlds">
@@ -648,7 +648,7 @@
 
   <footer class="hud hud-bottom">
     <span>Hand-built by <a href="https://desertdatalabs.com/" rel="noopener">Desert Data Labs</a>
-      &middot; no frameworks &middot; eleven worlds, one artifact &middot;
+      &middot; no frameworks &middot; eleven worlds, one derelict &middot;
       <a href="https://github.com/tgilbert14/ddl-orrery" rel="noopener">you are standing in the source</a></span>
 
     <!-- THE GRAND TOUR: autopilot readout + control. Both hidden without JS
