@@ -790,6 +790,12 @@ function touchArtifact() {
   const now = performance.now();
   if (now - artLast < 700) return;                     /* it does not answer to hammering */
   artLast = now;
+  /* BOARDING (WOW #5): after the rite the plates stay parted — a touch is
+     no longer a knock, it is the door. The shuttle flies INTO the wound. */
+  if (keep.get('orrery-survey-complete') === '1' && Scenes.current === 'hub') {
+    travelObject0();
+    return;
+  }
   artTouches++;
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
@@ -1094,14 +1100,16 @@ function setScene(name, { instant = false } = {}) {
       if (back) back.focus({ preventScroll: true });
     }
   } else {
+    /* SECTOR 00 has no registry row: it is not a world, it is the reason */
     const w = bySlug[name];
-    locName.textContent = `World · ${w.label}`;
-    html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
-    html.style.setProperty('--acc-rgb', w.a.join(','));
+    locName.textContent = w ? `World · ${w.label}` : 'Sector 00 · the hold';
+    const acc = w ? w.a : [255, 214, 140];
+    html.style.setProperty('--acc', `rgb(${acc.join(',')})`);
+    html.style.setProperty('--acc-rgb', acc.join(','));
     Orrery.stopAmbient();                              /* one scene owns the frame budget */
     stopSonar();                                       /* the call is a hub voice only */
     WorldFX.start(name);
-    markSurveyed(name);
+    if (w) markSurveyed(name);                         /* the hold is not a survey */
     /* refresh this card's medallion so the little world advanced since last
        visit (skip while it bakes: wiping the canvas before a no-op drawMini
        would blank it — onReady paints it the moment it lands) */
@@ -1221,6 +1229,40 @@ function travel(slug, fromBeat) {
   }, 495);
 }
 
+/* BOARDING (WOW #5): the twelfth departure — the shuttle flies into the
+   bite in the hull, and the warp blooms cream from the wound itself */
+function travelObject0() {
+  if (Scenes.transitioning || Scenes.current === 'object-0') return;
+  if (reduced()) { location.hash = '#/world/object-0'; return; }
+  const p = { x: ART.cx + ART.r * 0.55, y: ART.cy - ART.r * 0.28 };
+  const flight = desktop() && window.SphereForge && SphereForge.sortie
+    && SphereForge.sortie(() => p, 700);
+  if (!skyTask) Orrery.startAmbient();
+  Orrery.events.dispatchEvent(new CustomEvent('sortie'));
+  clearTimeout(beatTimer);                             /* Back mid-beat kills the boarding too */
+  beatTimer = setTimeout(() => {
+    beatTimer = null;
+    if (Scenes.current !== 'hub') return;
+    Scenes.transitioning = true;
+    html.style.setProperty('--wx', (p.x / W * 100).toFixed(1) + '%');
+    html.style.setProperty('--wy', (p.y / H * 100).toFixed(1) + '%');
+    html.style.setProperty('--acc', 'rgb(255,214,140)');
+    html.style.setProperty('--acc-rgb', '255,214,140');
+    warp.active = true; warp.p = 0; warp.cx = p.x / W; warp.cy = p.y / H;
+    warp.tint = [255, 214, 140]; warp.slug = null;     /* no planet rises: you fall into the wound */
+    html.classList.remove('warping'); void html.offsetWidth;
+    html.classList.add('warping');
+    clearTimeout(warpClearTimer);
+    warpClearTimer = setTimeout(endWarp, 1200);
+    Orrery.events.dispatchEvent(new CustomEvent('warp', { detail: { slug: 'object-0' } }));
+    travelTimer = setTimeout(() => {
+      location.hash = '#/world/object-0';
+      Scenes.transitioning = false;
+      travelTimer = null;
+    }, 495);
+  }, flight ? 700 : 250);
+}
+
 /* clicks on planet anchors always go through the router's namespace —
    the hrefs themselves are DOCUMENT anchors so the no-JS brochure
    navigates natively (Smaug kill 3) */
@@ -1326,8 +1368,11 @@ function markTransitDot() {
 
 /* ---------- router (deep links are LCP paths: no warp on arrival) ---------- */
 function route(instant = false) {
-  const m = location.hash.match(/^#\/world\/([a-z-]+)/);
-  const slug = m && bySlug[m[1]] ? m[1] : null;
+  const m = location.hash.match(/^#\/world\/([a-z0-9-]+)/);
+  let slug = m && bySlug[m[1]] ? m[1] : null;
+  /* SECTOR 00 (WOW #5): the twelfth destination exists only for finishers —
+     the URL cannot skip the game */
+  if (!slug && m && m[1] === 'object-0' && keep.get('orrery-survey-complete') === '1') slug = 'object-0';
   setScene(slug || 'hub', { instant });
 }
 addEventListener('hashchange', () => {

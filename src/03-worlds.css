@@ -77,6 +77,19 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
 }
 .w-name input:focus-visible { outline: 2px solid var(--wa, #64d5f5); outline-offset: 2px; }
 
+/* ---------- SECTOR 00: the hold of Object 0 (WOW #5 — earned, JS-only) ---------- */
+html:not(.js) #world-object-0 { display: none; }      /* the brochure keeps the mystery */
+[data-scene="object-0"] {
+  --wa: #ffd68c; --wa-rgb: 255, 214, 140;
+  --wground: #05060d;
+}
+[data-scene="object-0"] .s00-void {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(60% 40% at 50% 18%, rgba(255, 214, 140, 0.06), transparent 70%),
+    linear-gradient(180deg, #04050b, #070910 60%, #05060d);
+}
+
 /* M4 — the verb worlds: a whisper of what the hand can do. The hint only
    exists where the verb does (animated JS path); brochure and rm never see
    it, so it can never promise an interaction that is not wired. */

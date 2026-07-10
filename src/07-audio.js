@@ -116,6 +116,16 @@ const Score = (() => {
       motif: [N(0,0,2,.08), R, R, N(2,0,1,.06), N(3,0,2,.07), R, N(5,0,1,.06), R, N(0,1,3,.08), R, R, N(6,0,1,.05), N(5,0,2,.06), R, N(1,0,3,.05), R],
       perc: 'K.........K...s.',
     },
+    /* SECTOR 00 — the hold of Object 0: the dread heard from WITHIN. The
+       heartbeat is the room now; the groans are close; the old minor-second
+       rub finally leans major (it was never a threat — it was carrying you). */
+    'object-0': {
+      root: 110.0, scale: [0, 3, 7, 8, 12], step: 640, bright: 260, gap: 18,
+      dr: 0.075, drDet: 4, pd: 0.022, ch: 0, padIv: [0, 7, 16], groan: true,
+      lead: { wave: 'sine', dly: 0.3, wet: 0.7 },
+      motif: [N(0,1,4,.05), R, R, R, N(2,1,4,.045), R, R, R, N(1,1,5,.04), R, R, R, N(4,0,6,.05), R, R, R],
+      perc: 'H...H...H...H...',
+    },
     /* distant horn-like calls over a cold drone: a rising call, then its
        falling answer, echoed down the delay like the fire chain. sparse. */
     beacons: {

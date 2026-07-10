@@ -24,7 +24,7 @@ const WorldFX = (() => {
 
   function start(sceneName) {
     stopAll();
-    const map = { 'dust-sea': 'dune', 'velocity': 'velocity', 'grid': 'grid', 'abyssal': 'abyssal', 'arcadia': 'arcadia', 'aurora': 'aurora', 'uncharted': 'draft', 'beacons': 'beacons', 'stormwall': 'storm', 'drillyard': 'drillyard', 'archive': 'archive' };
+    const map = { 'dust-sea': 'dune', 'velocity': 'velocity', 'grid': 'grid', 'abyssal': 'abyssal', 'arcadia': 'arcadia', 'aurora': 'aurora', 'uncharted': 'draft', 'beacons': 'beacons', 'stormwall': 'storm', 'drillyard': 'drillyard', 'archive': 'archive', 'object-0': 'object0' };
     const name = map[sceneName];
     if (!name || !fx[name]) return;
     if (window.Orrery.reduced()) { fx[name].rm && fx[name].rm(); return; }
@@ -3099,6 +3099,147 @@ const WorldFX = (() => {
     /* no live FX hook (init failed?) → the horns still answer the press */
     if (!beaconTrigger || beaconTrigger()) beaconEvent();
   });
+
+  /* ============================================================
+     SECTOR 00 — THE HOLD OF OBJECT 0 (WOW #5, the capstone): earned by
+     finishing. Pitch dark but for your roving lamp; slow dust adrift in
+     the hold; eleven monoliths wearing the accents of the worlds it was
+     carrying all along; the heartbeat glowing from INSIDE at the crown.
+     caps: 240 dust pts (Float32) · 11 monoliths · 2 baked sprites · 0 alloc
+     ============================================================ */
+  let S00_HOLE = null, S00_GLOW = null;
+  function s00Sprites() {
+    if (S00_HOLE) return;
+    const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(256, 256, 40, 256, 256, 256);
+    gr.addColorStop(0, 'rgba(0,0,0,1)');               /* the lamp punches the veil */
+    gr.addColorStop(0.55, 'rgba(0,0,0,0.5)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+    S00_HOLE = c;
+    const c2 = document.createElement('canvas'); c2.width = 128; c2.height = 128;
+    const g2 = c2.getContext('2d');
+    const gr2 = g2.createRadialGradient(64, 64, 4, 64, 64, 64);
+    gr2.addColorStop(0, 'rgba(255,236,190,0.9)');
+    gr2.addColorStop(0.5, 'rgba(255,214,140,0.3)');
+    gr2.addColorStop(1, 'rgba(255,214,140,0)');
+    g2.fillStyle = gr2; g2.fillRect(0, 0, 128, 128);
+    S00_GLOW = c2;
+  }
+  fx.object0 = {
+    init(s) {
+      s00Sprites();
+      const N = 240;
+      const dx = new Float32Array(N), dy = new Float32Array(N), dz = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        dx[i] = Math.random() * 2 - 1;
+        dy[i] = (Math.random() * 2 - 1) * 0.55;
+        dz[i] = (Math.random() * 2 - 1) * 0.55;
+      }
+      const mono = [];
+      if (typeof WORLDS !== 'undefined') {
+        for (let i = 0; i < WORLDS.length; i++) {
+          mono.push({ x: -0.82 + (i / (WORLDS.length - 1)) * 1.64, w: WORLDS[i], lit: 0 });
+        }
+      }
+      return { dx, dy, dz, N, mono, lx: s.w / 2, ly: s.h * 0.55, yaw: 0 };
+    },
+    frame(s, st, dt, clock) {
+      const g = s.g, w = s.w, h = s.h;
+      g.clearRect(0, 0, w, h);
+      st.yaw += dt * 0.00002;                          /* the hold turns, imperceptibly */
+      const F = 3.4, cx = w / 2, cy = h * 0.52, S2 = Math.min(w, h) * 0.62;
+      const cyw = Math.cos(st.yaw), syw = Math.sin(st.yaw);
+      /* the dust: slow drift along the hold's length */
+      g.fillStyle = 'rgba(214,226,240,1)';
+      for (let i = 0; i < st.N; i++) {
+        st.dx[i] += dt * 0.00001 * (1 + (i % 3));
+        if (st.dx[i] > 1) st.dx[i] = -1;
+        const x1 = st.dx[i] * cyw + st.dz[i] * syw;
+        const z1 = st.dz[i] * cyw - st.dx[i] * syw;
+        const sc = F / (F + z1);
+        g.globalAlpha = 0.12 * sc;
+        g.fillRect(cx + x1 * sc * S2, cy + st.dy[i] * sc * S2 * 0.8, 1.6, 1.6);
+      }
+      g.globalAlpha = 1;
+      /* the eleven: they light only where your lamp reaches (tellStroke is
+         baked at registry time — no strings minted here) */
+      for (const m of st.mono) {
+        const x1 = m.x * cyw, z1 = -m.x * syw;
+        const sc = F / (F + z1);
+        const sx = cx + x1 * sc * S2;
+        const mh = 96 * sc, mw = 14 * sc;
+        const near = Math.max(0, 1 - Math.hypot(sx - st.lx, cy - st.ly) / (S2 * 0.55));
+        m.lit += (Math.max(0.06, near) - m.lit) * Math.min(1, dt / 300);
+        m.sx = sx; m.mw = mw;                          /* remembered for the verb's hit-test */
+        g.globalAlpha = 0.12 + 0.88 * Math.min(1, m.lit);
+        g.fillStyle = m.w.tellStroke;
+        g.fillRect(sx - mw / 2, cy - mh / 2, mw, mh);
+        if (m.lit > 0.4) {                             /* a lit world hums */
+          g.globalAlpha = (m.lit - 0.4) * 0.7;
+          g.drawImage(S00_GLOW, sx - mh * 0.4, cy - mh * 0.4, mh * 0.8, mh * 0.8);
+        }
+      }
+      g.globalAlpha = 1;
+      /* the veil, and your lamp through it */
+      g.fillStyle = 'rgba(2,4,10,0.88)';
+      g.fillRect(0, 0, w, h);
+      g.globalCompositeOperation = 'destination-out';
+      const LR = Math.min(w, h) * 0.55;
+      g.drawImage(S00_HOLE, st.lx - LR, st.ly - LR, LR * 2, LR * 2);
+      g.globalCompositeOperation = 'source-over';
+      /* the heart, seen from inside: above the veil, always */
+      const hb = 0.22 + 0.24 * Math.max(0, Math.sin(clock * 0.0016));
+      g.globalAlpha = hb;
+      g.drawImage(S00_GLOW, cx - w * 0.18, -h * 0.16, w * 0.36, h * 0.36);
+      g.globalAlpha = 1;
+    },
+    aim(s, st, x, y) { st.lx = x; st.ly = y; },
+    verb(s, st, x, y, clock) {
+      /* touch a monolith and it answers in its world's own voice */
+      for (const m of st.mono) {
+        if (m.sx === undefined || Math.abs(x - m.sx) > Math.max(24, m.mw * 2)) continue;
+        m.lit = 1.6;                                   /* the flare decays through the lerp */
+        verbEvent2('strum', { slug: m.w.slug, surveyed: true });
+        return;
+      }
+      st.lx = x; st.ly = y;                            /* an empty touch just moves the lamp */
+    },
+    rm() {
+      /* the designed still: lamp resting center, all eleven dimly visible,
+         the heart glowing at the crown — painted once */
+      const c = document.querySelector('[data-canvas="object0"]');
+      if (!c || !c.parentElement) return;
+      s00Sprites();
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = c.parentElement.getBoundingClientRect();
+      c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const w = r.width, h = r.height, cx = w / 2, cy = h * 0.52, S2 = Math.min(w, h) * 0.62;
+      if (typeof WORLDS !== 'undefined') {
+        for (let i = 0; i < WORLDS.length; i++) {
+          const sx = cx + (-0.82 + (i / (WORLDS.length - 1)) * 1.64) * S2;
+          g.globalAlpha = 0.5;
+          g.fillStyle = WORLDS[i].tellStroke;
+          g.fillRect(sx - 7, cy - 48, 14, 96);
+        }
+      }
+      g.globalAlpha = 1;
+      g.fillStyle = 'rgba(2,4,10,0.8)';
+      g.fillRect(0, 0, w, h);
+      g.globalCompositeOperation = 'destination-out';
+      const LR = Math.min(w, h) * 0.6;
+      g.drawImage(S00_HOLE, cx - LR, cy - LR, LR * 2, LR * 2);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 0.4;
+      g.drawImage(S00_GLOW, cx - w * 0.18, -h * 0.16, w * 0.36, h * 0.36);
+      g.globalAlpha = 1;
+    },
+  };
+  /* strum with a payload (the plain verbEvent carries none) */
+  const verbEvent2 = (kind, detail) =>
+    window.Orrery.events.dispatchEvent(new CustomEvent(kind, { detail }));
 
   /* M4: the verb buttons — the keyboard's path to the same delight the
      pointer gets by striking the scene itself. Each pokes its world's verb
