@@ -9,7 +9,7 @@
 const WorldFX = (() => {
   const fx = {};
   let activeName = null, activeTask = null, activeCanvas = null, activeCtx = null, activeState = null;
-  let activeSurf = null, verbSec = null, verbDown = null, verbMove = null;
+  let activeSurf = null, verbSec = null, verbDown = null, verbMove = null, verbUpH = null;
 
   function canvasFor(name) {
     const c = document.querySelector(`[data-canvas="${name}"]`);
@@ -66,6 +66,15 @@ const WorldFX = (() => {
           };
           sec.addEventListener('pointermove', verbMove);
         }
+        if (fx[name].verbUp) {                     /* the release: hold-verbs need to know */
+          verbUpH = () => {
+            if (activeName !== name) return;
+            fx[name].verbUp(surf, state, window.Orrery.ticker.clock);
+          };
+          sec.addEventListener('pointerup', verbUpH);
+          sec.addEventListener('pointercancel', verbUpH);
+          sec.addEventListener('pointerleave', verbUpH);
+        }
       }
     }
   }
@@ -76,7 +85,12 @@ const WorldFX = (() => {
     if (verbSec) {
       if (verbDown) verbSec.removeEventListener('pointerdown', verbDown);
       if (verbMove) verbSec.removeEventListener('pointermove', verbMove);
-      verbSec = null; verbDown = null; verbMove = null;
+      if (verbUpH) {
+        verbSec.removeEventListener('pointerup', verbUpH);
+        verbSec.removeEventListener('pointercancel', verbUpH);
+        verbSec.removeEventListener('pointerleave', verbUpH);
+      }
+      verbSec = null; verbDown = null; verbMove = null; verbUpH = null;
     }
     activeName = null; activeSurf = null;
   }
@@ -525,13 +539,19 @@ const WorldFX = (() => {
   fx.velocity = {
     init(s) {
       const cy = s.h * 0.71;
+      const riders = [
+        vMakeRider(s, cy, -1, '41,230,255', 0.34),
+        vMakeRider(s, cy, +1, '255,46,151', 0.31),
+      ];
+      for (const r of riders) { r.hotUntil = 0; r.gateAt = -9e9; }
+      const gates = [];                                /* hard-light gates the hand drops on the grid */
+      for (let i = 0; i < 4; i++) gates.push({ on: false, x: 0, y: 0, t0: 0 });
+      const bursts = [];                               /* the flash when a rider threads one */
+      for (let i = 0; i < 6; i++) bursts.push({ on: false, x: 0, y: 0, t0: 0, col: '' });
       return {
         bars: skyline ? skyline.querySelectorAll('.bar') : null,
         nextRender: 0,
-        riders: [
-          vMakeRider(s, cy, -1, '41,230,255', 0.34),
-          vMakeRider(s, cy, +1, '255,46,151', 0.31),
-        ],
+        riders, gates, bursts,
         pulse: { on: false, x: 0, t0: 0 },
         pulseNext: 4000 + Math.random() * 4000,
         boostUntil: 0, lastBoost: -9e9,
@@ -562,10 +582,39 @@ const WorldFX = (() => {
         }
       }
 
+      /* the gates: neon posts with a shimmer bar; they expire in 7s */
+      for (const gt of st.gates) {
+        if (!gt.on) continue;
+        const age = clock - gt.t0;
+        if (age > 7000) { gt.on = false; continue; }
+        const fade = age > 6200 ? 1 - (age - 6200) / 800 : 1;
+        const shim = 0.55 + 0.45 * Math.sin(clock * 0.012 + gt.x);
+        g.fillStyle = `rgba(255,154,61,${(0.85 * fade).toFixed(3)})`;
+        g.fillRect(gt.x - 15, gt.y - 34, 3, 68);
+        g.fillRect(gt.x + 12, gt.y - 34, 3, 68);
+        g.fillStyle = `rgba(255,214,150,${(0.3 * shim * fade).toFixed(3)})`;
+        g.fillRect(gt.x - 12, gt.y - 30, 24, 60);
+        g.fillStyle = `rgba(255,234,190,${(0.9 * fade).toFixed(3)})`;
+        g.fillRect(gt.x - 15, gt.y - 36, 3, 3); g.fillRect(gt.x + 12, gt.y - 36, 3, 3);
+      }
+
+      for (const b of st.bursts) {                     /* threading flash: an expanding diamond */
+        if (!b.on) continue;
+        const k = (clock - b.t0) / 420;
+        if (k >= 1) { b.on = false; continue; }
+        const r2 = 6 + k * 30, a = (1 - k) * 0.9;
+        g.strokeStyle = `rgba(${b.col},${a.toFixed(3)})`;
+        g.lineWidth = 2.2 - k * 1.4;
+        g.beginPath();
+        g.moveTo(b.x, b.y - r2); g.lineTo(b.x + r2, b.y); g.lineTo(b.x, b.y + r2); g.lineTo(b.x - r2, b.y);
+        g.closePath(); g.stroke();
+      }
+
       const hot = clock < st.boostUntil;               /* M4: throttle open */
       for (let ri = 0; ri < st.riders.length; ri++) {
         const r = st.riders[ri], pa = r.path;
-        let rem = r.speed * (hot ? 2 : 1) * dt;
+        const rHot = hot || clock < r.hotUntil;
+        let rem = r.speed * (rHot ? 2 : 1) * dt;
         while (rem > 0) {
           const need = pa.seg[r.si] * (1 - r.p);
           if (rem >= need) {
@@ -577,6 +626,19 @@ const WorldFX = (() => {
         r.hx = pa.px[i0] + (pa.px[i1] - pa.px[i0]) * r.p;
         r.hy = pa.py[i0] + (pa.py[i1] - pa.py[i0]) * r.p;
 
+        /* threading a gate: a flash in the rider's own color + a sprint */
+        for (const gt of st.gates) {
+          if (!gt.on || clock - r.gateAt < 500) continue;
+          if (Math.abs(r.hx - gt.x) < 12 && Math.abs(r.hy - gt.y) < 40) {
+            r.gateAt = clock; r.hotUntil = clock + 1100;
+            for (const b of st.bursts) {
+              if (b.on) continue;
+              b.on = true; b.x = gt.x; b.y = r.hy; b.t0 = clock; b.col = r.col;
+              break;
+            }
+          }
+        }
+
         r.tacc += dt;
         if (r.tacc >= 32) {
           r.tacc = 0;
@@ -585,12 +647,12 @@ const WorldFX = (() => {
           r.brkNext = 0;
           if (r.tn < V_CAP) r.tn++;
         }
-        vDrawTrail(g, r, hot);
+        vDrawTrail(g, r, rHot);
       }
 
-      g.shadowBlur = hot ? 20 : 12;
       for (let ri = 0; ri < st.riders.length; ri++) {
         const r = st.riders[ri];
+        g.shadowBlur = (hot || clock < r.hotUntil) ? 20 : 12;
         g.shadowColor = `rgba(${r.col},0.9)`;
         g.fillStyle = `rgba(${r.col},1)`;
         g.beginPath(); g.arc(r.hx, r.hy, 3.2, 0, 7); g.fill();
@@ -607,11 +669,22 @@ const WorldFX = (() => {
         b.style.setProperty('--h', (0.3 + ((i * 37) % 50) / 100).toFixed(2));
       });
     },
-    /* M4 verb: open the throttle — both riders double for ~800ms, trails burn hotter */
+    /* the verb, rebuilt: DROP A GATE where you strike — neon posts on the
+       grid; any rider who threads it flashes and sprints. The press still
+       opens the throttle for a beat, so the button keeps its old promise. */
     verb(s, st, x, y, clock) {
       if (clock - st.lastBoost < 250) return;       /* one event per press, not per jitter */
       st.lastBoost = clock;
       st.boostUntil = clock + 800;
+      let gt = null, oldest = null;
+      for (const q of st.gates) {
+        if (!q.on) { gt = q; break; }
+        if (!oldest || q.t0 < oldest.t0) oldest = q;
+      }
+      gt = gt || oldest;
+      gt.on = true; gt.t0 = clock;
+      gt.x = Math.max(20, Math.min(s.w - 20, x));
+      gt.y = Math.max(s.h * 0.48, Math.min(s.h * 0.88, y));   /* gates live on the grid, not the sky */
       verbEvent('boost');
     },
   };
@@ -645,7 +718,9 @@ const WorldFX = (() => {
         ch: GRID_GA[(Math.random() * GRID_N) | 0],
         traceUntil: 0,
       };
-      return { C, rowH, nextTrace: 0 };
+      const bursts = [];                               /* decode ripples: expanding glyph rings */
+      for (let i = 0; i < 3; i++) bursts.push({ on: false, x: 0, y: 0, t0: 0 });
+      return { C, rowH, nextTrace: 0, bursts };
     },
     frame(s, st, dt, clock) {
       const g = s.g, w = s.w, h = s.h, C = st.C, rowH = st.rowH, n = C.length;
@@ -678,15 +753,36 @@ const WorldFX = (() => {
       for (let i = 0; i < n; i++) { const c = C[i]; if (c.stepped && clock >= c.traceUntil) g.fillText(c.ch, c.x, c.y); }
       g.fillStyle = G_TRACE;
       for (let i = 0; i < n; i++) { const c = C[i]; if (c.stepped && clock < c.traceUntil) g.fillText(c.ch, c.x, c.y); }
+
+      /* decode ripples: rings of white glyphs sweep outward from the tap;
+         the persistent overlay fades each stamp into a green afterimage */
+      for (const b of st.bursts) {
+        if (!b.on) continue;
+        const k = (clock - b.t0) / 620;
+        if (k >= 1) { b.on = false; continue; }
+        const rr = 24 + k * 130;
+        g.fillStyle = G_TRACE;
+        for (let a = 0; a < 10; a++) {
+          const ang = a * 0.628 + b.t0 * 0.01;
+          g.fillText(GRID_GA[(Math.random() * GRID_N) | 0], b.x + Math.cos(ang) * rr, b.y + Math.sin(ang) * rr * 0.72);
+        }
+      }
     },
-    /* M4 verb: tap a column and the white trace ignites THERE — the same
-       paint the auto-trace uses, so the two can never drift apart */
+    /* M4 verb, enriched: tap a column and the white trace ignites THERE —
+       and the tap point itself detonates a decode ripple through the rain */
     verb(s, st, x, y, clock) {
       const C = st.C, g = s.g;
       const c = C[Math.max(0, Math.min(C.length - 1, (x / (s.w / C.length)) | 0))];
       c.traceUntil = clock + 520;
       g.fillStyle = G_TRACE;
       for (let yy = -st.rowH; yy < s.h + st.rowH; yy += st.rowH) g.fillText(GRID_GA[(Math.random() * GRID_N) | 0], c.x, yy);
+      let b = null, oldest = null;
+      for (const q of st.bursts) {
+        if (!q.on) { b = q; break; }
+        if (!oldest || q.t0 < oldest.t0) oldest = q;
+      }
+      b = b || oldest;
+      b.on = true; b.x = x; b.y = y; b.t0 = clock;
       verbEvent('trace');
     },
   };
@@ -724,7 +820,13 @@ const WorldFX = (() => {
       }
       const RINGS = [];                                  /* M4: 3 pooled sonar rings */
       for (let i = 0; i < 3; i++) RINGS.push({ on: false, x: 0, y: 0, t0: 0 });
-      return { J, SNOW, SHAFTS, RINGS, levOn: false, levStart: 0, nextLev: -1, levDir: 1, levY: 0 };
+      const MOTES = [];                                  /* a touched jelly sheds living light */
+      for (let i = 0; i < 14; i++) MOTES.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1 });
+      return {
+        J, SNOW, SHAFTS, RINGS, MOTES,
+        levOn: false, levStart: 0, nextLev: -1, levDir: 1, levY: 0,
+        ping0: -9e9, ping1: -9e9,                        /* the last two pings: three fast = a call */
+      };
     },
     frame(s, st, dt, clock) {
       const g = s.g;
@@ -837,10 +939,22 @@ const WorldFX = (() => {
         g.globalAlpha = 0.25 * (1 - k) * dim;
         g.beginPath(); g.arc(q.x, q.y, rr * 0.62, 0, 7); g.stroke();
       }
+      g.fillStyle = 'rgba(124,242,255,1)';                /* shed light rises and gutters out */
+      for (const m of st.MOTES) {
+        if (!m.on) continue;
+        m.life += dt;
+        const k = m.life / m.max;
+        if (k >= 1) { m.on = false; continue; }
+        m.x += m.vx * dt; m.y += m.vy * dt; m.vy -= 0.00002 * dt;
+        g.globalAlpha = (1 - k) * 0.85 * dim;
+        g.beginPath(); g.arc(m.x, m.y, 1.3 + (1 - k), 0, 7); g.fill();
+      }
       g.globalAlpha = 1;
     },
-    /* M4 verb: one sonar ping — a ring blooms at the tap, the jellies pulse
-       and lean toward it, and once in a while the deep answers back */
+    /* the verb, enriched: a sonar ping blooms at the tap and the jellies
+       lean in. Touch a jelly ITSELF and it startles — a hard pulse and a
+       shed of living light. Three fast pings anywhere are a CALL, and the
+       deep answers: the leviathan comes now. */
     verb(s, st, x, y, clock) {
       let q = null, oldest = null;
       for (const r of st.RINGS) {
@@ -850,6 +964,24 @@ const WorldFX = (() => {
       q = q || oldest;
       q.on = true; q.x = x; q.y = y; q.t0 = clock;
       for (const j of st.J) { j.kick = 1; j.kx = x; }
+      for (const j of st.J) {                             /* the touched jelly startles */
+        const dx = x - j.x, dy = y - j.y;
+        if (dx * dx + dy * dy < j.re * j.re * 2.6) {
+          j.kick = 1.8;
+          let shed = 0;
+          for (const m of st.MOTES) {
+            if (m.on) continue;
+            m.on = true; m.x = j.x + dx * 0.3; m.y = j.y + dy * 0.3;
+            const a = Math.random() * 7, sp = 0.02 + Math.random() * 0.04;
+            m.vx = Math.cos(a) * sp; m.vy = Math.sin(a) * sp - 0.02;
+            m.life = 0; m.max = 800 + Math.random() * 700;
+            if (++shed >= 6) break;
+          }
+          break;
+        }
+      }
+      if (clock - st.ping1 < 1400 && !st.levOn) st.nextLev = clock;   /* the third fast ping is a call */
+      st.ping1 = st.ping0; st.ping0 = clock;
       verbEvent('ping');
     },
   };
@@ -883,9 +1015,29 @@ const WorldFX = (() => {
   }
 
   /* ============================================================
-     ARCADIA: the 8-bit cabinet — pixel rank, patrol ship, CRT crunch
-     caps: invaders <=10 · stars 36 · 1 shot · 1 explosion
+     ARCADIA: the 8-bit cabinet — pixel rank, patrol ship, CRT crunch.
+     The cannon is REAL now: hold to autofire (140ms), 8 pooled shots,
+     6 pooled explosions, a pixel-digit score, and every cleared wave
+     marches the next one faster. The cabinet still demos itself when
+     nobody is at the stick.
+     caps: invaders <=10 · stars 36 · shots 8 · explosions 6
      ============================================================ */
+  const ARC_DIG = [                                    /* 3x5 pixel digits, row bitmasks */
+    [7,5,5,5,7],[2,6,2,2,7],[7,1,7,4,7],[7,1,7,1,7],[5,5,7,1,1],
+    [7,4,7,1,7],[7,4,7,5,7],[7,1,1,2,2],[7,5,7,5,7],[7,5,7,1,7],
+  ];
+  function arcScore(g, score, w) {                     /* right-aligned, cabinet-yellow */
+    let s2 = Math.min(999999, score) | 0;
+    const digits = s2 === 0 ? [0] : [];
+    while (s2 > 0) { digits.unshift(s2 % 10); s2 = (s2 / 10) | 0; }
+    let x = w - 20 - digits.length * 16;
+    for (const d of digits) {
+      const bm = ARC_DIG[d];
+      for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++)
+        if (bm[r] & (4 >> c)) g.fillRect(x + c * 4, 16 + r * 4, 4, 4);
+      x += 16;
+    }
+  }
   const INVADER_A = [0x18, 0x3C, 0x7E, 0xDB, 0xFF, 0x24, 0x5A, 0xA5];
   const INVADER_B = [0x18, 0x3C, 0x7E, 0xDB, 0xFF, 0xA5, 0x5A, 0x24];
   const PLAYER = [0x18, 0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0xE7];
@@ -943,21 +1095,26 @@ const WorldFX = (() => {
       });
       const inv = [];
       for (let i = 0; i < N; i++) inv.push({ dead: false, respawnAt: 0 });
+      const shots = [];
+      for (let i = 0; i < 8; i++) shots.push({ on: false, x: 0, y: 0, ps: false });
+      const expls = [];
+      for (let i = 0; i < 6; i++) expls.push({ on: false, x: 0, y: 0, start: 0 });
       return {
         w, h, N, SPR, CELL,
         gx: leftBound, gy: 128, dir: 1, leftBound, rightBound,
         topStart: 128, resetY: Math.floor(h * 0.60 / 4) * 4, canMove: rightBound > leftBound,
-        stepTick: -1, stars, inv,
+        stepTick: -1, stepMs: 480, stars, inv,
         shipX: w / 2 - 16, shipTargetX: w / 2 - 16, shipY: Math.floor((h - 76) / 4) * 4,
-        shot: { active: false, x: 0, y: 0 }, nextShot: -1,
-        expl: { active: false, x: 0, y: 0, start: 0 },
-        aimHold: -9e9, coolUntil: -9e9, playerShot: false,
+        shots, expls, nextShot: -1,
+        aimHold: -9e9, coolUntil: -9e9,
+        fireHeld: false, fireDownAt: -9e9,
+        score: 0, waveClearAt: 0,
       };
     },
     frame(s, st, dt, clock) {
       const g = s.g, w = s.w, h = s.h, SPR = 32;
 
-      const tick = Math.floor(clock / 480);
+      const tick = Math.floor(clock / st.stepMs);
       const flip = tick & 1;
       if (tick !== st.stepTick) {
         st.stepTick = tick;
@@ -975,7 +1132,15 @@ const WorldFX = (() => {
         }
       }
 
-      for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
+      /* a cleared wave re-forms all at once, and marches FASTER (floor 300ms) */
+      if (st.waveClearAt && clock >= st.waveClearAt) {
+        st.waveClearAt = 0;
+        st.stepMs = Math.max(300, st.stepMs - 40);
+        st.stepTick = Math.floor(clock / st.stepMs);
+        st.gy = st.topStart;
+        for (const iv of st.inv) iv.dead = false;
+      }
+      if (!st.waveClearAt) for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
 
       /* the ship: chases the player's aim while a hand is on the stick;
          only wanders on its own once the hand has been gone a while (M4) */
@@ -984,32 +1149,49 @@ const WorldFX = (() => {
       if (Math.abs(st.shipTargetX - st.shipX) < 4 && clock - st.aimHold > 4000)
         st.shipTargetX = shipMin + Math.random() * (shipMax - shipMin);
 
+      /* hold-to-autofire: the cannon answers as long as the hand is down
+         (5s max burst so a stuck latch can never fire forever) */
+      if (st.fireHeld && clock - st.fireDownAt > 5000) st.fireHeld = false;
+      if (st.fireHeld && clock >= st.coolUntil) {
+        st.coolUntil = clock + 140;
+        if (arcFire(st, true)) verbEvent('shot');
+      }
+
       /* attract mode: the cabinet plays itself only while nobody is at it */
       if (st.nextShot < 0) st.nextShot = clock + 3000 + Math.random() * 3000;
-      if (clock > st.nextShot && !st.shot.active && !st.expl.active) {
-        if (clock - st.aimHold > 6000) { st.playerShot = false; arcFire(st); }
+      if (clock > st.nextShot) {
+        if (clock - st.aimHold > 6000) arcFire(st, false);
         st.nextShot = clock + 8000 + Math.random() * 6000;
       }
 
-      /* the shot flies STRAIGHT (M4 killed the homing steer): a hit is a
-         hit against whichever live invader the shot actually crosses */
-      if (st.shot.active) {
-        st.shot.y -= 0.38 * dt;
-        const rowY = st.gy + 16, sx = st.shot.x + 2;
-        if (st.shot.y <= rowY + 14 && st.shot.y > rowY - 14) {
+      /* shots fly STRAIGHT (M4 killed the homing steer): a hit is a hit
+         against whichever live invader the shot actually crosses */
+      const rowY = st.gy + 16;
+      for (const sh of st.shots) {
+        if (!sh.on) continue;
+        sh.y -= 0.38 * dt;
+        if (sh.y <= rowY + 14 && sh.y > rowY - 14) {
+          const sx = sh.x + 2;
           for (let i = 0; i < st.N; i++) {
             if (st.inv[i].dead) continue;
             const cx = st.gx + i * st.CELL + 16;
             if (Math.abs(sx - cx) < 18) {
-              st.expl.active = true; st.expl.x = cx; st.expl.y = rowY; st.expl.start = clock;
+              for (const ex of st.expls) if (!ex.on) { ex.on = true; ex.x = cx; ex.y = rowY; ex.start = clock; break; }
               st.inv[i].dead = true; st.inv[i].respawnAt = clock + 3000;
-              st.shot.active = false;
-              if (st.playerShot) verbEvent('invader');
+              sh.on = false;
+              if (sh.ps) { st.score += 100; verbEvent('invader'); }
+              let alive = 0;
+              for (const iv of st.inv) if (!iv.dead) alive++;
+              if (alive === 0 && !st.waveClearAt) {          /* WAVE CLEAR */
+                st.waveClearAt = clock + 900;
+                for (const iv of st.inv) iv.respawnAt = clock + 9e9;
+                if (sh.ps) st.score += 500;
+              }
               break;
             }
           }
         }
-        if (st.shot.active && st.shot.y < 8) st.shot.active = false;
+        if (sh.on && sh.y < 8) sh.on = false;
       }
 
       g.clearRect(0, 0, w, h);
@@ -1025,15 +1207,20 @@ const WorldFX = (() => {
 
       g.fillStyle = '#ffd23f';
       arcBlit(g, PLAYER, Math.floor(st.shipX / 4) * 4, st.shipY);
-      if (st.shot.active) g.fillRect(Math.floor(st.shot.x / 4) * 4, Math.floor(st.shot.y / 4) * 4, 4, 12);
+      for (const sh of st.shots) if (sh.on) g.fillRect(Math.floor(sh.x / 4) * 4, Math.floor(sh.y / 4) * 4, 4, 12);
+      if (st.score > 0) arcScore(g, st.score, w);      /* the cabinet keeps your count */
 
-      if (st.expl.active) {
-        const f = Math.floor((clock - st.expl.start) / 64);
-        if (f >= 6) st.expl.active = false;
-        else { g.fillStyle = '#ff4757'; const fr = EXPL[f]; for (let k = 0; k < fr.length; k++) g.fillRect(st.expl.x + fr[k][0] * 4, st.expl.y + fr[k][1] * 4, 4, 4); }
+      g.fillStyle = '#ff4757';
+      for (const ex of st.expls) {
+        if (!ex.on) continue;
+        const f = Math.floor((clock - ex.start) / 64);
+        if (f >= 6) { ex.on = false; continue; }
+        const fr = EXPL[f];
+        for (let k = 0; k < fr.length; k++) g.fillRect(ex.x + fr[k][0] * 4, ex.y + fr[k][1] * 4, 4, 4);
       }
     },
-    /* M4 verbs: the pointer is the stick, the tap is the fire button */
+    /* M4 verbs: the pointer is the stick, holding it down is the fire
+       button — press to shoot, keep it pressed to hose the sky */
     aim(s, st, x, y, clock) {
       st.aimHold = clock;
       st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
@@ -1041,12 +1228,12 @@ const WorldFX = (() => {
     verb(s, st, x, y, clock) {
       st.aimHold = clock;
       st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
-      if (st.shot.active || clock < st.coolUntil) return;   /* 1 pooled shot, 600ms cooldown */
-      st.coolUntil = clock + 600;
-      st.playerShot = true;
-      arcFire(st);
-      verbEvent('shot');
+      st.fireHeld = true; st.fireDownAt = clock;
+      if (clock < st.coolUntil) return;
+      st.coolUntil = clock + 140;
+      if (arcFire(st, true)) verbEvent('shot');
     },
+    verbUp(s, st) { st.fireHeld = false; },
     rm() {
       const c = document.querySelector('[data-canvas="arcadia"]');
       if (!c || !c.parentElement) return;
@@ -1057,10 +1244,15 @@ const WorldFX = (() => {
       arcStatic(g, r.width, r.height);
     },
   };
-  function arcFire(st) {
-    st.shot.active = true;
-    st.shot.x = Math.floor(st.shipX / 4) * 4 + 12;
-    st.shot.y = st.shipY - 8;
+  function arcFire(st, playerShot) {
+    for (const sh of st.shots) {
+      if (sh.on) continue;
+      sh.on = true; sh.ps = !!playerShot;
+      sh.x = Math.floor(st.shipX / 4) * 4 + 12;
+      sh.y = st.shipY - 8;
+      return true;
+    }
+    return false;                                      /* all 8 in the air: the cannon breathes */
   }
 
   /* ============================================================
@@ -1099,12 +1291,25 @@ const WorldFX = (() => {
     init(s) {
       const snow = [];
       for (let i = 0; i < 64; i++) snow.push(newFlake(s, true));
-      return { snow, star: null, nextStar: 0 };
+      const surges = [];                               /* the hand conducts: 3 pooled sky-surges */
+      for (let i = 0; i < 3; i++) surges.push({ on: false, xn: 0, t0: 0 });
+      const sparks = [];                               /* ice-sparks off the strike itself */
+      for (let i = 0; i < 14; i++) sparks.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1 });
+      return { snow, star: null, nextStar: 0, surges, sparks };
     },
     frame(s, st, dt, clock) {
       const g = s.g, w = s.w, h = s.h;
       g.clearRect(0, 0, w, h);
       if (st.nextStar === 0) st.nextStar = clock + 3000 + Math.random() * 5000;
+
+      let lift = 0;                                    /* how hard the sky is being conducted */
+      for (const sg of st.surges) {
+        if (!sg.on) continue;
+        const age = (clock - sg.t0) / 2600;
+        if (age >= 1) { sg.on = false; continue; }
+        const e = Math.sin(age * Math.PI);
+        if (e > lift) lift = e;
+      }
 
       g.globalCompositeOperation = 'lighter';
       for (let ri = 0; ri < A_RIB.length; ri++) {
@@ -1112,20 +1317,40 @@ const WorldFX = (() => {
         const f = 0.5 + 0.5 * Math.sin(clock * R.hs + R.hp);
         const hemRGB = aRGB(R.ca[0], R.cb[0], f), botRGB = aRGB(R.ca[1], R.cb[1], f);
         const hbY = R.hb * h, fbY = R.fb * h;
+        const ha = R.ha * (1 + 0.55 * lift);           /* a conducted sky burns brighter */
         const grad = g.createLinearGradient(0, hbY - R.amax * h, 0, fbY);
-        grad.addColorStop(0, `rgba(${hemRGB},${R.ha})`);
-        grad.addColorStop(0.5, `rgba(${botRGB},${R.ha * 0.4})`);
+        grad.addColorStop(0, `rgba(${hemRGB},${ha})`);
+        grad.addColorStop(0.5, `rgba(${botRGB},${ha * 0.4})`);
         grad.addColorStop(1, `rgba(${botRGB},0)`);
         g.fillStyle = grad;
         g.beginPath();
         for (let i = 0; i < A_NX; i++) {
           const xn = A_XS[i]; let y = hbY;
           for (let j = 0; j < 3; j++) { const c = R.comps[j]; y += c.a * h * Math.sin(c.f * xn + c.p + clock * c.s); }
+          /* the surge: a localized swell that dances outward from the strike */
+          for (const sg of st.surges) {
+            if (!sg.on) continue;
+            const age = (clock - sg.t0) / 2600, d = xn - sg.xn;
+            y -= h * 0.055 * Math.exp(-(d * d) / 0.014) * Math.sin(age * Math.PI)
+               * Math.sin(11 * xn - clock * 0.006 + ri * 1.3);
+          }
           const x = xn * w; i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
         }
         g.lineTo(w, fbY); g.lineTo(0, fbY); g.closePath(); g.fill();
       }
       g.globalCompositeOperation = 'source-over';
+
+      g.fillStyle = 'rgba(214,240,255,1)';             /* the strike's ice-sparks */
+      for (const p of st.sparks) {
+        if (!p.on) continue;
+        p.life += dt;
+        const k = p.life / p.max;
+        if (k >= 1) { p.on = false; continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.00006 * dt;
+        g.globalAlpha = (1 - k) * 0.9;
+        g.beginPath(); g.arc(p.x, p.y, 1.1 + (1 - k) * 0.9, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
 
       g.fillStyle = 'rgba(214,236,255,0.72)';
       for (const p of st.snow) {
@@ -1154,6 +1379,28 @@ const WorldFX = (() => {
       }
     },
     rm() { /* intentional no-op: the frozen end-state is pure CSS (.aurora-static) */ },
+    /* the verb: CONDUCT the lights — strike the sky and a swell rolls
+       through every ribbon from where you touched, ice-sparks at the point,
+       the whole aurora burning brighter while it dances */
+    verb(s, st, x, y, clock) {
+      let sg = null, oldest = null;
+      for (const q of st.surges) {
+        if (!q.on) { sg = q; break; }
+        if (!oldest || q.t0 < oldest.t0) oldest = q;
+      }
+      sg = sg || oldest;
+      sg.on = true; sg.xn = x / s.w; sg.t0 = clock;
+      let n2 = 0;
+      for (const p of st.sparks) {
+        if (p.on) continue;
+        p.on = true; p.x = x; p.y = y;
+        const a = Math.random() * 7, sp = 0.03 + Math.random() * 0.06;
+        p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp - 0.03;
+        p.life = 0; p.max = 600 + Math.random() * 600;
+        if (++n2 >= 10) break;
+      }
+      verbEvent('query');
+    },
   };
   const runQuery = document.getElementById('run-query');
   if (runQuery) {
@@ -1192,7 +1439,15 @@ const WorldFX = (() => {
     init(s) {
       const cols = Math.ceil(s.w / 56), rows = Math.ceil(s.h / 56);
       const lit = new Float32Array(cols * rows);
-      const st = { cols, rows, lit, px: s.w / 2, py: s.h / 2, auto: !matchMedia('(pointer: fine)').matches, at: 0 };
+      const pings = [];                                 /* survey soundings: 2 pooled rings */
+      for (let i = 0; i < 2; i++) pings.push({ on: false, x: 0, y: 0, t0: 0 });
+      const st = {
+        cols, rows, lit, px: s.w / 2, py: s.h / 2,
+        auto: !matchMedia('(pointer: fine)').matches, at: 0,
+        pings,
+        wpx: new Float32Array(7), wpy: new Float32Array(7),   /* the charted route: 7 waypoints, FIFO */
+        wpN: 0, wpHead: 0,
+      };
       st.litAt = (c, r) => st.lit[c + r * st.cols];     /* bound once: zero per-frame alloc */
       const move = (e) => {
         /* canvas-local coordinates: the grid math below indexes THIS surface,
@@ -1218,8 +1473,72 @@ const WorldFX = (() => {
           st.lit[k] = Math.min(1, st.lit[k] + dt / (dx || dy ? 2600 : 900));
         }
       }
+      /* the soundings: an expanding wavefront charts every cell it crosses */
+      for (const p of st.pings) {
+        if (!p.on) continue;
+        const k = (clock - p.t0) / 950;
+        if (k >= 1) { p.on = false; continue; }
+        const rr = 20 + k * 170;
+        for (let r = 0; r < st.rows; r++) for (let c = 0; c < st.cols; c++) {
+          const dx = c * 56 + 28 - p.x, dy = r * 56 + 28 - p.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d > rr - 30 && d < rr + 30) {
+            const kk = c + r * st.cols;
+            st.lit[kk] = Math.min(1, st.lit[kk] + dt / 480);
+          }
+        }
+      }
       s.g.clearRect(0, 0, s.w, s.h);
       draftPaint(s.g, st.cols, st.rows, st.litAt);
+      const g = s.g;
+      for (const p of st.pings) {                       /* the wavefront itself */
+        if (!p.on) continue;
+        const k = (clock - p.t0) / 950;
+        const rr = 20 + k * 170;
+        g.strokeStyle = `rgba(100,213,245,${((1 - k) * 0.65).toFixed(3)})`;
+        g.lineWidth = 1.6;
+        g.beginPath(); g.arc(p.x, p.y, rr, 0, 7); g.stroke();
+      }
+      if (st.wpN > 0) {                                 /* the charted route: dashed, oldest to newest */
+        g.strokeStyle = 'rgba(100,213,245,0.55)';
+        g.lineWidth = 1.2;
+        g.setLineDash([5, 7]);
+        g.beginPath();
+        for (let i = 0; i < st.wpN; i++) {
+          const k = (st.wpHead - st.wpN + 1 + i + 14) % 7;
+          i === 0 ? g.moveTo(st.wpx[k], st.wpy[k]) : g.lineTo(st.wpx[k], st.wpy[k]);
+        }
+        g.stroke();
+        g.setLineDash([]);                              /* the shared context keeps its line style */
+        for (let i = 0; i < st.wpN; i++) {
+          const k = (st.wpHead - st.wpN + 1 + i + 14) % 7;
+          const last = i === st.wpN - 1;
+          const pulse = last ? 0.7 + 0.3 * Math.sin(clock * 0.006) : 0.75;
+          g.strokeStyle = `rgba(100,213,245,${pulse.toFixed(3)})`;
+          g.lineWidth = last ? 1.8 : 1.2;
+          g.beginPath(); g.arc(st.wpx[k], st.wpy[k], last ? 6 : 4.5, 0, 7); g.stroke();
+          g.beginPath();
+          g.moveTo(st.wpx[k] - 8, st.wpy[k]); g.lineTo(st.wpx[k] + 8, st.wpy[k]);
+          g.moveTo(st.wpx[k], st.wpy[k] - 8); g.lineTo(st.wpx[k], st.wpy[k] + 8);
+          g.stroke();
+        }
+      }
+    },
+    /* the verb: SOUND THE SURVEY — a wavefront charts a ring of cells out
+       from the strike, and a waypoint drops there, threading onto the
+       dashed route of everywhere you have declared worth returning to */
+    verb(s, st, x, y, clock) {
+      let p = null, oldest = null;
+      for (const q of st.pings) {
+        if (!q.on) { p = q; break; }
+        if (!oldest || q.t0 < oldest.t0) oldest = q;
+      }
+      p = p || oldest;
+      p.on = true; p.x = x; p.y = y; p.t0 = clock;
+      st.wpHead = (st.wpHead + 1) % 7;
+      st.wpx[st.wpHead] = x; st.wpy[st.wpHead] = y;
+      if (st.wpN < 7) st.wpN++;
+      verbEvent('ping');
     },
     rm() {                                     /* designed static pose: a survey abandoned mid-draft —
                                                   a diagonal swath of charted cells, densest where the
@@ -1281,7 +1600,10 @@ const WorldFX = (() => {
   function archiveBuildFan(s, st) {          /* rebuilds the pool IN PLACE — zero alloc */
     const W = s.w, H = s.h, rnd = Math.random;
     const MAXD = 4 + (rnd() < 0.5 ? 0 : 1);
-    st.rootX = W * (0.28 + rnd() * 0.44); st.rootY = H * 0.92;
+    /* a hand may have planted the question somewhere specific */
+    st.rootX = st.rerootX != null ? st.rerootX : W * (0.28 + rnd() * 0.44);
+    st.rerootX = null;
+    st.rootY = H * 0.92;
     st.ax[0] = st.rootX; st.ay[0] = st.rootY;
     st.parent[0] = -1; st.depth[0] = 0; st.ang[0] = Math.PI / 2;
     st.wt[0] = 1; st.br[0] = 1; st.gd[0] = 0;
@@ -1409,6 +1731,42 @@ const WorldFX = (() => {
       const bp = 0.5 + 0.5 * Math.sin(clock * 0.004);
       archiveDrawFan(g, st, gp, cp, bp);
       if (st.shimmer >= 0) archiveShimmer(g, st, clock);
+      if (st.chooseAt && clock - st.chooseAt < 700) {   /* the chosen record flares */
+        const k = (clock - st.chooseAt) / 700, i = st.chooseI;
+        const sz = 46 * (1 - k * 0.4);
+        g.globalAlpha = (1 - k) * 0.9;
+        g.drawImage(archiveGlow(), st.cx[i] - sz / 2, st.cy[i] - sz / 2, sz, sz);
+        g.globalAlpha = 1;
+      }
+    },
+    /* the verb: CHOOSE THE FUTURE. Touch a branch and the gold path
+       re-burns through the record you chose — the archive re-reads
+       tomorrow through YOUR node. Touch the empty stacks and a new
+       question is planted there instead: the fan re-roots at your hand. */
+    verb(s, st, x, y, clock) {
+      let best = -1, bd = 42 * 42;
+      for (let i = 1; i < st.count; i++) {
+        const dx = st.cx[i] - x, dy = st.cy[i] - y, d2 = dx * dx + dy * dy;
+        if (d2 < bd) { bd = d2; best = i; }
+      }
+      if (best > 0) {
+        for (let i = 1; i < st.count; i++) st.br[i] = 0;
+        for (let n2 = best; n2 > 0; n2 = st.parent[n2]) st.br[n2] = 1;   /* your ancestry lights */
+        let cur = best;                                 /* and the future runs on from your choice */
+        for (;;) {
+          let nb = -1, bw = -1;
+          for (let i = cur + 1; i < st.count; i++) if (st.parent[i] === cur && st.wt[i] > bw) { bw = st.wt[i]; nb = i; }
+          if (nb < 0) break;
+          st.br[nb] = 1; cur = nb;
+        }
+        st.cycleT0 = clock - st.GROW;                   /* fully grown; a fresh hold to admire it */
+        st.shimmer = -1;
+        st.chooseAt = clock; st.chooseI = best;
+      } else {
+        st.rerootX = Math.max(s.w * 0.15, Math.min(s.w * 0.85, x));
+        st.shimmer = clock;                             /* dice-shimmer, then the fan re-roots there */
+      }
+      verbEvent('consult');
     },
     rm() {                                     /* designed static pose: one grown fan, chosen path lit */
       const c = document.querySelector('[data-canvas="archive"]');
@@ -1696,6 +2054,40 @@ const WorldFX = (() => {
 
       dyDraw(s.g, st, clock);
     },
+    /* the verb: YOU are the drill instructor. Tap a frozen cadet and your
+       hand taps them back in — no waiting for the rescue. Strike anywhere
+       else and that point becomes the RALLY: all three squads break and
+       re-form around it (down is a direction you choose; so is together). */
+    verb(s, st, x, y, clock) {
+      const L = st.L;
+      for (let i = 0; i < 21; i++) {                    /* the mercy tap comes first */
+        const q = L[i];
+        if (!q.frozen) continue;
+        const dx = q.sx - x, dy = q.sy - y;
+        if (dx * dx + dy * dy < 400) {
+          q.frozen = false; q.flash = clock + 500;
+          if (q.rescuer >= 0) { L[q.rescuer].rescuing = -1; q.rescuer = -1; }
+          verbEvent('drill');
+          return;
+        }
+      }
+      /* unproject the strike onto the camera's mid-plane (z'=0, where the
+         projection scale is exactly 1), then undo pitch and yaw */
+      const x1 = (x - st.cx) / st.S, y1 = (y - st.cy) / st.S;
+      const wy = Math.max(-0.8, Math.min(0.8, y1 * st.cosx));
+      const z1 = -y1 * st.sinx;
+      const wx = Math.max(-0.8, Math.min(0.8, x1 * st.cosy - z1 * st.siny));
+      const wz = Math.max(-0.8, Math.min(0.8, x1 * st.siny + z1 * st.cosy));
+      for (let i = 0; i < 21; i++) {                    /* a tight shell around the rally point */
+        const q = L[i];
+        q.tx = Math.max(-0.9, Math.min(0.9, wx + st.shell[i * 3] * 0.55));
+        q.ty = Math.max(-0.9, Math.min(0.9, wy + st.shell[i * 3 + 1] * 0.55));
+        q.tz = Math.max(-0.9, Math.min(0.9, wz + st.shell[i * 3 + 2] * 0.55));
+        if (!q.frozen) q.flash = clock + 400;           /* the squads acknowledge the order */
+      }
+      st.nextForm = clock + 7000;                       /* the drills resume on their own clock */
+      verbEvent('drill');
+    },
     rm() {                                             /* the held pose: mid-turn, wedges locked, one cadet adrift */
       const c = document.querySelector('[data-canvas="drillyard"]');
       if (!c || !c.parentElement) return;
@@ -1949,6 +2341,53 @@ const WorldFX = (() => {
       }
     },
     rm() { /* intentional no-op: the frozen pose is the .sw-static SVG (aurora precedent) */ },
+    /* the verb: the weather answers the hand. Strike INTO the wall and the
+       light cracks exactly where you pointed (never faster than the strobe
+       law allows), sparks scattering off the blow. Touch the calm plain and
+       the nearest shelled bud flinches shut, risers lift off your finger,
+       and the nearest unseen stone MOVES to where you touched — the spark
+       streams will curl around it on the next transit. */
+    verb(s, st, x, y, clock) {
+      let frontX = s.w + 160;
+      if (st.storm) {
+        const p = (clock - st.t0) / st.dur;
+        if (p < 1) frontX = (s.w + 160) - p * st.travel;
+      }
+      if (st.storm && x > frontX - 60) {                /* the strike lands inside the wall */
+        if (clock - (st.lastStrike || -9e9) >= 900) {   /* the strobe law holds for the hand too */
+          st.lastStrike = clock;
+          for (const f of st.flashes) {
+            if (f.on) continue;
+            f.on = true; f.t0 = clock; f.dur = 340;
+            f.rel = Math.max(60, Math.min(st.WW - 120, x - frontX));
+            f.y = Math.max(20, Math.min(st.hY * 0.72, y));
+            f.r = 110 + Math.random() * 80;
+            break;
+          }
+        }
+        for (let i = 0; i < 6; i++)                     /* sparks scatter off the blow */
+          swSpawn(st, Math.min(x, s.w + 26), st.hY, 1);
+      } else {                                          /* the calm plain, disturbed */
+        let nb = null, bd = 1e9;
+        for (const b of st.buds) {
+          const d = Math.abs(b.x - x);
+          if (d < bd) { bd = d; nb = b; }
+        }
+        if (nb) nb.o = Math.min(nb.o, 0.22);            /* the nearest bud flinches, then trusts again */
+        let nr = null, rd = 1e9;
+        for (const rk of st.rocks) {
+          const d = Math.abs(rk.x - x);
+          if (d < rd) { rd = d; nr = rk; }
+        }
+        if (nr) {                                       /* the stone answers to where you touched */
+          nr.x = Math.max(30, Math.min(s.w - 30, x));
+          nr.y = Math.max(st.hY - 60, Math.min(st.hY - 10, y));
+          nr.pol = -nr.pol;
+        }
+        for (let i = 0; i < 4; i++) swSpawn(st, x + (Math.random() - 0.5) * 30, st.hY, 0);
+      }
+      verbEvent('storm');
+    },
   };
   const braceWall = document.getElementById('brace-wall');
   if (braceWall) {
@@ -1977,7 +2416,14 @@ const WorldFX = (() => {
      path — idle spectacle must never preempt the player's version of it */
   let beaconTrigger = null;   /* the active FX sets this; the toy button calls it */
 
-  function bcnRun(st, clock) { st.sig.on = true; st.sig.t0 = clock; for (let i = 0; i < BCN_N; i++) st.burst[i] = 0; }
+  function bcnRun(st, clock, from) {
+    const f = from || 0;
+    const far = Math.max(f, BCN_N - 1 - f);            /* the wave spreads BOTH ways from your fire */
+    st.sig.on = true; st.sig.t0 = clock; st.sig.from = f;
+    st.sig.settle = clock + far * BCN_STAGGER + BCN_HOLD;
+    st.sig.run = far * BCN_STAGGER + BCN_HOLD + BCN_SETTLE;
+    for (let i = 0; i < BCN_N; i++) st.burst[i] = 0;
+  }
   function bcnEmber(st, x, y, n, sc) {
     for (let c = 0; c < n; c++) {
       let e = null; for (const q of st.embers) if (!q.on) { e = q; break; }
@@ -2248,7 +2694,8 @@ const WorldFX = (() => {
         fire: 0.1,
         ans: 0,
         inten: new Float32Array(BCN_N), rdrift: new Float32Array(ridges.length),
-        sig: { on: false, t0: 0 }, burst: new Uint8Array(BCN_N),
+        sig: { on: false, t0: 0, from: 0, settle: 0, run: BCN_RUN }, burst: new Uint8Array(BCN_N),
+        falls: [{ on: false, x0: 0, y0: 0, tx: 0, ty: 0, t0: 0 }, { on: false, x0: 0, y0: 0, tx: 0, ty: 0, t0: 0 }],
         next: null, lastEnd: -99999, calm: 1, btnOn: false,
         emberAcc: 0, smokeAcc: 0, gust: 0, gustNext: 0,
       };
@@ -2284,17 +2731,18 @@ const WorldFX = (() => {
         else beaconToy.removeAttribute('aria-disabled');
       }
       if (st.sig.on) {
-        const runEnd = st.sig.t0 + BCN_RUN;
+        const runEnd = st.sig.t0 + st.sig.run;
         if (clock >= runEnd) { st.sig.on = false; st.lastEnd = clock; st.next = st.sig.t0 + BCN_GAP + Math.random() * 4000; }
       }
 
       for (let k = 0; k < st.ridges.length; k++) { const r = st.ridges[k]; st.rdrift[k] = r.driftA * Math.sin(clock * r.driftS + r.phase); }
 
-      const settleStart = st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + BCN_HOLD;
+      const settleStart = st.sig.settle;
       for (let i = 0; i < BCN_N; i++) {
         let it = BCN_EMBER;
         if (st.sig.on) {
-          const ig = clock - (st.sig.t0 + i * BCN_STAGGER);     /* the wave reaches pyre i */
+          /* the wave spreads outward from whichever fire was struck first */
+          const ig = clock - (st.sig.t0 + Math.abs(i - st.sig.from) * BCN_STAGGER);
           if (ig >= 0) {
             it = ig < BCN_RISE ? BCN_EMBER + (1 - BCN_EMBER) * (ig / BCN_RISE)
                                : 0.82 + 0.07 * Math.sin((clock + i * 370) * 0.018);
@@ -2303,6 +2751,26 @@ const WorldFX = (() => {
           }
         }
         st.inten[i] = it;
+      }
+
+      /* falling stars: a wanderer's spark arcs down and kindles where it lands */
+      for (const fs of st.falls) {
+        if (!fs.on) continue;
+        const k = (clock - fs.t0) / 700;
+        if (k >= 1) {
+          fs.on = false;
+          bcnEmber(st, fs.tx, fs.ty, 12, 1.1);
+          bcnSmoke(st, fs.tx, fs.ty, 1, 1);
+          continue;
+        }
+        const e = k * k;
+        const fx2 = fs.x0 + (fs.tx - fs.x0) * k;
+        const fy2 = fs.y0 + (fs.ty - fs.y0) * e;
+        g.strokeStyle = `rgba(255,214,150,${(0.8 * (1 - k * 0.4)).toFixed(3)})`;
+        g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(fx2 - 14 * (1 - k), fy2 - 22 * (1 - k)); g.lineTo(fx2, fy2); g.stroke();
+        g.fillStyle = 'rgba(255,246,210,0.95)';
+        g.beginPath(); g.arc(fx2, fy2, 1.8, 0, 7); g.fill();
       }
 
       st.calm += ((st.sig.on ? 0.42 : 1) - st.calm) * 0.02;      /* stars sharpen between signals */
@@ -2356,11 +2824,11 @@ const WorldFX = (() => {
       g.fillStyle = 'rgba(9,7,13,0.96)';
       g.fill(st.tower);
 
-      /* the Eye's envelope: past the 7th fire, something far off opens.
-         The oldest fire on the range does not need lighting. */
+      /* the Eye's envelope: when the LAST fire catches, something far off
+         opens. The oldest fire on the range does not need lighting. */
       let ansT = 0;
       if (st.sig.on) {
-        const ag = clock - (st.sig.t0 + (BCN_N - 1) * BCN_STAGGER + 1300);
+        const ag = clock - (st.sig.t0 + Math.abs(BCN_N - 1 - st.sig.from) * BCN_STAGGER + 1300);
         if (ag > 0) ansT = Math.min(1, ag / 900);
         if (clock > settleStart) ansT *= Math.max(0, 1 - (clock - settleStart) / BCN_SETTLE);
       }
@@ -2506,6 +2974,38 @@ const WorldFX = (() => {
       g.globalAlpha = 1;
     },
     rm() { /* intentional no-op: the frozen mid-burn pose is the .beacon-static SVG (see 03-worlds.css) */ },
+    /* the verb: KINDLE THE FIRE YOU TOUCH. Strike a pyre and the signal
+       runs BOTH ways down the range from your fire — the chain answers
+       outward, and the Eye still waits for the last one. Strike the empty
+       dusk and a wanderer's spark falls from the sky and kindles where it
+       lands. (A running chain just puffs embers: the range is busy.) */
+    verb(s, st, x, y, clock) {
+      let hit = -1, hd = 60 * 60;
+      for (let i = 0; i < BCN_N; i++) {
+        const p = st.pyres[i];
+        const dx = p.baseX + st.rdrift[p.ridge] - x, dy = p.y - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < hd) { hd = d2; hit = i; }
+      }
+      if (hit >= 0) {
+        const p = st.pyres[hit];
+        bcnEmber(st, p.baseX + st.rdrift[p.ridge], p.y, 10, p.scale);
+        if (!st.sig.on && clock - st.lastEnd > 800) {
+          bcnRun(st, clock, hit);
+          beaconEvent();
+        }
+      } else {
+        for (const fs of st.falls) {
+          if (fs.on) continue;
+          fs.on = true; fs.t0 = clock;
+          fs.tx = Math.max(20, Math.min(s.w - 20, x));
+          fs.ty = Math.max(s.h * 0.3, Math.min(s.h * 0.92, y));
+          fs.x0 = fs.tx + (fs.tx > s.w / 2 ? -1 : 1) * (120 + Math.random() * 80);
+          fs.y0 = -20;
+          break;
+        }
+      }
+    },
   };
   /* the toy: light the chain now. The FX owns the run + the button's busy
      state; the score's horns take their cadence FROM the event so the two
