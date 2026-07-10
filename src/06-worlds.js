@@ -3200,8 +3200,13 @@ const WorldFX = (() => {
       }
       const mono = [];
       if (typeof WORLDS !== 'undefined') {
-        for (let i = 0; i < WORLDS.length; i++) {
-          mono.push({ x: -0.82 + (i / (WORLDS.length - 1)) * 1.64, w: WORLDS[i], lit: 0 });
+        /* the eleven stand in the order YOU lit them — the surveyed set keeps
+           insertion order, and nobody enters the hold with fewer than eleven */
+        const ordered = (typeof surveyed !== 'undefined' && surveyed.size)
+          ? [...surveyed].map(s2 => WORLDS.find(w2 => w2.slug === s2)).filter(Boolean)
+          : WORLDS;
+        for (let i = 0; i < ordered.length; i++) {
+          mono.push({ x: -0.82 + (i / Math.max(1, ordered.length - 1)) * 1.64, w: ordered[i], lit: 0 });
         }
       }
       return { dx, dy, dz, N, mono, lx: s.w / 2, ly: s.h * 0.55, yaw: 0 };

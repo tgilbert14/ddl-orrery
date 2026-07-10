@@ -16,9 +16,23 @@ of whichever world you consider. Eleven running lights kindle one per surveyed w
 Log made physical — and when the survey completes, the whole length wakes and the engines breathe.
 Object 0 was the ship's registry all along.
 
-And YOUR vessel: the shuttle, docked on the spine. Choose a world and it undocks and burns an
-intercept to the planet's live position; the warp fires on arrival. A second click re-aims it
-mid-flight; Back recalls it; reduced motion keeps instant, honest travel.
+And YOUR vessel: the shuttle, docked on the spine. Choose a world and it undocks — clamp-specks
+falling, engine coughing alive — and burns an intercept to the planet's live position; the warp
+fires on arrival, the destination itself swelling into the whiteout while its tonic sounds in its
+own voice. She MOORS off the world's limb and crosses its sky every so often while you play (the
+vigil); come home and she flips end-over-end, brakes retrograde into a lit cradle, and a spark runs
+the spine to kindle the running light you just earned.
+
+v8 "The Instrument Plays Back": every world is now a game (an arcade cabinet with lives, a coin
+slot and a persistent best; a dive lamp the deep answers; glyph rain that hangs mid-air under a held
+finger; a world you can NAME, and it keeps the name). Hold Object 0 and a ring walks the system —
+every world it crosses flares and plays its riff in its own voice, surveyed full-throated,
+unsurveyed muffled. Finish the survey and the ship WAKES: eleven tonics in your order, lights
+snapping to unison, engines catching on the downbeat, a parade lap — and from then on a touch is
+boarding: the shuttle flies into the wound in the hull, and Sector 00 opens, where eleven monoliths
+stand in the order you lit them. A dark twelfth body crosses the band on a real-clock schedule the
+site never explains. Play deep enough after finishing and the dots turn gold. The sky is graded by
+your own local hour. The heartbeat window lands exactly on the thump in your headphones.
 
 **Live:** https://tgilbert14.github.io/ddl-orrery/
 

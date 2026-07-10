@@ -1516,7 +1516,9 @@ function transitState() {
     saveT = setTimeout(() => keep.set('orrery-mastery', JSON.stringify(mastery)), 800);
     paintGold();
   };
-  ['worm', 'boost', 'trace', 'ping', 'shot', 'invader', 'query', 'consult',
+  /* deliberate acts only: 'shot' fires 7x/sec under autofire and would gild
+     Arcadia in two seconds — kills ('invader') are what mastery counts */
+  ['worm', 'boost', 'trace', 'ping', 'invader', 'query', 'consult',
    'drill', 'storm', 'beacon', 'credit', 'charted', 'named'].forEach(k =>
     Orrery.events.addEventListener(k, bump));
   Orrery.events.addEventListener('scene', paintGold);
