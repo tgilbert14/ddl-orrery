@@ -182,8 +182,13 @@ const SphereForge = (() => {
     mode: 'dock', t0: 0, sx: 0, sy: 0, get: null, dur: 760,
     px: 0, py: 0, hd: 0, dockX: 0, dockY: 0,
     trail: new Float32Array(48), tn: 0, th: -1, tacc: 0,
+    lampUntil: 0,                          /* the dock lamp holds a beat after the clamps take her */
   };
   let sortieReq = null, recallReq = false;
+  /* THE KINDLING (WOW board #6): when a survey comes home, a spark leaves the
+     dock and runs the spine to the newest window cluster — the light you just
+     earned kindles WHILE YOU WATCH. Latched when `lit` grows; runs once docked. */
+  let prevLit = -1, kindleIdx = -1, kindlePending = false, kindleT0 = -1e9;
 
   function easeIO(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
 
@@ -222,6 +227,12 @@ const SphereForge = (() => {
       const awake = lit >= total;
       const ghost = revealUntil > clockMs;   /* the reveal: for a moment, all decks answer */
       const wakeK = awake ? 1 : ghost ? Math.min(1, (revealUntil - clockMs) / 600) : 0;
+      /* a new survey aboard: hold the newest light dark until its spark lands
+         (bounded: the hull has exactly eleven decks, whatever the set claims) */
+      if (prevLit >= 0 && lit > prevLit && lit <= LIGHTS.length && !reduced2) { kindleIdx = lit - 1; kindlePending = true; }
+      prevLit = lit;
+      if (kindlePending && shu.mode === 'dock') { kindlePending = false; kindleT0 = clockMs + 250; }
+      const kindleK = kindleIdx >= 0 ? (clockMs - kindleT0) / 700 : 9;
 
       /* attitude: a very slow drift; reduced motion holds the seeded pose */
       const bob = reduced2 ? 0 : Math.sin(t * 0.00021) * R * 0.022;
@@ -243,7 +254,10 @@ const SphereForge = (() => {
       for (let i = 0; i < LIGHTS.length; i++) {
         const on = i < lit || wakeK > 0;
         if (!on) continue;
-        const a = (i < lit ? 0.85 : 0) + (i < lit ? 0 : wakeK * 0.7);
+        /* the newest light waits dark for its spark, then blooms as it lands */
+        if (i === kindleIdx && (kindlePending || kindleK < 1)) continue;
+        let a = (i < lit ? 0.85 : 0) + (i < lit ? 0 : wakeK * 0.7);
+        if (i === kindleIdx && kindleK < 1.6) a = Math.min(1, a + (1.6 - kindleK) * 0.8);
         const tw = 0.75 + 0.25 * Math.sin(t * 0.0011 + i * 1.9);
         g.globalAlpha = a * tw;
         g.fillStyle = CREAM;
@@ -285,6 +299,19 @@ const SphereForge = (() => {
       }
       g.globalAlpha = 1;
 
+      /* the kindle spark: a bright point runs the spine, dock -> new light */
+      if (kindleIdx >= 0 && !kindlePending && kindleK >= 0 && kindleK < 1) {
+        const kk = kindleK * kindleK * (3 - 2 * kindleK);
+        const kx = DOCK[0] + (LIGHTS[kindleIdx][0] - DOCK[0]) * kk;
+        const ky = DOCK[1] + (LIGHTS[kindleIdx][1] - DOCK[1]) * kk;
+        g.globalAlpha = 0.9;
+        g.fillStyle = CREAM;
+        g.fillRect(L(kx) - 1.4, Y(ky) - 1.4, 2.8, 2.8);
+        g.globalAlpha = 0.6;
+        g.drawImage(glowSpr, L(kx) - 9, Y(ky) - 9, 18, 18);
+        g.globalAlpha = 1;
+      }
+
       /* remember the dock in SCREEN space for the shuttle */
       const ca = Math.cos(tilt), sa = Math.sin(tilt);
       const dlx = L(DOCK[0]) * s, dly = Y(DOCK[1]) * s;
@@ -311,6 +338,8 @@ const SphereForge = (() => {
           shu.mode = 'return'; shu.t0 = clockMs;
           shu.sx = from.x; shu.sy = from.y; shu.px = from.x; shu.py = from.y;
           shu.dur = 900; shu.tn = 0; shu.th = -1;
+          /* the ride home gets its voice (WOW board #6) */
+          if (window.Orrery) Orrery.events.dispatchEvent(new CustomEvent('recall'));
         }
       }
       let sx2 = shu.dockX, sy2 = shu.dockY, flying = false;
@@ -335,11 +364,18 @@ const SphereForge = (() => {
         flying = true;
         if (k >= 1) {
           if (shu.mode === 'fly') shu.mode = 'hold';   /* she STAYS at the world until recalled */
-          else shu.mode = 'dock';
+          else {
+            shu.mode = 'dock';
+            shu.lampUntil = clockMs + 700;             /* the lamp holds while the clamps take her */
+            if (window.Orrery) Orrery.events.dispatchEvent(new CustomEvent('docked'));
+          }
         }
       }
+      /* the flip: past the midpoint of the ride home she turns end-over-end
+         and burns retrograde — the torch leads her in, shedding speed */
+      const retro = shu.mode === 'return' && (clockMs - shu.t0) / shu.dur >= 0.55;
       const nhd = Math.atan2(sy2 - shu.py, sx2 - shu.px);
-      if (flying && (shu.px !== sx2 || shu.py !== sy2)) shu.hd = nhd;
+      if (flying && (shu.px !== sx2 || shu.py !== sy2)) shu.hd = retro ? nhd + Math.PI : nhd;
       shu.px = sx2; shu.py = sy2;
       /* trail: 24 pooled points, sampled every 26ms while moving */
       if (flying && !reduced2) {
@@ -365,15 +401,26 @@ const SphereForge = (() => {
         g.globalAlpha = 1;
         g.lineCap = capWas;                /* the shared sky context keeps its caps */
       } else { shu.tn = 0; shu.th = -1; }
+      /* the dock lamp: kindles ahead of her as she comes home, holds while
+         the clamps take her, then lets the dark back in */
+      let lampA = 0;
+      if (shu.mode === 'return') lampA = 0.2 + 0.6 * Math.min(1, (clockMs - shu.t0) / shu.dur);
+      else if (clockMs < shu.lampUntil) lampA = 0.8 * ((shu.lampUntil - clockMs) / 700);
+      if (lampA > 0.02 && !reduced2) {
+        g.globalAlpha = lampA;
+        g.drawImage(glowSpr, shu.dockX - 11, shu.dockY - 11, 22, 22);
+        g.globalAlpha = 1;
+      }
       /* the shuttle itself (hidden mid-warp is impossible: hub stops drawing) */
       const ss = Math.max(0.7, Math.min(1.3, R / 170));
       g.save();
       g.translate(sx2, sy2);
       g.rotate(flying ? shu.hd : tilt);
       g.scale(ss, ss);
-      if (flying) {                          /* the burn */
-        g.globalAlpha = 0.85;
-        g.drawImage(glowSpr, -30, -9, 18, 18);
+      if (flying) {                          /* the burn — harder on the retro brake */
+        g.globalAlpha = retro ? 1 : 0.85;
+        if (retro) g.drawImage(glowSpr, -34, -11, 22, 22);
+        else g.drawImage(glowSpr, -30, -9, 18, 18);
         g.globalAlpha = 1;
       }
       g.drawImage(shuttleSpr, -22, -9);

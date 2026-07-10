@@ -220,7 +220,26 @@ function bakeGlow() {
 }
 
 /* warp state (the streak burst) */
-const warp = { active: false, p: 0, cx: 0.5, cy: 0.5, tint: [100, 213, 245] };
+const warp = { active: false, p: 0, cx: 0.5, cy: 0.5, tint: [100, 213, 245], slug: null };
+
+/* THE FALL INTO THE WORLD (WOW board #4): as the streaks converge, the
+   destination itself swells from its live position and rushes the camera —
+   the flood's whiteout becomes the moment you hit its atmosphere. One baked
+   sprite growing in place; the CSS flood covers the scene swap at its peak. */
+function drawWarpSwell(clockMs) {
+  if (!warp.active || !warp.slug) return;
+  const w = bySlug[warp.slug]; if (!w) return;
+  const e = warp.p * warp.p;
+  ctx.globalAlpha = Math.min(1, 0.3 + warp.p * 0.9);
+  PlanetForge.draw(ctx, warp.slug, warp.cx * W, warp.cy * H,
+    w.size * 0.74 * (1 + e * 5), clockMs, { hover: false, rm: reduced() });
+  ctx.globalAlpha = 1;
+}
+
+/* SOUND THE DERELICT (WOW board #1): hold state. The ring lives in drawSky;
+   the per-world flare stamps live here so drawWorld can read them. */
+let strum = null;                                      /* { t0, hit: Uint8Array } while walking */
+const strumFlare = new Float32Array(WORLDS.length);
 
 /* ---------- planet layout: parametric orbits on the shared clock ---------- */
 const anchors = new Map();
@@ -492,6 +511,8 @@ function drawSky(dt, clockMs) {
         a.classList.toggle('pl-above', p.depth < 0);
       }
       const hov = hovered === w.slug;
+      /* the strum's touch: the world flares as the wave crosses it */
+      const fl = strumFlare[i] > 0 ? Math.max(0, 1 - (clockMs - strumFlare[i]) / 900) : 0;
       const dx0 = p.x - ART.cx, dy0 = p.y - ART.cy, hyp = Math.hypot(dx0, dy0) || 1;
       const th = Math.atan2(dy0 / ART.ry, dx0 / ART.rx);
       /* the armature: a faint radius from the Artifact's limb out to the
@@ -529,11 +550,11 @@ function drawSky(dt, clockMs) {
          one materializes — grows in over half a second as the orrery wakes */
       const mat = PlanetForge.progress ? PlanetForge.progress(w.slug) : 1;
       if (mat > 0) {
-        ctx.globalAlpha = (hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2) * mat;
+        ctx.globalAlpha = Math.min(1, (hov ? 1 : 0.62 + 0.38 * (p.depth + 1) / 2) + fl * 0.5) * mat;
         /* bigger, richer worlds: 0.74 draw factor (was 0.55), deeper hover swell */
         PlanetForge.draw(ctx, w.slug, p.x, p.y,
-          w.size * 0.74 * p.sc * (hov ? 1.18 : 1) * (0.72 + 0.28 * mat),
-          clockMs, { hover: hov, rm: reduced() });
+          w.size * 0.74 * p.sc * (hov ? 1.18 : 1) * (1 + fl * 0.24) * (0.72 + 0.28 * mat),
+          clockMs, { hover: hov || fl > 0.4, rm: reduced() });
         ctx.globalAlpha = 1;
       }
 
@@ -556,6 +577,43 @@ function drawSky(dt, clockMs) {
       SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
     }
     for (const e of ps) if (e.p.depth > 0) drawWorld(e);
+
+    /* SOUND THE DERELICT (WOW board #1): the strum ring walks the system —
+       every world it crosses flares (drawWorld reads strumFlare) and sounds
+       its riff in its own voice, in the order the wave truly reaches them */
+    if (strum) {
+      const k = (clockMs - strum.t0) / 2400;
+      if (k >= 1.15) {
+        strum = null;
+        /* the silence after: it heard its worlds report in, and is satisfied */
+        if (window.SphereForge) SphereForge.ping();
+        Orrery.events.dispatchEvent(new CustomEvent('artifact'));
+      } else {
+        const reach = ART.rx * 1.18;
+        const ringR = ART.r * 1.05 + (reach - ART.r * 1.05) * k;
+        for (const e of ps) {
+          if (strum.hit[e.i]) continue;
+          if (Math.hypot(e.p.x - ART.cx, e.p.y - ART.cy) <= ringR) {
+            strum.hit[e.i] = 1;
+            strumFlare[e.i] = clockMs;
+            Orrery.events.dispatchEvent(new CustomEvent('strum',
+              { detail: { slug: e.w.slug, surveyed: surveyed.has(e.w.slug) } }));
+          }
+        }
+        if (k < 1) {
+          ctx.strokeStyle = BRASS_STROKE;
+          ctx.globalAlpha = 0.5 * (1 - k * 0.55);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath(); ctx.arc(ART.cx, ART.cy, ringR, 0, 7); ctx.stroke();
+          ctx.globalAlpha = 0.2 * (1 - k);
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(ART.cx, ART.cy, ringR * 0.93, 0, 7); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    drawWarpSwell(clockMs);
   } else if (Scenes.current === 'hub' && window.SphereForge && ART.cy > -ART.r * 1.6) {
     /* the pocket orrery (M2): full presence — seated, shadowed, answerable,
        and gone with its stage once the list scrolls past it. The stageless
@@ -569,6 +627,7 @@ function drawSky(dt, clockMs) {
       SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
     }
     SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
+    drawWarpSwell(clockMs);
   }
 
   /* comets, when any are in flight */
@@ -716,7 +775,56 @@ function touchArtifact() {
   }
   Orrery.events.dispatchEvent(new CustomEvent('artifact'));
 }
-if (artHit) artHit.addEventListener('click', touchArtifact);
+/* SOUND THE DERELICT: hold the dead ship >=600ms and the strum begins; a
+   quick tap stays the knock ladder. The click that trails a strum-press is
+   consumed (the grabConsumed idiom). */
+let artHoldT = null, strumConsumed = false;
+function soundTheOrrery() {
+  const now = performance.now();
+  if (strum || now - artLast < 400) return;
+  artLast = now;
+  if (window.SphereForge && !reduced()) SphereForge.ripple();
+  if (reduced() || !desktop()) {
+    /* rm: the designed answer is a CHORD — every world reports at once (the
+       score staggers the voices onto its grid). Phone: the sweep walks the
+       rows stern to bow, each pulsing as its riff sounds. */
+    WORLDS.forEach((w, i) => {
+      const fire = () => {
+        Orrery.events.dispatchEvent(new CustomEvent('strum',
+          { detail: { slug: w.slug, surveyed: surveyed.has(w.slug) } }));
+        const a = anchors.get(w.slug);
+        if (a && !reduced()) { a.classList.remove('pa-strum'); void a.offsetWidth; a.classList.add('pa-strum'); }
+      };
+      if (reduced()) fire(); else setTimeout(fire, 160 + i * 170);
+    });
+    /* the silence after: it heard its worlds report in, and is satisfied */
+    const answerAt = reduced() ? 400 : 160 + WORLDS.length * 170 + 500;
+    setTimeout(() => {
+      if (window.SphereForge && !reduced()) SphereForge.ping();
+      Orrery.events.dispatchEvent(new CustomEvent('artifact'));
+    }, answerAt);
+    if (reduced()) requestStatic();
+    whisperArtLabel('Object 0 · the worlds report in', 2600);
+    return;
+  }
+  strum = { t0: Ticker.clock, hit: new Uint8Array(WORLDS.length) };
+  if (!skyTask) Orrery.startAmbient();                 /* the ring needs frames */
+  whisperArtLabel('Object 0 · sounding', 2600);
+}
+if (artHit) {
+  artHit.addEventListener('click', () => {
+    if (strumConsumed) { strumConsumed = false; return; }
+    touchArtifact();
+  });
+  artHit.addEventListener('pointerdown', () => {
+    clearTimeout(artHoldT);
+    artHoldT = setTimeout(() => { strumConsumed = true; soundTheOrrery(); }, 600);
+  });
+  const cancelHold = () => clearTimeout(artHoldT);
+  artHit.addEventListener('pointerup', cancelHold);
+  artHit.addEventListener('pointerleave', cancelHold);
+  artHit.addEventListener('pointercancel', cancelHold);
+}
 
 /* the idle sky task: runs only when something moves */
 let skyTask = null;
@@ -1029,6 +1137,7 @@ function travel(slug, fromBeat) {
 
   warp.active = true; warp.p = 0; warp.cx = p.x / W; warp.cy = p.y / H;
   warp.tint = w.a;                                     /* the streaks arrive INTO this world's color */
+  warp.slug = slug;                                    /* the destination itself rises to meet you */
   if (!skyTask) Orrery.startAmbient();                 /* streaks need the loop */
   html.classList.remove('warping'); void html.offsetWidth;   /* restartable */
   html.classList.add('warping');

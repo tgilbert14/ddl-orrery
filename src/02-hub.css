@@ -202,9 +202,12 @@ html.rm .planet-anchor.pa-rite .pa-ring {
 #warpfx {
   position: fixed; inset: 0; z-index: 90; pointer-events: none;
   opacity: 0;
+  /* the arrival grade (WOW board #4): a white-hot cream core so the flood
+     reads as LIGHT with a temperature, falling off into the world's accent */
   background: radial-gradient(circle at var(--wx, 50%) var(--wy, 50%),
-    rgba(var(--acc-rgb), 0.85) 0%,
-    rgba(var(--acc-rgb), 0.35) 22%,
+    rgba(255, 244, 220, 0.95) 0%,
+    rgba(var(--acc-rgb), 0.85) 9%,
+    rgba(var(--acc-rgb), 0.35) 24%,
     rgba(5, 7, 15, 0.0) 62%);
 }
 html.warping #warpfx { animation: warp-flood var(--warp-ms) var(--ease-out) both; }
@@ -224,3 +227,13 @@ html.rm #warpfx { display: none; }
 /* v3: the canvas planets ARE the worlds; the flat dot retires on desktop
    (the 44px anchor, ring affordance, labels, and focus stay fully intact) */
 @media (min-width: 701px) { html.js .planet-anchor .pa-dot { opacity: 0; } }
+
+/* the pocket strum (WOW board #1): each row pulses as its world's riff
+   sounds — JS re-triggers the class per crossing; rm never adds it */
+html.js:not(.rm) .planet-anchor.pa-strum .pa-dot {
+  animation: pa-strum 0.7s ease-out 1;
+}
+@keyframes pa-strum {
+  0% { box-shadow: 0 0 0 0 rgba(var(--pa-rgb, var(--acc-rgb)), 0.7); }
+  100% { box-shadow: 0 0 0 16px rgba(var(--pa-rgb, var(--acc-rgb)), 0); }
+}

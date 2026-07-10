@@ -544,11 +544,80 @@ const Score = (() => {
     n.onended = () => gn.disconnect();
   });
 
-  /* the warp: riser swells into the whoosh, which blooms in the hall */
-  window.Orrery.events.addEventListener('warp', () => {
+  /* the ride home (WOW board #6): a falling gliss as she brakes — from the
+     world you left, back down toward the hold's low root — under a reversed
+     hiss; then the dock answers with the clunk of the clamps taking her */
+  let lastRecall = -9;
+  window.Orrery.events.addEventListener('recall', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastRecall < 0.8) return;
+    lastRecall = ctx.currentTime;
+    const t = ctx.currentTime + 0.02;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(Math.max(180, cfg.root) * 2, t);
+    o.frequency.exponentialRampToValueAtTime(110, t + 0.88);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.035, t + 0.15);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.92);
+    o.connect(og); og.connect(wet);
+    o.start(t); o.stop(t + 0.95);
+    o.onended = () => og.disconnect();
+    const n = noiseSrc();                              /* the reversed hiss: high -> low */
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(2400, t);
+    bp.frequency.exponentialRampToValueAtTime(420, t + 0.8);
+    const gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t);
+    gn.gain.exponentialRampToValueAtTime(0.04, t + 0.2);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+    n.connect(bp); bp.connect(gn); gn.connect(bus);
+    n.start(t); n.stop(t + 0.9);
+    n.onended = () => gn.disconnect();
+  });
+  let lastDock = -9;
+  window.Orrery.events.addEventListener('docked', () => {
+    if (!ready()) return;
+    if (ctx.currentTime - lastDock < 0.8) return;
+    lastDock = ctx.currentTime;
+    const t = ctx.currentTime + 0.02;
+    taiko(t, 0.28);                                    /* the clamps take her */
+    note(880, t + 0.05, 0.028, 0.04, 'square', dry, 0, 0);   /* the latch, answered */
+    note(660, t + 0.13, 0.02, 0.05, 'square', dry, 0, 0);
+  });
+
+  /* SOUND THE DERELICT (WOW board #1): each world the strum ring crosses
+     sounds its riff in its own voice — full-throated if surveyed, muffled
+     if not. The hole in the chord is the collection shelf, audible. */
+  let lastStrumAt = -9;
+  window.Orrery.events.addEventListener('strum', (e) => {
+    if (!ready()) return;
+    const v = ARR[e.detail.slug]; if (!v) return;
+    const L = v.lead, dest = L.dry ? dry : bus;
+    const vol = e.detail.surveyed ? 1 : 0.32;
+    const at = Math.max(ctx.currentTime + 0.02, lastStrumAt + 0.07);
+    lastStrumAt = at;
+    const gapN = Math.min(0.14, v.step / 2200);
+    note(v.root * 2, at, 0.06 * vol, 0.32, L.wave, dest, L.dly, L.wet);
+    note(v.root * Math.pow(2, v.scale[2] / 12) * 2, at + gapN, 0.05 * vol, 0.36, L.wave, dest, L.dly, L.wet);
+    if (e.detail.surveyed)                             /* only a surveyed world finishes its phrase */
+      note(v.root * Math.pow(2, v.scale[v.scale.length - 1] / 12) * 2, at + gapN * 2, 0.045, 0.4, L.wave, dest, L.dly, L.wet);
+  });
+
+  /* the warp: riser swells into the whoosh, which blooms in the hall —
+     and the destination's tonic triad sounds in its OWN lead voice at the
+     peak: every arrival becomes the world's first word (WOW board #4) */
+  window.Orrery.events.addEventListener('warp', (e) => {
     if (!ready()) return;
     riser(ctx.currentTime);
     whoosh(ctx.currentTime + 0.22);
+    const v = e.detail && ARR[e.detail.slug];
+    if (v) {
+      const t = ctx.currentTime + 0.55, L = v.lead, dest = L.dry ? dry : bus;
+      note(v.root, t, 0.05, 1.4, L.wave, dest, L.dly, L.wet);
+      note(v.root * Math.pow(2, v.scale[2] / 12), t + 0.06, 0.04, 1.3, L.wave, dest, L.dly, L.wet);
+      note(v.root * Math.pow(2, v.padIv[2] / 12), t + 0.12, 0.04, 1.5, L.wave, dest, L.dly, L.wet);
+    }
   });
   window.Orrery.events.addEventListener('scene', (e) => setWorld(e.detail.name));
   window.Orrery.events.addEventListener('query', () => {
