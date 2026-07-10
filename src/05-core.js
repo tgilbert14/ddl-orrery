@@ -1011,11 +1011,20 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     if (artHit) artHit.setAttribute('aria-label', 'Object 0. Survey accepted. It knows you now.');
     announce('All eleven worlds surveyed. ' + HONOR);   /* AT shares the moment */
     if (window.SphereForge && SphereForge.reveal && !reduced()) SphereForge.reveal(5200);
+    /* IGNITION (WOW #2): the ship actually wakes — lights snap to unison
+       stern to bow, the engines catch on the cadence's downbeat, the hull
+       eases into her kept trim, and the shuttle flies one lap of honor
+       around the gilded ring before the homecoming brings her in */
+    if (window.SphereForge && !reduced()) {
+      if (SphereForge.awakenRite) SphereForge.awakenRite();
+      if (SphereForge.parade) SphereForge.parade();
+    }
     document.querySelectorAll('.planet-anchor').forEach(a => {
       a.classList.remove('pa-rite'); void a.offsetWidth; a.classList.add('pa-rite');
       setTimeout(() => a.classList.remove('pa-rite'), 2600);
     });
-    try { Orrery.events.dispatchEvent(new CustomEvent('mastery')); } catch (_) {}
+    /* the cadence needs the JOURNEY: the surveyed set in insertion order */
+    try { Orrery.events.dispatchEvent(new CustomEvent('mastery', { detail: { order: [...surveyed] } })); } catch (_) {}
     const hint = document.querySelector('.hub-hint');            /* swap the honor in for 10s */
     if (hint) hint.textContent = HONOR;
     setTimeout(() => {                                 /* the release must NOT depend on the hint */

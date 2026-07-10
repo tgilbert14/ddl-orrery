@@ -768,14 +768,30 @@ const Score = (() => {
     artifactAnswer(ctx.currentTime + 0.03);
   });
 
-  /* the survey is complete: the wrong note comes true from here on, and the
-     rite sounds it in full — a swelled, resolved answer over the fanfare */
-  window.Orrery.events.addEventListener('mastery', () => {
+  /* the survey is complete: IGNITION (WOW board #2). The whole journey,
+     recapitulated — the eleven world-roots sound in YOUR survey order, each
+     in its own instrument, converging on the wrong note finally coming true;
+     then the fanfare, and a held major landing as the engines catch. */
+  window.Orrery.events.addEventListener('mastery', (e) => {
     artifactTrue = true;
     if (!ready()) return;
     lastAnswer = ctx.currentTime;
-    artifactAnswer(ctx.currentTime + 0.1);
-    fanfare(ctx.currentTime + 0.7);
+    const order = (e.detail && e.detail.order) || [];
+    const t0 = ctx.currentTime + 0.1;
+    let i = 0;
+    for (const slug of order) {
+      const v = ARR[slug]; if (!v) continue;
+      const L = v.lead, dest = L.dry ? dry : bus;
+      note(v.root * 2, t0 + i * 0.32, 0.055, 0.5, L.wave, dest, L.dly, L.wet);
+      i++;
+    }
+    const tAns = t0 + Math.max(0.6, i * 0.32) + 0.15;  /* the ladder lands on the true answer */
+    artifactAnswer(tAns);
+    fanfare(tAns + 0.6);
+    /* the picardy landing: the hub's first major chord, held as the engines
+       breathe (the visual flare peaks ~6s in — this chord is its downbeat) */
+    [220, 277.2, 329.6].forEach((f, k) =>
+      note(f, tAns + 2.1 + k * 0.05, 0.06, 3.2, 'sine', bus, 0, 0.55));
   });
 
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */

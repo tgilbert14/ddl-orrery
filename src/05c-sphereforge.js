@@ -219,6 +219,11 @@ const SphereForge = (() => {
   const rm = () => docEl.classList.contains('rm');
   let revealReq = 0, revealUntil = -1;
   let accR = 201, accG = 163, accB = 92, accPulse = -1e9, accPulseReq = false, accPulseDelay = 0;
+  /* IGNITION (WOW board #2): the rite's clock. riteT0 sits at -1e9 forever
+     unless the rite fires THIS session — and every expression below is built
+     so that huge elapsed = the settled post-rite pose, which is exactly what
+     a returning master surveyor should find. */
+  let riteT0 = -1e9, riteReq = false, paradeReq = false;
   /* the shuttle: dock -> fly -> return -> dock. Sorties latch into draw()
      (the ripplePending pattern) so the module never needs its own clock. */
   const shu = {
@@ -267,6 +272,8 @@ const SphereForge = (() => {
       const total = (typeof WORLDS !== 'undefined') ? WORLDS.length : 11;
       if (revealReq) { revealUntil = clockMs + revealReq; revealReq = 0; }
       if (accPulseReq) { accPulse = clockMs + accPulseDelay; accPulseReq = false; }
+      if (riteReq) { riteT0 = clockMs; riteReq = false; }
+      const riteEl = clockMs - riteT0;       /* enormous when no rite ran: the settled pose */
       const awake = lit >= total;
       const ghost = revealUntil > clockMs;   /* the reveal: for a moment, all decks answer */
       const wakeK = awake ? 1 : ghost ? Math.min(1, (revealUntil - clockMs) / 600) : 0;
@@ -277,9 +284,12 @@ const SphereForge = (() => {
       if (kindlePending && shu.mode === 'dock') { kindlePending = false; kindleT0 = clockMs + 250; }
       const kindleK = kindleIdx >= 0 ? (clockMs - kindleT0) / 700 : 9;
 
-      /* attitude: a very slow drift; reduced motion holds the seeded pose */
+      /* attitude: a very slow drift; reduced motion holds the seeded pose.
+         An awakened ship rides TRIMMED — nose eased up, kept forever (the
+         rite eases it in live; every later visit boots straight into it) */
+      const trim = awake ? -0.011 * Math.max(0, Math.min(1, (riteEl - 4000) / 3000)) : 0;
       const bob = reduced2 ? 0 : Math.sin(t * 0.00021) * R * 0.022;
-      const tilt = reduced2 ? 0.006 : Math.sin(t * 0.00013 + 1.2) * 0.016;
+      const tilt = (reduced2 ? 0.006 : Math.sin(t * 0.00013 + 1.2) * 0.016) + trim;
 
       g.save();
       g.translate(x, y + bob);
@@ -312,7 +322,11 @@ const SphereForge = (() => {
         if (i === kindleIdx && (kindlePending || kindleK < 1)) continue;
         let a = (i < lit ? 0.85 : 0) + (i < lit ? 0 : wakeK * 0.7);
         if (i === kindleIdx && kindleK < 1.6) a = Math.min(1, a + (1.6 - kindleK) * 0.8);
-        const tw = 0.75 + 0.25 * Math.sin(t * 0.0011 + i * 1.9);
+        /* the ignition's first tell: the lights stop twinkling out of phase —
+           unison sweeps stern to bow during the rite and HOLDS forever after
+           (awake + a long-past riteT0 resolves to full unison at boot) */
+        const uni = awake ? Math.max(0, Math.min(1, (riteEl - 300 - i * 340) / 900)) : 0;
+        const tw = 0.75 + 0.25 * Math.sin(t * 0.0011 + i * 1.9 * (1 - uni));
         g.globalAlpha = a * tw;
         g.fillStyle = CREAM;
         g.fillRect(L(LIGHTS[i][0]) - 1.6, Y(LIGHTS[i][1]) - 1.6, 3.2, 3.2);
@@ -341,15 +355,21 @@ const SphereForge = (() => {
       g.fillRect(L(BRIDGE[0]) - 2, Y(BRIDGE[1]) - 2, 4, 4);
       g.globalAlpha = (0.35 + 0.65 * bp) * 0.8;
       g.drawImage(glowSpr, L(BRIDGE[0]) - 13 - 6 * bp, Y(BRIDGE[1]) - 13 - 6 * bp, 26 + 12 * bp, 26 + 12 * bp);
-      /* engines: cold until the ship is awake (or the reveal ghosts them) */
+      /* engines: cold until the ship is awake (or the reveal ghosts them).
+         IGNITION: the burn CATCHES near the cadence's downbeat (~6s into the
+         rite) — a hard flare breathing down over seconds to the steady glow */
       if (wakeK > 0.02) {
-        const eb = wakeK * (0.5 + 0.3 * Math.sin(t * 0.003));
+        const ign = riteT0 > 0
+          ? Math.max(0, Math.min(1, (riteEl - 5600) / 800)) * Math.max(0, Math.min(1, 1 - (riteEl - 6400) / 5000))
+          : 0;
+        const eb = Math.min(1, wakeK * (0.5 + 0.3 * Math.sin(t * 0.003)) + ign * 0.6);
+        const gs = 32 + ign * 26;
         for (const [ex, ey] of ENGINES) {
           g.globalAlpha = eb;
-          g.drawImage(glowSpr, L(ex) - 16, Y(ey) - 16, 32, 32);
-          g.globalAlpha = eb * 0.9;
+          g.drawImage(glowSpr, L(ex) - gs / 2, Y(ey) - gs / 2, gs, gs);
+          g.globalAlpha = Math.min(1, eb * 0.9 + ign * 0.3);
           g.fillStyle = 'rgba(255,220,160,1)';
-          g.beginPath(); g.arc(L(ex), Y(ey), 3, 0, TAU); g.fill();
+          g.beginPath(); g.arc(L(ex), Y(ey), 3 + ign * 1.6, 0, TAU); g.fill();
         }
       }
       g.globalAlpha = 1;
@@ -397,8 +417,31 @@ const SphereForge = (() => {
           if (window.Orrery) Orrery.events.dispatchEvent(new CustomEvent('recall'));
         }
       }
+      /* THE PARADE (WOW #2): the rite's lap of honor. Waits for the rite's
+         opening beat, needs a real ring to circle (the pocket stage has none),
+         and hands off to the homecoming choreography when the circuit closes. */
+      if (paradeReq && shu.mode === 'dock' && (riteT0 < -1e8 || clockMs > riteT0 + 1500)) {
+        paradeReq = false;
+        if (typeof ART !== 'undefined' && ART.rx > 40) {
+          shu.mode = 'parade'; shu.t0 = clockMs; shu.dur = 6500;
+          shu.tn = 0; shu.th = -1;
+        }
+      }
       let sx2 = shu.dockX, sy2 = shu.dockY, flying = false;
-      if (shu.mode === 'hold' && shu.get) {
+      if (shu.mode === 'parade' && typeof ART !== 'undefined') {
+        /* once around the gilded dial, past every arc the survey earned */
+        const k = Math.min(1, (clockMs - shu.t0) / shu.dur);
+        const a0 = Math.atan2((shu.dockY - ART.cy) / (ART.ry || 1), (shu.dockX - ART.cx) / (ART.rx || 1));
+        const a = a0 + easeIO(k) * TAU;
+        sx2 = ART.cx + Math.cos(a) * ART.rx * 0.94;
+        sy2 = ART.cy + Math.sin(a) * ART.ry * 0.94;
+        flying = true;
+        if (k >= 1) {                        /* the circuit closes into the flip-and-brake */
+          shu.mode = 'return'; shu.t0 = clockMs;
+          shu.sx = sx2; shu.sy = sy2; shu.px = sx2; shu.py = sy2;
+          shu.dur = 900; shu.tn = 0; shu.th = -1;
+        }
+      } else if (shu.mode === 'hold' && shu.get) {
         /* on station at the world: she rides the planet's orbit, engines
            cold, until the traveler backs out and recalls her */
         const tgt = shu.get();
@@ -556,6 +599,12 @@ const SphereForge = (() => {
     },
     /* the reveal: every deck answers for a moment — a ghost of the living ship */
     reveal(ms) { revealReq = ms || 2600; },
+    /* IGNITION (WOW #2): the completion rite made physical — lights to unison
+       stern-to-bow, the engines catching on the cadence's downbeat, the hull
+       easing into her kept trim. rm's designed still is the settled pose. */
+    awakenRite() { if (!rm()) riteReq = true; },
+    /* the lap of honor: one circuit of the dial, then the homecoming */
+    parade() { if (!rm()) paradeReq = true; },
 
     /* your vessel departs: fly to a live target over ms, then HOLD there —
        she stays moored at the world while you walk it. travel() owns the
