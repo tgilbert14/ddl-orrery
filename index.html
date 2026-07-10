@@ -2624,6 +2624,7 @@ function drawWarpSwell(clockMs) {
    the per-world flare stamps live here so drawWorld can read them. */
 let strum = null;                                      /* { t0, hit: Uint8Array } while walking */
 const strumFlare = new Float32Array(WORLDS.length);
+let hoverT0 = 0;                                       /* the consideration beam's departure stamp */
 
 /* ---------- planet layout: parametric orbits on the shared clock ---------- */
 const anchors = new Map();
@@ -2907,12 +2908,30 @@ function drawSky(dt, clockMs) {
          'radius' would otherwise overshoot outward past the planet). */
       ctx.strokeStyle = BRASS_STROKE;
       if (hyp > ART.r + 8) {
-        ctx.globalAlpha = (hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim);
-        ctx.lineWidth = hov ? 1.2 : 1;
-        ctx.beginPath();
-        ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
+        const limbX = ART.cx + dx0 * (ART.r / hyp), limbY = ART.cy + dy0 * (ART.r / hyp);
+        if (hov) {
+          /* THE CONSIDERATION BEAM (WOW #17): the spoke ignites in the world's
+             own accent and a bead of its light runs planet -> prow; the bridge
+             pulses the moment it ARRIVES (tint() hands setSkin the same delay).
+             Cause and effect in pure light — hover becomes a conversation. */
+          const bk = reduced() ? 1 : Math.min(1, (clockMs - hoverT0) / 450);
+          ctx.strokeStyle = w.tellStroke;
+          ctx.globalAlpha = (0.14 + 0.24 * bk) * (0.4 + 0.6 * dim);
+          ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(limbX, limbY); ctx.lineTo(p.x, p.y); ctx.stroke();
+          if (!reduced() && bk < 1) {
+            ctx.fillStyle = w.tellStroke;
+            ctx.globalAlpha = 0.9;
+            ctx.beginPath();
+            ctx.arc(p.x + (limbX - p.x) * bk, p.y + (limbY - p.y) * bk, 2.2, 0, 7);
+            ctx.fill();
+          }
+          ctx.strokeStyle = BRASS_STROKE;
+        } else {
+          ctx.globalAlpha = 0.055 * (0.4 + 0.6 * dim);
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(limbX, limbY); ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
       }
       /* the survey, given a face on the dial: the ~11° of ring each world
          owns fills SOLID brass once surveyed, and stays a dim dashed gap
@@ -3237,10 +3256,12 @@ anchors.forEach((a, slug) => {
   const w = bySlug[slug];
   const tint = () => {
     hovered = slug;
+    hoverT0 = Ticker.clock;                /* the beam's bead departs the planet now */
     html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
     html.style.setProperty('--acc-rgb', w.a.join(','));
-    /* the Artifact considers the world with you: it wears that world's face */
-    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug);
+    /* the Artifact considers the world with you — the bridge pulses when
+       the consideration beam's bead lands (450ms downstream) */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug, reduced() ? 0 : 450);
     if (!skyTask) Orrery.startAmbient();       /* the morph needs frames; under rm this
                                                   IS the one designed repaint (drawStatic) */
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
@@ -4696,6 +4717,7 @@ const SphereForge = (() => {
   const ENGINES = [[92, 150], [88, 170], [92, 190]];
 
   let hullSpr = null, glowSpr = null, shadowSpr = null, shuttleSpr = null;
+  let seamSpr = null;                      /* WOW #3: the light that sleeps inside */
   let inited = false, frozenT = 60000;
 
   function buildGlow() {
@@ -4759,11 +4781,15 @@ const SphereForge = (() => {
     sh.addColorStop(0.35, 'rgba(201,163,92,0.05)');
     sh.addColorStop(1, 'rgba(0,0,0,0.35)');
     g.fillStyle = sh; g.fillRect(60, 110, 790, 150);
-    /* seeded panel seams + patch plates + a few scars */
+    /* seeded panel seams + patch plates + a few scars (geometry RECORDED so
+       the light layer below can re-stroke the exact same apertures) */
+    const seamRec = [], scarRec = [];
     for (let x = 96; x < 830; x += 18 + rnd() * 26) {
       g.strokeStyle = `rgba(201,163,92,${0.05 + rnd() * 0.09})`;
       g.lineWidth = 1;
-      g.beginPath(); g.moveTo(x, 120); g.lineTo(x + (rnd() - 0.5) * 8, 212); g.stroke();
+      const dr = (rnd() - 0.5) * 8;
+      g.beginPath(); g.moveTo(x, 120); g.lineTo(x + dr, 212); g.stroke();
+      seamRec.push([x, dr]);
     }
     for (let i = 0; i < 9; i++) {
       g.fillStyle = `rgba(201,163,92,${0.03 + rnd() * 0.05})`;
@@ -4772,8 +4798,9 @@ const SphereForge = (() => {
     g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 3;
     for (let i = 0; i < 3; i++) {          /* old wounds */
       const sx = 200 + rnd() * 480, sy = 140 + rnd() * 50;
-      g.beginPath(); g.moveTo(sx, sy);
-      g.lineTo(sx + 16 + rnd() * 26, sy + (rnd() - 0.5) * 18); g.stroke();
+      const ex2 = sx + 16 + rnd() * 26, ey2 = sy + (rnd() - 0.5) * 18;
+      g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex2, ey2); g.stroke();
+      scarRec.push([sx, sy, ex2, ey2]);
     }
     /* portholes: a long row, all dark. The living ones draw live. */
     g.fillStyle = 'rgba(70,58,42,0.55)';
@@ -4787,6 +4814,43 @@ const SphereForge = (() => {
     g.beginPath(); g.arc(520, 118, 14, 0, TAU); g.fill();
     g.beginPath(); g.arc(640, 194, 10, 0, TAU); g.fill();
     g.restore();
+
+    /* WHAT SLEEPS INSIDE IS LIGHT (WOW board #3): the same seams and wounds,
+       baked once more as apertures — gold pours from them when the plates
+       part, and an awakened ship keeps them faintly warm forever. Bake-time
+       blur only; runtime is one 'lighter' blit. */
+    const lc = cv(HL, HH), lg = lc.getContext('2d');
+    lg.shadowColor = 'rgba(255,214,140,0.9)'; lg.shadowBlur = 7;
+    lg.strokeStyle = 'rgba(255,224,160,0.5)'; lg.lineWidth = 1.4;
+    for (const [x, dr] of seamRec) {
+      lg.beginPath(); lg.moveTo(x, 122); lg.lineTo(x + dr, 210); lg.stroke();
+    }
+    lg.shadowBlur = 12; lg.lineWidth = 3.2;
+    lg.strokeStyle = 'rgba(255,232,178,0.9)';
+    for (const [a1, b1, a2, b2] of scarRec) {
+      lg.beginPath(); lg.moveTo(a1, b1); lg.lineTo(a2, b2); lg.stroke();
+    }
+    lg.shadowBlur = 0;
+    const bite = (bx, by, br) => {           /* the wounds spill hardest */
+      const gr2 = lg.createRadialGradient(bx, by, 1, bx, by, br * 2.6);
+      gr2.addColorStop(0, 'rgba(255,236,190,0.85)');
+      gr2.addColorStop(0.4, 'rgba(255,210,130,0.3)');
+      gr2.addColorStop(1, 'rgba(255,210,130,0)');
+      lg.fillStyle = gr2;
+      lg.beginPath(); lg.arc(bx, by, br * 2.6, 0, TAU); lg.fill();
+    };
+    bite(520, 118, 14); bite(640, 194, 10);
+    const ray = (bx, by, ang, len, w2) => {  /* thin god-rays leaning off the hull */
+      lg.save(); lg.translate(bx, by); lg.rotate(ang);
+      const rg = lg.createLinearGradient(0, 0, len, 0);
+      rg.addColorStop(0, 'rgba(255,228,170,0.18)');
+      rg.addColorStop(1, 'rgba(255,228,170,0)');
+      lg.fillStyle = rg;
+      lg.beginPath(); lg.moveTo(0, 0); lg.lineTo(len, -w2); lg.lineTo(len, w2); lg.closePath(); lg.fill();
+      lg.restore();
+    };
+    ray(520, 118, -1.9, 120, 26); ray(640, 194, 1.25, 100, 22);
+    seamSpr = lc;
     return c;
   }
   function buildShadow() {
@@ -4820,7 +4884,7 @@ const SphereForge = (() => {
   const rings = [{ on: false, born: 0 }, { on: false, born: 0 }, { on: false, born: 0 }];
   const rm = () => docEl.classList.contains('rm');
   let revealReq = 0, revealUntil = -1;
-  let accR = 201, accG = 163, accB = 92, accPulse = -1e9, accPulseReq = false;
+  let accR = 201, accG = 163, accB = 92, accPulse = -1e9, accPulseReq = false, accPulseDelay = 0;
   /* the shuttle: dock -> fly -> return -> dock. Sorties latch into draw()
      (the ripplePending pattern) so the module never needs its own clock. */
   const shu = {
@@ -4868,7 +4932,7 @@ const SphereForge = (() => {
       const lit = (typeof surveyed !== 'undefined') ? surveyed.size : 0;
       const total = (typeof WORLDS !== 'undefined') ? WORLDS.length : 11;
       if (revealReq) { revealUntil = clockMs + revealReq; revealReq = 0; }
-      if (accPulseReq) { accPulse = clockMs; accPulseReq = false; }
+      if (accPulseReq) { accPulse = clockMs + accPulseDelay; accPulseReq = false; }
       const awake = lit >= total;
       const ghost = revealUntil > clockMs;   /* the reveal: for a moment, all decks answer */
       const wakeK = awake ? 1 : ghost ? Math.min(1, (revealUntil - clockMs) / 600) : 0;
@@ -4893,6 +4957,17 @@ const SphereForge = (() => {
 
       const ox = HL / 2 - (72 + 838) / 2;  /* same offset for every local point */
       const L = (lx) => lx + ox - HL / 2;
+
+      /* THE POUR (WOW #3): during a reveal the light inside escapes at full
+         strength; an awakened ship keeps her seams faintly warm forever */
+      const pourK = ghost ? wakeK : awake ? 0.3 : 0;
+      if (pourK > 0.01 && seamSpr) {
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = pourK * (reduced2 ? 0.85 : 0.72 + 0.16 * Math.sin(t * 0.0021));
+        g.drawImage(seamSpr, -HL / 2 + (HL / 2 - (72 + 838) / 2), -170, HL, HH);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
       const Y = (ly) => ly - 170;
 
       /* the running lights: one deck kindles per surveyed world */
@@ -4924,8 +4999,9 @@ const SphereForge = (() => {
       g.beginPath(); g.arc(L(BEACON[0]), Y(BEACON[1]), 2.4, 0, TAU); g.fill();
       g.globalAlpha = bk * 0.7;
       g.drawImage(glowSpr, L(BEACON[0]) - 12, Y(BEACON[1]) - 12, 24, 24);
-      /* the bridge display: wears the accent of the world being considered */
-      const bp = Math.max(0, 1 - (clockMs - accPulse) / 900);
+      /* the bridge display: wears the accent of the world being considered
+         (clamped: a delayed pulse waits for the beam's bead to arrive) */
+      const bp = Math.max(0, Math.min(1, 1 - (clockMs - accPulse) / 900));
       g.globalAlpha = 0.5 + 0.5 * bp;
       g.fillStyle = `rgba(${accR},${accG},${accB},1)`;
       g.fillRect(L(BRIDGE[0]) - 2, Y(BRIDGE[1]) - 2, 4, 4);
@@ -5134,12 +5210,15 @@ const SphereForge = (() => {
     },
 
     /* the bridge considers a world: its display takes the accent and pulses.
-       (Keeps the setSkin name so every hover/beat call site stands.) */
-    setSkin(slug) {
+       (Keeps the setSkin name so every hover/beat call site stands.) An
+       optional delay lets the pulse wait for the consideration beam's bead
+       to ARRIVE (WOW #17): cause and effect in pure light. */
+    setSkin(slug, delayMs) {
       const w = (typeof bySlug !== 'undefined') && bySlug[slug];
       if (w && w.a) { accR = w.a[0]; accG = w.a[1]; accB = w.a[2]; }
       else { accR = 201; accG = 163; accB = 92; }
       accPulseReq = true;                   /* latched onto the draw clock next frame */
+      accPulseDelay = delayMs || 0;
     },
     /* the reveal: every deck answers for a moment — a ghost of the living ship */
     reveal(ms) { revealReq = ms || 2600; },

@@ -240,6 +240,7 @@ function drawWarpSwell(clockMs) {
    the per-world flare stamps live here so drawWorld can read them. */
 let strum = null;                                      /* { t0, hit: Uint8Array } while walking */
 const strumFlare = new Float32Array(WORLDS.length);
+let hoverT0 = 0;                                       /* the consideration beam's departure stamp */
 
 /* ---------- planet layout: parametric orbits on the shared clock ---------- */
 const anchors = new Map();
@@ -523,12 +524,30 @@ function drawSky(dt, clockMs) {
          'radius' would otherwise overshoot outward past the planet). */
       ctx.strokeStyle = BRASS_STROKE;
       if (hyp > ART.r + 8) {
-        ctx.globalAlpha = (hov ? 0.30 : 0.055) * (0.4 + 0.6 * dim);
-        ctx.lineWidth = hov ? 1.2 : 1;
-        ctx.beginPath();
-        ctx.moveTo(ART.cx + dx0 * (ART.r / hyp), ART.cy + dy0 * (ART.r / hyp));
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
+        const limbX = ART.cx + dx0 * (ART.r / hyp), limbY = ART.cy + dy0 * (ART.r / hyp);
+        if (hov) {
+          /* THE CONSIDERATION BEAM (WOW #17): the spoke ignites in the world's
+             own accent and a bead of its light runs planet -> prow; the bridge
+             pulses the moment it ARRIVES (tint() hands setSkin the same delay).
+             Cause and effect in pure light — hover becomes a conversation. */
+          const bk = reduced() ? 1 : Math.min(1, (clockMs - hoverT0) / 450);
+          ctx.strokeStyle = w.tellStroke;
+          ctx.globalAlpha = (0.14 + 0.24 * bk) * (0.4 + 0.6 * dim);
+          ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(limbX, limbY); ctx.lineTo(p.x, p.y); ctx.stroke();
+          if (!reduced() && bk < 1) {
+            ctx.fillStyle = w.tellStroke;
+            ctx.globalAlpha = 0.9;
+            ctx.beginPath();
+            ctx.arc(p.x + (limbX - p.x) * bk, p.y + (limbY - p.y) * bk, 2.2, 0, 7);
+            ctx.fill();
+          }
+          ctx.strokeStyle = BRASS_STROKE;
+        } else {
+          ctx.globalAlpha = 0.055 * (0.4 + 0.6 * dim);
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(limbX, limbY); ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
       }
       /* the survey, given a face on the dial: the ~11° of ring each world
          owns fills SOLID brass once surveyed, and stays a dim dashed gap
@@ -853,10 +872,12 @@ anchors.forEach((a, slug) => {
   const w = bySlug[slug];
   const tint = () => {
     hovered = slug;
+    hoverT0 = Ticker.clock;                /* the beam's bead departs the planet now */
     html.style.setProperty('--acc', `rgb(${w.a.join(',')})`);
     html.style.setProperty('--acc-rgb', w.a.join(','));
-    /* the Artifact considers the world with you: it wears that world's face */
-    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug);
+    /* the Artifact considers the world with you — the bridge pulses when
+       the consideration beam's bead lands (450ms downstream) */
+    if (window.SphereForge && SphereForge.setSkin) SphereForge.setSkin(slug, reduced() ? 0 : 450);
     if (!skyTask) Orrery.startAmbient();       /* the morph needs frames; under rm this
                                                   IS the one designed repaint (drawStatic) */
     Orrery.events.dispatchEvent(new CustomEvent('preview', { detail: { slug } }));
