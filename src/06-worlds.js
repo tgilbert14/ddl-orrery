@@ -37,8 +37,9 @@ const WorldFX = (() => {
       if (activeName !== name) return false;
       fx[name].frame(surf, state, dt, clock);
       /* THE VIGIL (WOW #7): the speck crossing your sky is your own ship,
-         holding station over the world you are standing on */
-      if (window.SphereForge && SphereForge.drawTransit)
+         holding station over the world you are standing on — but never
+         inside the hold you visibly flew INTO (guardian) */
+      if (window.SphereForge && SphereForge.drawTransit && name !== 'object0')
         SphereForge.drawTransit(surf.g, surf.w, surf.h, clock);
       return true;
     };
@@ -592,7 +593,7 @@ const WorldFX = (() => {
         const age = clock - gt.t0;
         if (age > 7000) { gt.on = false; continue; }
         const fade = age > 6200 ? 1 - (age - 6200) / 800 : 1;
-        const shim = 0.55 + 0.45 * Math.sin(clock * 0.012 + gt.x);
+        const shim = 0.55 + 0.45 * Math.sin(clock * 0.006 + gt.x);   /* >=1s period: strobe-safe */
         g.fillStyle = `rgba(255,154,61,${(0.85 * fade).toFixed(3)})`;
         g.fillRect(gt.x - 15, gt.y - 34, 3, 68);
         g.fillRect(gt.x + 12, gt.y - 34, 3, 68);
@@ -851,7 +852,7 @@ const WorldFX = (() => {
       return {
         J, SNOW, SHAFTS, RINGS, MOTES,
         levOn: false, levStart: 0, nextLev: -1, levDir: 1, levY: 0,
-        lampHeld: false, lampX: 0, lampY: 0,           /* THE DIVE LAMP (WOW #15) */
+        lampHeld: false, lampX: 0, lampY: 0, lampOff: -1e9,   /* THE DIVE LAMP (WOW #15) */
         ping0: -9e9, ping1: -9e9,                        /* the last two pings: three fast = a call */
       };
     },
@@ -964,12 +965,14 @@ const WorldFX = (() => {
         g.stroke();
       }
 
-      /* the lamp itself: a cone of pale light, marine snow igniting in it */
-      if (st.lampHeld) {
+      /* the lamp itself: a cone of pale light, marine snow igniting in it —
+         and on release it gutters out over 600ms instead of vanishing */
+      const lampK = st.lampHeld ? 1 : Math.max(0, 1 - (clock - (st.lampOff || -1e9)) / 600);
+      if (lampK > 0.02) {
         g.globalCompositeOperation = 'lighter';
-        g.globalAlpha = 0.8 * dim;
+        g.globalAlpha = 0.8 * dim * lampK;
         g.drawImage(abyLamp(), st.lampX - 130, st.lampY - 130, 260, 260);
-        g.globalAlpha = 0.4 * dim;
+        g.globalAlpha = 0.4 * dim * lampK;
         g.drawImage(abyLamp(), st.lampX - 40, st.lampY - 40, 80, 80);
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
@@ -1036,7 +1039,11 @@ const WorldFX = (() => {
       verbEvent('ping');
     },
     aim(s, st, x, y) { if (st.lampHeld) { st.lampX = x; st.lampY = y; } },
-    verbUp(s, st) { st.lampHeld = false; },            /* the dark closes over you */
+    verbUp(s, st, clock) {
+      st.lampHeld = false;
+      st.lampOff = clock;                              /* the light GUTTERS out — a dying
+                                                          lamp proves there was a lamp (v8 walk) */
+    },
   };
   let ABY_LAMP = null;
   function abyLamp() {                                 /* baked once: the diver's light */
@@ -1316,7 +1323,7 @@ const WorldFX = (() => {
 
       g.fillStyle = '#ffd23f';
       if (st.over) g.globalAlpha = 0.3;                /* the ship waits for its coin */
-      else if (clock < st.respawnUntil) g.globalAlpha = 0.35 + 0.3 * (((clock / 220) | 0) & 1);
+      else if (clock < st.respawnUntil) g.globalAlpha = 0.4 + 0.25 * Math.sin(clock * 0.004);   /* soft shimmer, strobe-safe */
       arcBlit(g, PLAYER, Math.floor(st.shipX / 4) * 4, st.shipY);
       g.globalAlpha = 1;
       for (let li = 0; li < Math.max(0, st.lives - 1); li++)   /* the spare ships wait below */

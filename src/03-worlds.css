@@ -77,6 +77,11 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
 }
 .w-name input:focus-visible { outline: 2px solid var(--wa, #64d5f5); outline-offset: 2px; }
 
+/* the press-and-HOLD flagships must survive a touch drift: a hold that
+   starts on the scenery is a VERB, never a scroll-claim (guardian). The
+   world cards keep their own scroll — this only covers the FX layer. */
+.world .world-fx { touch-action: none; }
+
 /* ---------- SECTOR 00: the hold of Object 0 (WOW #5 — earned, JS-only) ---------- */
 html:not(.js) #world-object-0 { display: none; }      /* the brochure keeps the mystery */
 [data-scene="object-0"] {

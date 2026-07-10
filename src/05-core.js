@@ -284,6 +284,7 @@ const strumFlare = new Float32Array(WORLDS.length);
 let hoverT0 = 0;                                       /* the consideration beam's departure stamp */
 let swAngle = -9;                                      /* the sweep's live bearing (WOW #13) */
 const litObj = { k: 0, key: '', side: 1 };             /* the hull's dominant sun (WOW #13) */
+let strumDemoDone = false, sonarCount = 0;             /* the self-demo fires once (v8 walk) */
 
 /* ---------- planet layout: parametric orbits on the shared clock ---------- */
 const anchors = new Map();
@@ -822,6 +823,26 @@ function pingSonar() {
     SphereForge.ping();
     if (!skyTask) Orrery.startAmbient();               /* rings need the loop */
   }
+  /* THE SELF-DEMO (v8 walk): once per visit, one ambient ring keeps walking —
+     out to the nearest world, which flares and answers in its own voice. The
+     instrument plays one string of itself; the visitor hunts the chord. */
+  if (!strumDemoDone && ++sonarCount === 2 && desktop() && Scenes.current === 'hub'
+      && !strum && !reduced()) {
+    strumDemoDone = true;
+    let best = -1, bd = 1e9;
+    for (let i = 0; i < WORLDS.length; i++) {
+      const p = planetPos(i, Ticker.clock);
+      const d = Math.hypot(p.x - ART.cx, p.y - ART.cy);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0) setTimeout(() => {
+      if (Scenes.current !== 'hub') return;
+      strumFlare[best] = Ticker.clock;
+      const w = WORLDS[best];
+      Orrery.events.dispatchEvent(new CustomEvent('strum',
+        { detail: { slug: w.slug, surveyed: surveyed.has(w.slug) } }));
+    }, 850);
+  }
   Orrery.events.dispatchEvent(new CustomEvent('sonar'));
 }
 function scheduleSonar() {
@@ -869,7 +890,7 @@ function touchArtifact() {
   artLast = now;
   /* BOARDING (WOW #5): after the rite the plates stay parted — a touch is
      no longer a knock, it is the door. The shuttle flies INTO the wound. */
-  if (keep.get('orrery-survey-complete') === '1' && Scenes.current === 'hub') {
+  if (surveyDone && Scenes.current === 'hub') {
     travelObject0();
     return;
   }
@@ -936,6 +957,7 @@ function soundTheOrrery() {
 }
 if (artHit) {
   artHit.addEventListener('click', () => {
+    if (transitConsumed) return;                       /* that tap was a CATCH, not a knock */
     if (strumConsumed) { strumConsumed = false; return; }
     touchArtifact();
   });
@@ -943,7 +965,14 @@ if (artHit) {
     clearTimeout(artHoldT);
     artHoldT = setTimeout(() => { strumConsumed = true; soundTheOrrery(); }, 600);
   });
-  const cancelHold = () => clearTimeout(artHoldT);
+  const cancelHold = () => {
+    clearTimeout(artHoldT);
+    /* a strum released OFF the button never sees its click — the consumed
+       flag must not outlive the gesture, or the NEXT genuine knock (or the
+       boarding tap) dead-clicks (guardian). The 0ms clear runs after the
+       trailing click, exactly the grabConsumed idiom. */
+    setTimeout(() => { strumConsumed = false; }, 0);
+  };
   artHit.addEventListener('pointerup', cancelHold);
   artHit.addEventListener('pointerleave', cancelHold);
   artHit.addEventListener('pointercancel', cancelHold);
@@ -1020,6 +1049,10 @@ const returnBtn = document.getElementById('return-orbit');
    the tab closes was never a pull-back loop (M3, council ruling 6) */
 let surveyed = new Set();
 try { surveyed = new Set(JSON.parse(keep.get('orrery-surveyed') || '[]')); } catch (_) {}
+/* the completion, mirrored in memory (guardian): blocked/private-mode storage
+   must not lock a finisher out of the boarding, the route, or the gold —
+   the rite sets this the moment it fires, storage or no storage */
+let surveyDone = keep.get('orrery-survey-complete') === '1';
 function markSurveyed(slug) {
   surveyed.add(slug);
   keep.set('orrery-surveyed', JSON.stringify([...surveyed]));
@@ -1143,6 +1176,7 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
     if (Scenes.current !== 'hub') return;
     riteDone = true;
     keep.set(COMPLETE_KEY, '1');
+    surveyDone = true;                                 /* the in-memory mirror (guardian) */
     showSeal();
     /* THE RITE — the Artifact answers the completed survey at last:
        the plates part FULLY (longer than the touch glimpse), the wrong
@@ -1223,13 +1257,21 @@ function setScene(name, { instant = false } = {}) {
     html.style.setProperty('--acc-rgb', acc.join(','));
     Orrery.stopAmbient();                              /* one scene owns the frame budget */
     stopSonar();                                       /* the call is a hub voice only */
+    strum = null;                                      /* a strum cannot outlive the hub (guardian) */
     WorldFX.start(name);
     if (w) markSurveyed(name);                         /* the hold is not a survey */
     /* refresh this card's medallion so the little world advanced since last
        visit (skip while it bakes: wiping the canvas before a no-op drawMini
        would blank it — onReady paints it the moment it lands) */
     const med = next.querySelector('.card-planet');
-    if (med && window.PlanetForge && (!PlanetForge.progress || PlanetForge.progress(name) > 0)) {
+    if (med && name === 'object-0' && window.SphereForge && SphereForge.stampHull) {
+      /* the capstone's portrait is the wreck herself (guardian: no blank frame) */
+      const g2 = med.getContext('2d');
+      const dpr2 = Math.min(devicePixelRatio || 1, 2);
+      med.width = 72 * dpr2; med.height = 72 * dpr2;
+      g2.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+      SphereForge.stampHull(g2, 36, 38, 66);
+    } else if (med && window.PlanetForge && (!PlanetForge.progress || PlanetForge.progress(name) > 0)) {
       const g2 = med.getContext('2d');
       const dpr2 = Math.min(devicePixelRatio || 1, 2);
       med.width = 72 * dpr2; med.height = 72 * dpr2;
@@ -1393,6 +1435,7 @@ anchors.forEach((a, slug) => {
   a.addEventListener('click', (e) => {
     e.preventDefault();
     if (grabConsumed) return;                          /* that gesture was a THROW, not a choice */
+    if (transitConsumed) return;                       /* that tap was a CATCH, not a departure */
     if (reduced()) { location.hash = '#/world/' + slug; return; }
     travel(slug);
   });
@@ -1432,6 +1475,11 @@ addEventListener('keydown', (e) => {
   const saved = keep.get('orrery-worldname');
   if (saved) { applyName(saved); wrap.hidden = false; input.value = saved; }
   Orrery.events.addEventListener('charted', () => { wrap.hidden = false; });
+  /* reduced motion never wires the verbs, so the pen is earned by ARRIVING —
+     a persistent identity feature may not be spectacle-gated (guardian) */
+  Orrery.events.addEventListener('scene', (e) => {
+    if (reduced() && e.detail && e.detail.name === 'uncharted') wrap.hidden = false;
+  });
   const commitName = () => {
     const v = (input.value || '').trim().slice(0, 18);
     if (!v) return;
@@ -1450,7 +1498,8 @@ addEventListener('keydown', (e) => {
    unlit, a hole in the starlight crossing the band on a REAL-clock schedule,
    deterministic per hour so two friends can both catch it. Click it and it
    answers wrong. Three catches earn one whispered line. Never explained. */
-const transit = { caughtAt: -1e9, on: false, x: 0, y: 0 };
+const transit = { caughtAt: -1e9, on: false, x: 0, y: 0, caughtHour: -1 };
+let transitConsumed = false;               /* a catch outranks whatever sat beneath it (guardian) */
 function transitHash(n) {
   let h = n ^ 0x9e3779b9;
   h = Math.imul(h ^ (h >>> 16), 2246822507);
@@ -1459,7 +1508,9 @@ function transitHash(n) {
 }
 function transitState() {
   const now = Date.now();
-  const h = transitHash(Math.floor(now / 3600000));
+  const hr = Math.floor(now / 3600000);
+  if (transit.caughtHour === hr) return -1;            /* one catch per window (guardian) */
+  const h = transitHash(hr);
   if (h % 3) return -1;                                /* most hours, nothing crosses */
   const start = (h >>> 4) % 3200000 + 200000;          /* a 90s window inside the hour */
   const p = (now % 3600000 - start) / 90000;
@@ -1468,16 +1519,22 @@ function transitState() {
 (() => {
   const hubSec = Scenes.els.get('hub');
   if (!hubSec) return;
+  /* CAPTURE phase: the catch is tested BEFORE the anchors and the knock disc
+     can claim the tap — a catch attempt must never be punished with a warp
+     (guardian). The trailing click is consumed via the grabConsumed idiom. */
   hubSec.addEventListener('pointerdown', (e) => {
-    if (!transit.on || e.target.closest('a, button')) return;
-    if (Math.hypot(e.clientX - transit.x, e.clientY - transit.y) > 26) return;
+    if (!transit.on) return;
+    if (Math.hypot(e.clientX - transit.x, e.clientY - transit.y) > 30) return;
+    transitConsumed = true;
+    setTimeout(() => { transitConsumed = false; }, 0);
     transit.on = false; transit.caughtAt = Ticker.clock;
+    transit.caughtHour = Math.floor(Date.now() / 3600000);
     const n = (parseInt(keep.get('orrery-transit') || '0', 10) || 0) + 1;
     keep.set('orrery-transit', String(n));
     Orrery.events.dispatchEvent(new CustomEvent('transit'));
     if (n === 3) whisperArtLabel('Object 0 · it is not the only one', 3600);
     markTransitDot();
-  });
+  }, { capture: true });
 })();
 /* THE MASTER'S PASS (WOW #16): after the survey, DEPTH is remembered — every
    verb a world answers accrues toward a GOLD dot, and eleven gold earn the
@@ -1489,13 +1546,20 @@ function transitState() {
   let saveT = null, goldTold = keep.get('orrery-gold') === '1';
   const GOLD_AT = 15;
   function paintGold() {
-    if (keep.get('orrery-survey-complete') !== '1') return;
+    if (!surveyDone) return;
     let all = true;
     for (const w of WORLDS) {
-      const gold = (mastery[w.slug] || 0) >= GOLD_AT;
+      const n2 = mastery[w.slug] || 0;
+      const gold = n2 >= GOLD_AT;
       if (!gold) all = false;
       const dot = document.querySelector(`.survey-dot[data-world="${w.slug}"]`);
-      if (dot) dot.classList.toggle('is-mastered', gold);
+      if (dot) {
+        dot.classList.toggle('is-mastered', gold);
+        /* depth made visible (v8 walk): a thin gold arc rings the dot as the
+           world's mastery accrues — never a binary flip after a blind grind */
+        dot.classList.toggle('is-working', !gold && n2 > 0);
+        if (!gold) dot.style.setProperty('--mk', Math.round(n2 / GOLD_AT * 100) + '%');
+      }
     }
     if (all && !goldTold) {
       goldTold = true;
@@ -1508,9 +1572,16 @@ function transitState() {
       try { Orrery.events.dispatchEvent(new CustomEvent('mastery', { detail: { order: [...surveyed] } })); } catch (_) {}
     }
   }
+  const bumpAt = {};
   const bump = () => {
     const s2 = Scenes.current;
     if (!bySlug[s2]) return;
+    /* the gold economy must be EVEN (guardian): arcadia's 7-shots-a-second
+       autofire cannot outweigh the archive's deliberate consults — depth is
+       measured in seconds of engagement, one count per world per 1.2s */
+    const nowB = performance.now();
+    if (nowB - (bumpAt[s2] || 0) < 1200) return;
+    bumpAt[s2] = nowB;
     mastery[s2] = (mastery[s2] || 0) + 1;
     clearTimeout(saveT);
     saveT = setTimeout(() => keep.set('orrery-mastery', JSON.stringify(mastery)), 800);
@@ -1541,7 +1612,7 @@ function route(instant = false) {
   let slug = m && bySlug[m[1]] ? m[1] : null;
   /* SECTOR 00 (WOW #5): the twelfth destination exists only for finishers —
      the URL cannot skip the game */
-  if (!slug && m && m[1] === 'object-0' && keep.get('orrery-survey-complete') === '1') slug = 'object-0';
+  if (!slug && m && m[1] === 'object-0' && surveyDone) slug = 'object-0';
   setScene(slug || 'hub', { instant });
 }
 addEventListener('hashchange', () => {
@@ -1767,7 +1838,7 @@ function tickClock() {
   }
   /* THE LITURGY (WOW #12): two unwatched minutes and the wreck runs one
      habit for a crew that is never coming back — once per visit */
-  if (!stirred && Scenes.current === 'hub' && performance.now() - lastInput > 120000
+  if (!stirred && Scenes.current === 'hub' && performance.now() - lastInput > 75000
       && window.SphereForge && SphereForge.stir && !reduced()) {
     stirred = true;
     SphereForge.stir();
@@ -1800,12 +1871,12 @@ function bootOrrery() {
   keep.set('orrery-visits', String(visits));
   markTransitDot();                                    /* a returning catcher keeps the extra slot */
   if (visits >= 3 && window.SphereForge && SphereForge.greet && !reduced()) {
-    setTimeout(() => {
+    setTimeout(() => {                                 /* after the headline is read, not under it */
       if (Scenes.current === 'hub') {
         SphereForge.greet();
         if (!skyTask) Orrery.startAmbient();
       }
-    }, 5200);
+    }, 12000);
   }
   /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
      a thumb. TourController's parse-time stash has already claimed the one
