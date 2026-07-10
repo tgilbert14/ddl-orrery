@@ -1479,6 +1479,50 @@ function transitState() {
     markTransitDot();
   });
 })();
+/* THE MASTER'S PASS (WOW #16): after the survey, DEPTH is remembered — every
+   verb a world answers accrues toward a GOLD dot, and eleven gold earn the
+   second rite: the whole cadence again, for the only visitor who could ever
+   hear the difference. Counted always; shown only to finishers. */
+(() => {
+  let mastery = {};
+  try { mastery = JSON.parse(keep.get('orrery-mastery') || '{}'); } catch (_) {}
+  let saveT = null, goldTold = keep.get('orrery-gold') === '1';
+  const GOLD_AT = 15;
+  function paintGold() {
+    if (keep.get('orrery-survey-complete') !== '1') return;
+    let all = true;
+    for (const w of WORLDS) {
+      const gold = (mastery[w.slug] || 0) >= GOLD_AT;
+      if (!gold) all = false;
+      const dot = document.querySelector(`.survey-dot[data-world="${w.slug}"]`);
+      if (dot) dot.classList.toggle('is-mastered', gold);
+    }
+    if (all && !goldTold) {
+      goldTold = true;
+      keep.set('orrery-gold', '1');
+      whisperArtLabel('Object 0 · master of all eleven', 5200);
+      if (window.SphereForge && !reduced()) {
+        SphereForge.reveal(5200);
+        if (SphereForge.parade) SphereForge.parade();
+      }
+      try { Orrery.events.dispatchEvent(new CustomEvent('mastery', { detail: { order: [...surveyed] } })); } catch (_) {}
+    }
+  }
+  const bump = () => {
+    const s2 = Scenes.current;
+    if (!bySlug[s2]) return;
+    mastery[s2] = (mastery[s2] || 0) + 1;
+    clearTimeout(saveT);
+    saveT = setTimeout(() => keep.set('orrery-mastery', JSON.stringify(mastery)), 800);
+    paintGold();
+  };
+  ['worm', 'boost', 'trace', 'ping', 'shot', 'invader', 'query', 'consult',
+   'drill', 'storm', 'beacon', 'credit', 'charted', 'named'].forEach(k =>
+    Orrery.events.addEventListener(k, bump));
+  Orrery.events.addEventListener('scene', paintGold);
+  paintGold();
+})();
+
 function markTransitDot() {
   const wrapD = document.querySelector('.survey-dots');
   if (!wrapD || wrapD.querySelector('.is-transit')) return;

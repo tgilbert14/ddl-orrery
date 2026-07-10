@@ -554,6 +554,13 @@ html.js .survey-log {
   background: #05070f;
   border-color: rgba(var(--brass-rgb), 0.5);
 }
+.survey-dot.is-mastered {                             /* THE MASTER'S PASS (WOW #16): gold, hot */
+  background:
+    radial-gradient(circle at 36% 34%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 42%),
+    radial-gradient(circle at 60% 66%, #ffe89a 0%, #d99b1d 92%);
+  border-color: #ffd23f;
+  box-shadow: 0 0 8px rgba(255, 210, 63, 0.85);
+}
 /* the seal is a BUTTON now (WOW #24): strip the UA chrome, keep the gold
    (.konami-seal's own background outranks the UA default — never reset it) */
 button.log-seal {

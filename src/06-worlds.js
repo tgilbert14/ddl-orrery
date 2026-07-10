@@ -724,7 +724,7 @@ const WorldFX = (() => {
       };
       const bursts = [];                               /* decode ripples: expanding glyph rings */
       for (let i = 0; i < 3; i++) bursts.push({ on: false, x: 0, y: 0, t0: 0 });
-      return { C, rowH, nextTrace: 0, bursts };
+      return { C, rowH, nextTrace: 0, bursts, held: false, hx: 0, hy: 0 };
     },
     frame(s, st, dt, clock) {
       const g = s.g, w = s.w, h = s.h, C = st.C, rowH = st.rowH, n = C.length;
@@ -741,7 +741,20 @@ const WorldFX = (() => {
         st.nextTrace = clock + 9000 + Math.random() * 6000;
       }
 
-      for (let i = 0; i < n; i++) { const c = C[i]; c.acc += dt; c.stepped = c.acc >= c.step; if (c.stepped) c.acc = 0; }
+      /* THERE IS NO SPOON (WOW #15): while the hand holds, time obeys — the
+         rain decelerates inside the fingertip's radius and hangs mid-air */
+      for (let i = 0; i < n; i++) {
+        const c = C[i];
+        let d2 = dt;
+        if (st.held) {
+          const dxc = Math.abs(c.x - st.hx);
+          if (dxc < 150) {
+            d2 = dt * (0.1 + 0.9 * (dxc / 150));
+            if (dxc < s.w / n) c.traceUntil = clock + 120;   /* the held column burns white */
+          }
+        }
+        c.acc += d2; c.stepped = c.acc >= c.step; if (c.stepped) c.acc = 0;
+      }
 
       g.fillStyle = G_TRAIL;
       for (let i = 0; i < n; i++) { const c = C[i]; if (c.stepped && clock >= c.traceUntil) g.fillText(c.ch, c.x, c.y); }
@@ -775,6 +788,7 @@ const WorldFX = (() => {
     /* M4 verb, enriched: tap a column and the white trace ignites THERE —
        and the tap point itself detonates a decode ripple through the rain */
     verb(s, st, x, y, clock) {
+      st.held = true; st.hx = x; st.hy = y;            /* the hold begins (WOW #15) */
       const C = st.C, g = s.g;
       const c = C[Math.max(0, Math.min(C.length - 1, (x / (s.w / C.length)) | 0))];
       c.traceUntil = clock + 520;
@@ -787,6 +801,14 @@ const WorldFX = (() => {
       }
       b = b || oldest;
       b.on = true; b.x = x; b.y = y; b.t0 = clock;
+      verbEvent('trace');
+    },
+    aim(s, st, x, y) { if (st.held) { st.hx = x; st.hy = y; } },
+    verbUp(s, st, clock) {
+      if (!st.held) return;
+      st.held = false;
+      /* the whip-crack: time snaps back through every column at once */
+      for (const c of st.C) c.acc += 260;
       verbEvent('trace');
     },
   };
@@ -829,6 +851,7 @@ const WorldFX = (() => {
       return {
         J, SNOW, SHAFTS, RINGS, MOTES,
         levOn: false, levStart: 0, nextLev: -1, levDir: 1, levY: 0,
+        lampHeld: false, lampX: 0, lampY: 0,           /* THE DIVE LAMP (WOW #15) */
         ping0: -9e9, ping1: -9e9,                        /* the last two pings: three fast = a call */
       };
     },
@@ -846,6 +869,16 @@ const WorldFX = (() => {
         lp = (clock - st.levStart) / 14000;
         if (lp >= 1) { st.levOn = false; st.nextLev = clock + 30000 + Math.random() * 20000; }
         else { lenv = Math.sin(Math.PI * lp); dim = 1 - 0.15 * lenv; }   /* the deep holds its breath */
+      }
+      /* THE DIVE LAMP (WOW #15): the held light gathers the jellies out of
+         the dark — and every second it burns, something very large draws
+         nearer than it was going to be */
+      if (st.lampHeld) {
+        for (const j of st.J) {
+          j.kick = Math.min(1.4, j.kick + dt * 0.0015);
+          j.kx = st.lampX;
+        }
+        if (!st.levOn) st.nextLev -= dt * 2.5;
       }
 
       for (const sh of st.SHAFTS) {
@@ -931,6 +964,16 @@ const WorldFX = (() => {
         g.stroke();
       }
 
+      /* the lamp itself: a cone of pale light, marine snow igniting in it */
+      if (st.lampHeld) {
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.8 * dim;
+        g.drawImage(abyLamp(), st.lampX - 130, st.lampY - 130, 260, 260);
+        g.globalAlpha = 0.4 * dim;
+        g.drawImage(abyLamp(), st.lampX - 40, st.lampY - 40, 80, 80);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
       g.lineWidth = 1.6;                                  /* M4: the sonar rings ride on top */
       g.strokeStyle = 'rgba(191,255,233,1)';
       for (const q of st.RINGS) {
@@ -960,6 +1003,10 @@ const WorldFX = (() => {
        shed of living light. Three fast pings anywhere are a CALL, and the
        deep answers: the leviathan comes now. */
     verb(s, st, x, y, clock) {
+      /* THE DIVE LAMP (WOW #15): the press IS a light. Hold it and the
+         jellies gather out of the dark — hold too long and something very
+         large notices, and comes early. */
+      st.lampHeld = true; st.lampX = x; st.lampY = y;
       let q = null, oldest = null;
       for (const r of st.RINGS) {
         if (!r.on) { q = r; break; }
@@ -988,7 +1035,21 @@ const WorldFX = (() => {
       st.ping1 = st.ping0; st.ping0 = clock;
       verbEvent('ping');
     },
+    aim(s, st, x, y) { if (st.lampHeld) { st.lampX = x; st.lampY = y; } },
+    verbUp(s, st) { st.lampHeld = false; },            /* the dark closes over you */
   };
+  let ABY_LAMP = null;
+  function abyLamp() {                                 /* baked once: the diver's light */
+    if (ABY_LAMP) return ABY_LAMP;
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 6, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(221,248,255,0.55)');
+    gr.addColorStop(0.4, 'rgba(191,255,233,0.18)');
+    gr.addColorStop(1, 'rgba(191,255,233,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    ABY_LAMP = c; return c;
+  }
   function drawBell(g, j, dim) {
     const r = j.re;
     g.globalAlpha = j.a * dim;
