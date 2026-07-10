@@ -36,6 +36,10 @@ const WorldFX = (() => {
     activeTask = (dt, clock) => {
       if (activeName !== name) return false;
       fx[name].frame(surf, state, dt, clock);
+      /* THE VIGIL (WOW #7): the speck crossing your sky is your own ship,
+         holding station over the world you are standing on */
+      if (window.SphereForge && SphereForge.drawTransit)
+        SphereForge.drawTransit(surf.g, surf.w, surf.h, clock);
       return true;
     };
     window.Orrery.ticker.add(activeTask);

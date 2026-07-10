@@ -449,6 +449,14 @@ const Score = (() => {
   }
 
   /* ---------- the scheduler: lookahead with a catch-up snap ---------- */
+  /* the beat conductor (WOW #8): every scheduled pulse announces its exact
+     landing time to the pictures — per-beat dispatch, never per-frame */
+  function cue(kind, at) {
+    try {
+      window.Orrery.events.dispatchEvent(new CustomEvent('step',
+        { detail: { kind, perfAt: performance.now() + (at - ctx.currentTime) * 1000 } }));
+    } catch (_) {}
+  }
   function armSched() {
     clearInterval(schedTimer);
     nextNote = ctx.currentTime + 0.1;
@@ -467,12 +475,12 @@ const Score = (() => {
           const pos = stepIdx % span;
           if (pos < v.motif.length) { const st = v.motif[pos]; if (st) playLead(v, st, nextNote); }
           const pc = v.perc[stepIdx % 16];
-          if (pc === 'K') taiko(nextNote, 0.4);
+          if (pc === 'K') { taiko(nextNote, 0.4); cue('K', nextNote); }
           else if (pc === 's') shaker(nextNote);
-          else if (pc === 'H') heart(nextNote);           /* the hub's 2.4s pulse (600ms x 4) */
+          else if (pc === 'H') { heart(nextNote); cue('H', nextNote); }   /* the hub's 2.4s pulse */
         }
         if (v.call && nextNote >= nextCallAt) { deepCall(nextNote); nextCallAt = nextNote + 17 + Math.random() * 7; }
-        if (v.groan && nextNote >= nextGroanAt) { groan(nextNote); nextGroanAt = nextNote + 25 + Math.random() * 15; }
+        if (v.groan && nextNote >= nextGroanAt) { groan(nextNote); cue('G', nextNote); nextGroanAt = nextNote + 25 + Math.random() * 15; }
         stepIdx += 1;
         nextNote += v.step / 1000;
       }

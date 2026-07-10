@@ -867,6 +867,12 @@ const Orrery = {
 };
 window.Orrery = Orrery;
 
+/* the beat conductor (WOW #8): the score's scheduled pulses reach the ship —
+   her chest finally lands ON the thump you hear */
+Orrery.events.addEventListener('step', (e) => {
+  if (window.SphereForge && SphereForge.cue) SphereForge.cue(e.detail.kind, e.detail.perfAt);
+});
+
 /* ---------- hover sync (accent retint is a token write, animated by @property) ---------- */
 anchors.forEach((a, slug) => {
   const w = bySlug[slug];
@@ -1128,9 +1134,26 @@ function travel(slug, fromBeat) {
       && (desktop() || ART.cy > 0)                     /* pocket beat only while on stage */
       && !(TourController && TourController.running)) { /* the autopilot keeps its own cadence */
     const wi = WORLDS.indexOf(w);
-    const flight = desktop() && SphereForge.sortie
-      && SphereForge.sortie(() => planetPos(wi, Ticker.clock), 760);
-    const ms = flight ? 760 : 300;
+    let flight = false;
+    if (desktop() && SphereForge.sortie) {
+      /* the target carries its drawn radius so the hold MOORS off the limb
+         instead of parking on the world's face (WOW #7) */
+      flight = SphereForge.sortie(() => {
+        const p2 = planetPos(wi, Ticker.clock);
+        return { x: p2.x, y: p2.y, r: w.size * 0.74 * p2.sc };
+      }, 760);
+    } else if (SphereForge.sortie && !ART.fb) {
+      /* THE POCKET SORTIE (WOW #10): she lifts off the derelict and streaks
+         down the list to the row under your thumb — the warp blooms exactly
+         where she arrives. Half the audience finally gets the flight. */
+      const a2 = anchors.get(slug);
+      const r2 = a2 && a2.getBoundingClientRect();
+      if (r2 && r2.height) {
+        const tx = r2.left + r2.width / 2, ty = r2.top + r2.height / 2;
+        flight = SphereForge.sortie(() => ({ x: tx, y: ty, r: 16 }), 520);
+      }
+    }
+    const ms = flight ? (desktop() ? 760 : 520) : 300;
     beatSlug = slug;
     SphereForge.setSkin(slug);
     if (!flight) SphereForge.ping();
@@ -1399,6 +1422,7 @@ const clockEl = document.getElementById('hud-clock');
 /* frame budget steering (M2): phones cap at ~30fps always; desktop demotes
    after a minute of untouched hub (any input restores full rate next tick) */
 let lastInput = performance.now();
+let stirred = false;                       /* the liturgy runs once per visit */
 ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(tp =>
   addEventListener(tp, () => { lastInput = performance.now(); }, { passive: true, capture: true }));
 function tickClock() {
@@ -1409,6 +1433,14 @@ function tickClock() {
      run in front of a client, findable by nobody in a 0.72rem footer) */
   if (TourController && Scenes.current === 'hub' && performance.now() - lastInput > 22000) {
     TourController.beckon();
+  }
+  /* THE LITURGY (WOW #12): two unwatched minutes and the wreck runs one
+     habit for a crew that is never coming back — once per visit */
+  if (!stirred && Scenes.current === 'hub' && performance.now() - lastInput > 120000
+      && window.SphereForge && SphereForge.stir && !reduced()) {
+    stirred = true;
+    SphereForge.stir();
+    if (!skyTask) Orrery.startAmbient();
   }
   /* phones run budgeted EXCEPT while the visitor is actively touching or
      scrolling — the scroll-glued sphere must track the stage at full rate */
@@ -1431,6 +1463,18 @@ function bootOrrery() {
     if (!skyTask) requestStatic();                     /* rm / idle: the newcomer still shows up */
   });
   if (window.SphereForge) SphereForge.init();          /* the Artifact bakes its gold */
+  /* THE THIRD VISIT (WOW #12): the ship counts your arrivals. From the third,
+     the masthead greets you — three deliberate pulses, never explained. */
+  const visits = (parseInt(keep.get('orrery-visits') || '0', 10) || 0) + 1;
+  keep.set('orrery-visits', String(visits));
+  if (visits >= 3 && window.SphereForge && SphereForge.greet && !reduced()) {
+    setTimeout(() => {
+      if (Scenes.current === 'hub') {
+        SphereForge.greet();
+        if (!skyTask) Orrery.startAmbient();
+      }
+    }, 5200);
+  }
   /* the hint speaks the visitor's input language: Tab/Enter mean nothing to
      a thumb. TourController's parse-time stash has already claimed the one
      true resting line (dataset.home), so re-point BOTH — otherwise the tour

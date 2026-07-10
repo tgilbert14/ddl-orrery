@@ -224,6 +224,12 @@ const SphereForge = (() => {
      so that huge elapsed = the settled post-rite pose, which is exactly what
      a returning master surveyor should find. */
   let riteT0 = -1e9, riteReq = false, paradeReq = false;
+  let greetT0 = -1e9, greetReq = false;    /* the third-visit greeting (WOW #12) */
+  let stirT0 = -1e9, stirReq = false;      /* the two-minute liturgy (WOW #12) */
+  let heartCueAt = -1e9, groanCueAt = -1e9; /* the conductor's cues (WOW #8), perf-clock */
+  let studyA = null, studyLit = -1;        /* the bridge's study list, baked per survey */
+  /* she moors off the world's limb, never on its face (WOW #7) */
+  const moor = (tgt) => ({ x: tgt.x + (tgt.r || 0) * 0.95, y: tgt.y - (tgt.r || 0) * 1.15 });
   /* the shuttle: dock -> fly -> return -> dock. Sorties latch into draw()
      (the ripplePending pattern) so the module never needs its own clock. */
   const shu = {
@@ -256,6 +262,7 @@ const SphereForge = (() => {
       if (!inited || R <= 0) return;
       const reduced2 = !!(opts && opts.rm);
       const t = reduced2 ? frozenT : clockMs;
+      const pn = reduced2 ? -1 : performance.now();    /* the conductor speaks perf-time */
       const s = (R * 2.6) / SPAN;
 
       if (reduced2) { ripplePending = false; rippleT0 = -1; }
@@ -273,7 +280,17 @@ const SphereForge = (() => {
       if (revealReq) { revealUntil = clockMs + revealReq; revealReq = 0; }
       if (accPulseReq) { accPulse = clockMs + accPulseDelay; accPulseReq = false; }
       if (riteReq) { riteT0 = clockMs; riteReq = false; }
+      if (greetReq) { greetT0 = clockMs; greetReq = false; }
+      if (stirReq) { stirT0 = clockMs; stirReq = false; }
       const riteEl = clockMs - riteT0;       /* enormous when no rite ran: the settled pose */
+      if (lit !== studyLit) {                /* rebuilt only when the survey grows: zero per-frame alloc */
+        studyLit = lit;
+        studyA = null;
+        if (lit >= 8 && typeof WORLDS !== 'undefined' && typeof surveyed !== 'undefined') {
+          studyA = [];
+          for (const w2 of WORLDS) if (surveyed.has(w2.slug)) studyA.push(w2.a);
+        }
+      }
       const awake = lit >= total;
       const ghost = revealUntil > clockMs;   /* the reveal: for a moment, all decks answer */
       const wakeK = awake ? 1 : ghost ? Math.min(1, (revealUntil - clockMs) / 600) : 0;
@@ -289,7 +306,11 @@ const SphereForge = (() => {
          rite eases it in live; every later visit boots straight into it) */
       const trim = awake ? -0.011 * Math.max(0, Math.min(1, (riteEl - 4000) / 3000)) : 0;
       const bob = reduced2 ? 0 : Math.sin(t * 0.00021) * R * 0.022;
-      const tilt = (reduced2 ? 0.006 : Math.sin(t * 0.00013 + 1.2) * 0.016) + trim;
+      /* THE STRAIN (WOW #8): when the pressure hull groans in your ears, the
+         frame flexes a fraction of a degree with it — mass you can hear */
+      const strainK = (pn - groanCueAt) / 2800;
+      const tilt = (reduced2 ? 0.006 : Math.sin(t * 0.00013 + 1.2) * 0.016) + trim
+        + (strainK > 0 && strainK < 1 ? 0.004 * Math.sin(Math.PI * strainK) : 0);
 
       g.save();
       g.translate(x, y + bob);
@@ -333,25 +354,77 @@ const SphereForge = (() => {
         g.globalAlpha = a * tw * 0.6;
         g.drawImage(glowSpr, L(LIGHTS[i][0]) - 11, Y(LIGHTS[i][1]) - 11, 22, 22);
       }
-      /* the heartbeat window: it never went dark. The audio's pulse, visible. */
-      const hb = 0.45 + 0.4 * Math.max(0, Math.sin(t * 0.0016));
+      /* the ship wakes by degrees (WOW #12): at four surveys a window you
+         did NOT earn smolders alive on its own — it is reading your notes */
+      if (lit >= 4 && lit < total && LIGHTS[lit]) {
+        const sm = 0.5 + 0.5 * Math.sin(t * 0.0007 + 2);   /* slow swell: strobe-safe */
+        const rl = LIGHTS[lit];
+        g.globalAlpha = 0.22 * sm;
+        g.fillStyle = CREAM;
+        g.fillRect(L(rl[0]) - 1.4, Y(rl[1]) - 1.4, 2.8, 2.8);
+        g.globalAlpha = 0.15 * sm;
+        g.drawImage(glowSpr, L(rl[0]) - 9, Y(rl[1]) - 9, 18, 18);
+      }
+      /* THE LITURGY: once per visit, unwatched, a work-light stutters on
+         behind one dead window, walks a few plates, and dies */
+      const sk = (clockMs - stirT0) / 3200;
+      if (sk >= 0 && sk < 1) {
+        const si = ((stirT0 / 1000) | 0) % LIGHTS.length;
+        const sl = LIGHTS[si];
+        const se = Math.sin(Math.PI * sk);
+        const sweep = (sk - 0.5) * 10;
+        g.globalAlpha = 0.5 * se;
+        g.fillStyle = 'rgba(255,236,190,1)';
+        g.fillRect(L(sl[0]) + sweep - 1.4, Y(sl[1]) - 1.4, 2.8, 2.8);
+        g.globalAlpha = 0.35 * se;
+        g.drawImage(glowSpr, L(sl[0]) + sweep - 10, Y(sl[1]) - 10, 20, 20);
+      }
+      /* the heartbeat window: it never went dark. The audio's pulse, visible.
+         At ten surveys it doubles into the anticipatory two-beat of a ship
+         that knows you are close (kept forever: it is awake now). */
+      const hbPh = (t * 0.0016) % TAU;
+      let hb = lit >= 10
+        ? 0.4 + 0.34 * Math.max(0, Math.sin(hbPh)) + 0.22 * Math.max(0, Math.sin(hbPh - 1.1))
+        : 0.45 + 0.4 * Math.max(0, Math.sin(t * 0.0016));
+      /* THE CONDUCTOR (WOW #8): while the score plays, the chest lands ON the
+         thump — attack into the cue, decay after, sine again when silent */
+      const hbEl = pn - heartCueAt;
+      if (!reduced2 && hbEl > -400 && hbEl < 3000) {
+        const env = hbEl < 0 ? Math.max(0, 1 + hbEl / 220) : Math.exp(-hbEl / 520);
+        hb = 0.32 + 0.58 * env;
+      }
       g.globalAlpha = hb;
       g.fillStyle = CREAM;
       g.fillRect(L(HEART[0]) - 1.8, Y(HEART[1]) - 1.8, 3.6, 3.6);
       g.globalAlpha = hb * 0.7;
       g.drawImage(glowSpr, L(HEART[0]) - 13, Y(HEART[1]) - 13, 26, 26);
-      /* nav beacon: a slow amber blink at the masthead (steady when reduced) */
-      const bk = reduced2 ? 0.8 : ((t % 2400) < 200 ? 1 : 0.06);
+      /* nav beacon: a slow amber blink at the masthead (steady when reduced).
+         THE GREETING (WOW #12): from the third visit it abandons the
+         metronome for three deliberate pulses — it knows your silhouette. */
+      const gk = clockMs - greetT0;
+      const bk = reduced2 ? 0.8
+        : (gk >= 0 && gk < 3600) ? ((gk % 1200) < 450 ? 1 : 0.06)
+        : ((t % 2400) < 200 ? 1 : 0.06);
       g.globalAlpha = bk;
       g.fillStyle = 'rgba(255,140,80,1)';
       g.beginPath(); g.arc(L(BEACON[0]), Y(BEACON[1]), 2.4, 0, TAU); g.fill();
       g.globalAlpha = bk * 0.7;
       g.drawImage(glowSpr, L(BEACON[0]) - 12, Y(BEACON[1]) - 12, 24, 24);
       /* the bridge display: wears the accent of the world being considered
-         (clamped: a delayed pulse waits for the beam's bead to arrive) */
+         (clamped: a delayed pulse waits for the beam's bead to arrive).
+         At eight surveys, whenever no one is considering, it STUDIES: slowly
+         cycling the accents of the worlds you brought back (WOW #12). */
+      let bR = accR, bG = accG, bB = accB;
+      if (studyA && studyA.length > 1 && clockMs - accPulse > 4000 && !reduced2) {
+        const cyc = (t / 6000) % studyA.length;
+        const i0 = cyc | 0, i1 = (i0 + 1) % studyA.length, f = cyc - i0;
+        bR = (studyA[i0][0] + (studyA[i1][0] - studyA[i0][0]) * f) | 0;
+        bG = (studyA[i0][1] + (studyA[i1][1] - studyA[i0][1]) * f) | 0;
+        bB = (studyA[i0][2] + (studyA[i1][2] - studyA[i0][2]) * f) | 0;
+      }
       const bp = Math.max(0, Math.min(1, 1 - (clockMs - accPulse) / 900));
       g.globalAlpha = 0.5 + 0.5 * bp;
-      g.fillStyle = `rgba(${accR},${accG},${accB},1)`;
+      g.fillStyle = `rgba(${bR},${bG},${bB},1)`;
       g.fillRect(L(BRIDGE[0]) - 2, Y(BRIDGE[1]) - 2, 4, 4);
       g.globalAlpha = (0.35 + 0.65 * bp) * 0.8;
       g.drawImage(glowSpr, L(BRIDGE[0]) - 13 - 6 * bp, Y(BRIDGE[1]) - 13 - 6 * bp, 26 + 12 * bp, 26 + 12 * bp);
@@ -399,7 +472,7 @@ const SphereForge = (() => {
         /* a re-aim from a hold departs from the planet's LIVE position —
            the world kept moving while the traveler walked it */
         const from = shu.mode === 'dock' ? { x: shu.dockX, y: shu.dockY }
-                   : (shu.mode === 'hold' && shu.get) ? shu.get()
+                   : (shu.mode === 'hold' && shu.get) ? moor(shu.get())
                    : { x: shu.px, y: shu.py };
         shu.mode = 'fly'; shu.t0 = clockMs; shu.sx = from.x; shu.sy = from.y;
         shu.get = sortieReq.get; shu.dur = sortieReq.ms;
@@ -409,7 +482,7 @@ const SphereForge = (() => {
       if (recallReq) {
         recallReq = false;
         if (shu.mode === 'fly' || shu.mode === 'hold') {
-          const from = (shu.mode === 'hold' && shu.get) ? shu.get() : { x: shu.px, y: shu.py };
+          const from = (shu.mode === 'hold' && shu.get) ? moor(shu.get()) : { x: shu.px, y: shu.py };
           shu.mode = 'return'; shu.t0 = clockMs;
           shu.sx = from.x; shu.sy = from.y; shu.px = from.x; shu.py = from.y;
           shu.dur = 900; shu.tn = 0; shu.th = -1;
@@ -442,10 +515,10 @@ const SphereForge = (() => {
           shu.dur = 900; shu.tn = 0; shu.th = -1;
         }
       } else if (shu.mode === 'hold' && shu.get) {
-        /* on station at the world: she rides the planet's orbit, engines
-           cold, until the traveler backs out and recalls her */
-        const tgt = shu.get();
-        sx2 = tgt.x; sy2 = tgt.y;
+        /* on station at the world: MOORED off its limb (never parked on the
+           face), riding the orbit until the traveler backs out */
+        const m2 = moor(shu.get());
+        sx2 = m2.x; sy2 = m2.y;
       } else if (shu.mode === 'fly' || shu.mode === 'return') {
         const k = Math.min(1, (clockMs - shu.t0) / shu.dur);
         const tgt = shu.mode === 'fly' ? (shu.get ? shu.get() : { x: shu.dockX, y: shu.dockY })
@@ -605,6 +678,44 @@ const SphereForge = (() => {
     awakenRite() { if (!rm()) riteReq = true; },
     /* the lap of honor: one circuit of the dial, then the homecoming */
     parade() { if (!rm()) paradeReq = true; },
+    /* THE GREETING (WOW #12): three deliberate masthead pulses */
+    greet() { if (!rm()) greetReq = true; },
+    /* the conductor's line in (WOW #8): 'H' beats the chest, 'G' strains the frame */
+    cue(kind, perfAt) {
+      if (kind === 'H') heartCueAt = perfAt;
+      else if (kind === 'G') groanCueAt = perfAt;
+    },
+    /* THE LITURGY (WOW #12): one unwatched habit, once per visit */
+    stir() { if (!rm()) stirReq = true; },
+    /* THE VIGIL (WOW #7): while she holds station over a world, she sometimes
+       crosses YOUR sky — a tiny silhouette, a short amber trail, one glint at
+       mid-crossing. Called by the world-FX harness; draws only mid-transit. */
+    drawTransit(g, w, h, clockMs) {
+      if (!inited || shu.mode !== 'hold') return;
+      const PERIOD = 41000, DUR = 5600;
+      const ph = clockMs % PERIOD;
+      if (ph > DUR) return;
+      const k = ph / DUR;
+      const cyc = (clockMs / PERIOD) | 0;
+      const dir = (cyc & 1) ? -1 : 1;                  /* she patrols both ways */
+      const y = h * (0.1 + ((cyc * 7919) % 13) / 13 * 0.16);
+      const x = dir > 0 ? -30 + (w + 60) * k : w + 30 - (w + 60) * k;
+      g.save();
+      g.translate(x, y);
+      if (dir < 0) g.scale(-1, 1);
+      g.globalAlpha = 0.45;                            /* the burn, far away */
+      g.drawImage(glowSpr, -20, -5, 10, 10);
+      g.globalAlpha = 0.8;
+      g.scale(0.55, 0.55);
+      g.drawImage(shuttleSpr, -22, -9);
+      g.restore();
+      const gl = Math.max(0, 1 - Math.abs(k - 0.5) * 8);   /* one glint amidships */
+      if (gl > 0) {
+        g.globalAlpha = gl * 0.6;
+        g.drawImage(glowSpr, x - 9, y - 9, 18, 18);
+        g.globalAlpha = 1;
+      }
+    },
 
     /* your vessel departs: fly to a live target over ms, then HOLD there —
        she stays moored at the world while you walk it. travel() owns the
