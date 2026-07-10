@@ -1076,6 +1076,12 @@ addEventListener('hashchange', () => {
      — and a pending departure beat dies with it (M2) */
   if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
   if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; beatSlug = null; }
+  /* any route home recalls the shuttle from her hold at the world — this
+     also catches a Back/Esc mid-departure-beat, when the scene never left */
+  if (!/^#\/world\//.test(location.hash) && window.SphereForge && SphereForge.recall) {
+    SphereForge.recall();
+    if (!skyTask && !reduced()) Orrery.startAmbient();   /* the flight home needs frames */
+  }
   route(false);
 });
 

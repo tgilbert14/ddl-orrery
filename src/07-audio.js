@@ -781,26 +781,43 @@ const Score = (() => {
     else {
       /* label honesty while blocked: Chrome leaves resume() PENDING (not
          rejected) until the first gesture, so turnOn may not settle for a
-         long while — say "ready" now; turnOn overwrites with the truth */
+         long while — say "ready" now; turnOn overwrites with the truth.
+         ARM THE LISTENERS NOW, not after turnOn settles: a pending boot
+         resume never settles, and Chrome's queued unlock does not fire for
+         every gesture type (Space and wheel have both failed it). A live
+         listener calling resume() INSIDE the real gesture always works. */
       setUI('ready');
-      turnOn().then((ok) => { if (!ok) armIgnition(); })
-        .catch(() => { setUI('ready'); armIgnition(); });  /* a boot throw must not eat the arm */
+      armIgnition();
+      turnOn().catch(() => { setUI(armed ? 'ready' : false); });
     }
   }
   function armIgnition() {
+    if (armIgnition.live) return;                    /* one set of listeners, ever */
+    armIgnition.live = true;
     const arm = async (e) => {
+      if (on) { cleanup(); return; }                 /* the boot resume already won */
       if (e.type === 'keydown' && (e.key === 'Escape' || e.altKey || e.ctrlKey || e.metaKey)) return;
       const ok = await turnOn();
       if (ok) cleanup();                             /* only disarm once it truly runs */
     };
     const cleanup = () => {
+      armIgnition.live = false;
+      removeEventListener('pointerdown', arm);
       removeEventListener('pointerup', arm);
       removeEventListener('click', arm);
       removeEventListener('keydown', arm);
+      removeEventListener('wheel', arm);
+      removeEventListener('touchend', arm);
     };
+    /* pointerdown/keydown carry activation the moment they land; wheel is
+       best-effort — a scroll completes the default-on intent once ANY prior
+       gesture granted activation (common right after skipping the approach) */
+    addEventListener('pointerdown', arm);
     addEventListener('pointerup', arm);
     addEventListener('click', arm);
     addEventListener('keydown', arm);
+    addEventListener('wheel', arm, { passive: true });
+    addEventListener('touchend', arm);
   }
 
   /* a hidden tab is a silent tab; a revealed tab may complete the default-on

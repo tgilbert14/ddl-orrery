@@ -183,7 +183,7 @@ const SphereForge = (() => {
     px: 0, py: 0, hd: 0, dockX: 0, dockY: 0,
     trail: new Float32Array(48), tn: 0, th: -1, tacc: 0,
   };
-  let sortieReq = null;
+  let sortieReq = null, recallReq = false;
 
   function easeIO(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
 
@@ -294,14 +294,32 @@ const SphereForge = (() => {
 
       /* ---------- the shuttle ---------- */
       if (sortieReq) {
-        const from = shu.mode === 'dock' ? { x: shu.dockX, y: shu.dockY } : { x: shu.px, y: shu.py };
+        /* a re-aim from a hold departs from the planet's LIVE position —
+           the world kept moving while the traveler walked it */
+        const from = shu.mode === 'dock' ? { x: shu.dockX, y: shu.dockY }
+                   : (shu.mode === 'hold' && shu.get) ? shu.get()
+                   : { x: shu.px, y: shu.py };
         shu.mode = 'fly'; shu.t0 = clockMs; shu.sx = from.x; shu.sy = from.y;
         shu.get = sortieReq.get; shu.dur = sortieReq.ms;
         shu.tn = 0; shu.th = -1;
         sortieReq = null;
       }
+      if (recallReq) {
+        recallReq = false;
+        if (shu.mode === 'fly' || shu.mode === 'hold') {
+          const from = (shu.mode === 'hold' && shu.get) ? shu.get() : { x: shu.px, y: shu.py };
+          shu.mode = 'return'; shu.t0 = clockMs;
+          shu.sx = from.x; shu.sy = from.y; shu.px = from.x; shu.py = from.y;
+          shu.dur = 900; shu.tn = 0; shu.th = -1;
+        }
+      }
       let sx2 = shu.dockX, sy2 = shu.dockY, flying = false;
-      if (shu.mode === 'fly' || shu.mode === 'return') {
+      if (shu.mode === 'hold' && shu.get) {
+        /* on station at the world: she rides the planet's orbit, engines
+           cold, until the traveler backs out and recalls her */
+        const tgt = shu.get();
+        sx2 = tgt.x; sy2 = tgt.y;
+      } else if (shu.mode === 'fly' || shu.mode === 'return') {
         const k = Math.min(1, (clockMs - shu.t0) / shu.dur);
         const tgt = shu.mode === 'fly' ? (shu.get ? shu.get() : { x: shu.dockX, y: shu.dockY })
                                        : { x: shu.dockX, y: shu.dockY };
@@ -316,7 +334,7 @@ const SphereForge = (() => {
         sy2 = ie * ie * shu.sy + 2 * ie * e * cyq + e * e * tgt.y;
         flying = true;
         if (k >= 1) {
-          if (shu.mode === 'fly') { shu.mode = 'return'; shu.t0 = clockMs; shu.sx = sx2; shu.sy = sy2; shu.dur = 900; }
+          if (shu.mode === 'fly') shu.mode = 'hold';   /* she STAYS at the world until recalled */
           else shu.mode = 'dock';
         }
       }
@@ -434,12 +452,21 @@ const SphereForge = (() => {
     /* the reveal: every deck answers for a moment — a ghost of the living ship */
     reveal(ms) { revealReq = ms || 2600; },
 
-    /* your vessel departs: fly to a live target over ms, then hold course.
-       travel() owns the warp timer; this owns only the picture. */
+    /* your vessel departs: fly to a live target over ms, then HOLD there —
+       she stays moored at the world while you walk it. travel() owns the
+       warp timer; this owns only the picture. */
     sortie(getTarget, ms) {
       if (rm()) return false;
+      recallReq = false;                     /* a fresh departure outranks a pending recall */
       sortieReq = { get: getTarget, ms: ms || 760 };
       return true;
+    },
+    /* the traveler backs out to orbit: bring her home from wherever the
+       world has carried her (rm keeps travel instant — she is simply docked) */
+    recall() {
+      sortieReq = null;
+      if (rm()) { shu.mode = 'dock'; return; }
+      recallReq = true;
     },
 
     drawShadowPass(g, x, y, R) {
