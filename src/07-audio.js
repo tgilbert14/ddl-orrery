@@ -295,13 +295,35 @@ const Score = (() => {
     o.onended = () => g.disconnect();
     return g;                        /* callers that schedule far ahead can mute a run mid-flight */
   }
-  function playLead(v, st, when) {
+  let sceneSetAt = 0;                                  /* the long stay's dwell clock (WOW #22) */
+  function mut32(n) {
+    n = Math.imul(n ^ (n >>> 15), 2246822519);
+    n = Math.imul(n ^ (n >>> 13), 3266489917);
+    return (n ^ (n >>> 16)) >>> 0;
+  }
+  function playLead(v, st, when, pos, cyc) {
     const L = v.lead;
-    const semis = v.scale[st.d % v.scale.length] + 12 * (st.o + Math.floor(st.d / v.scale.length));
+    let d = st.d, o = st.o;
+    /* THE LONG STAY (WOW #22): past the second cycle a growing DETERMINISTIC
+       mask of steps mutates — octave lifts and neighbor tones, the same
+       variation for every visitor (composed, not random); every 6th cycle
+       the theme returns clean, so it breathes rather than drifts */
+    if (cyc > 1 && cyc % 6 !== 0) {
+      const hsh = mut32(((v.root * 1000) | 0) + cyc * 131 + (pos || 0) * 17);
+      if ((hsh % 16) < Math.min(6, (cyc - 1) * 2)) {
+        if (hsh & 32) o += 1; else d += (hsh & 64) ? 1 : -1;
+        if (d < 0) d = 0;
+      }
+    }
+    const semis = v.scale[d % v.scale.length] + 12 * (o + Math.floor(d / v.scale.length));
     const f = v.root * Math.pow(2, semis / 12);
     const dur = st.dur * v.step / 1000 * 0.92 + 0.08;
     note(f, when, st.v, dur, L.wave, L.dry ? dry : bus, L.dly, L.wet);
     if (v.spark && st.v >= 0.11) note(f * 2, when + 0.03, st.v * 0.5, dur * 0.8, 'triangle', bus, 0.35, 0);
+    /* past ninety seconds of dwell a quiet countermelody enters — a fifth
+       up, half a step behind: the world learning to harmonize with itself */
+    if (ctx.currentTime - sceneSetAt > 90 && st.v >= 0.05)
+      note(f * Math.pow(2, 7 / 12), when + v.step / 2000, st.v * 0.4, dur, L.wave, bus, L.dly, Math.min(1, (L.wet || 0) + 0.2));
   }
   function taiko(when, vel) {
     const o = ctx.createOscillator(); o.type = 'sine';
@@ -397,7 +419,7 @@ const Score = (() => {
      regress to the wrong tone (the rite fires once, ever). */
   let artifactTrue = false;
   try { artifactTrue = localStorage.getItem('orrery-survey-complete') === '1'; } catch (_) {}
-  function artifactAnswer(when) {
+  function artifactAnswer(when, knocks) {
     const o = ctx.createOscillator(); o.type = 'sine';
     const dur = artifactTrue ? 2.2 : 1.2;
     if (artifactTrue) { o.frequency.setValueAtTime(185, when); o.frequency.linearRampToValueAtTime(196, when + dur); }
@@ -412,6 +434,14 @@ const Score = (() => {
     o.onended = () => g.disconnect();
     if (artifactTrue) {                             /* a bloomed fifth crowns the resolved tone */
       note(294, when + 0.12, 0.05, dur, 'sine', bus, 0, 0.7);
+    } else {
+      /* THE KNOCK LEARNS YOUR NAME (WOW #23): each ladder tier adds a fainter
+         overtone and a harder minor-second rub — less a bell every time,
+         more like something clearing its throat */
+      const layers = Math.min(3, ((knocks || 0) / 3) | 0);
+      for (let i2 = 1; i2 <= layers; i2++)
+        note(196 * Math.pow(1.5, i2), when + 0.05 * i2, 0.012, 1 + 0.3 * i2, 'sine', bus, 0, 0.6);
+      if (layers >= 2) note(207.65, when + 0.1, 0.02 + 0.008 * layers, 1.4, 'sine', bus, 0, 0.5);
     }
   }
   function riser(when) {                               /* pre-warp reverse-swell into the arrival */
@@ -483,7 +513,7 @@ const Score = (() => {
         if (nextNote >= holdUntil) {
           const span = v.motif.length + v.gap;
           const pos = stepIdx % span;
-          if (pos < v.motif.length) { const st = v.motif[pos]; if (st) playLead(v, st, nextNote); }
+          if (pos < v.motif.length) { const st = v.motif[pos]; if (st) playLead(v, st, nextNote, pos, (stepIdx / span) | 0); }
           const pc = v.perc[stepIdx % 16];
           if (pc === 'K') { taiko(nextNote, 0.4); cue('K', nextNote); }
           else if (pc === 's') shaker(nextNote);
@@ -504,6 +534,7 @@ const Score = (() => {
     muteHorns();                      /* the horns must not follow the traveler off-world */
     cfg = next;
     stepIdx = 0;
+    sceneSetAt = ctx ? ctx.currentTime : 0;            /* the long stay's clock restarts (WOW #22) */
     if (!ready()) return;                              /* rig is built on the next turnOn */
     holdUntil = ctx.currentTime + 1.6;                 /* pads land first; the motif enters after the breath */
     nextCallAt = ctx.currentTime + 12;
@@ -779,11 +810,11 @@ const Score = (() => {
   });
 
   /* the Artifact answers when touched: low, slow, slightly flat. 1 per 2s. */
-  window.Orrery.events.addEventListener('artifact', () => {
+  window.Orrery.events.addEventListener('artifact', (e) => {
     if (!ready()) return;
     if (ctx.currentTime - lastAnswer < 2) return;
     lastAnswer = ctx.currentTime;
-    artifactAnswer(ctx.currentTime + 0.03);
+    artifactAnswer(ctx.currentTime + 0.03, (e.detail && e.detail.n) || 0);
   });
 
   /* the survey is complete: IGNITION (WOW board #2). The whole journey,

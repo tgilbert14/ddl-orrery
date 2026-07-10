@@ -554,6 +554,12 @@ html.js .survey-log {
   background: #05070f;
   border-color: rgba(var(--brass-rgb), 0.5);
 }
+/* the seal is a BUTTON now (WOW #24): strip the UA chrome, keep the gold
+   (.konami-seal's own background outranks the UA default — never reset it) */
+button.log-seal {
+  appearance: none; border: 0; padding: 0; margin: 0;
+  cursor: pointer; font: inherit;
+}
 /* forced-colors strips gradients and shadows: state must survive on borders */
 @media (forced-colors: active) {
   .survey-dot { border: 1px solid CanvasText; }

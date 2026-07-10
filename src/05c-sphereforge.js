@@ -52,6 +52,7 @@ const SphereForge = (() => {
 
   let hullSpr = null, glowSpr = null, shadowSpr = null, shuttleSpr = null;
   let seamSpr = null;                      /* WOW #3: the light that sleeps inside */
+  let rimSpr = null, rimTint = null, rimKey = '';   /* WOW #13: the hull remembers the light */
   let inited = false, frozenT = 60000;
 
   function buildGlow() {
@@ -185,6 +186,17 @@ const SphereForge = (() => {
     };
     ray(520, 118, -1.9, 120, 26); ray(640, 194, 1.25, 100, 22);
     seamSpr = lc;
+
+    /* THE HULL REMEMBERS THE LIGHT (WOW #13): one white rim pass, re-tinted
+       at runtime only when the dominant passing light CHANGES */
+    const rc = cv(HL, HH), rg3 = rc.getContext('2d');
+    rg3.save();
+    rg3.shadowColor = 'rgba(255,255,255,0.9)'; rg3.shadowBlur = 10;
+    rg3.strokeStyle = 'rgba(255,255,255,0.8)'; rg3.lineWidth = 2.5;
+    hullPath(rg3); rg3.stroke();
+    rg3.restore();
+    rimSpr = rc;
+    rimTint = cv(HL, HH);
     return c;
   }
   function buildShadow() {
@@ -237,8 +249,12 @@ const SphereForge = (() => {
     px: 0, py: 0, hd: 0, dockX: 0, dockY: 0,
     trail: new Float32Array(48), tn: 0, th: -1, tacc: 0,
     lampUntil: 0,                          /* the dock lamp holds a beat after the clamps take her */
+    nextGet: null, nextDur: 760, cough: 0, /* the undock ceremony's baton (WOW #18) */
+    arrived: false,                        /* the first docking fires once, ever (WOW #19) */
   };
-  let sortieReq = null, recallReq = false;
+  let sortieReq = null, recallReq = false, arriveReq = 0;
+  /* THE FIRST UNDOCK (WOW #18): two clamp-specks fall away as she coughs alive */
+  const specks = [{ on: false, x: 0, y: 0, vy: 0, t0: 0 }, { on: false, x: 0, y: 0, vy: 0, t0: 0 }];
   /* THE KINDLING (WOW board #6): when a survey comes home, a spark leaves the
      dock and runs the spine to the newest window cluster — the light you just
      earned kindles WHILE YOU WATCH. Latched when `lit` grows; runs once docked. */
@@ -330,6 +346,28 @@ const SphereForge = (() => {
         g.globalCompositeOperation = 'lighter';
         g.globalAlpha = pourK * (reduced2 ? 0.85 : 0.72 + 0.16 * Math.sin(t * 0.0021));
         g.drawImage(seamSpr, -HL / 2 + (HL / 2 - (72 + 838) / 2), -170, HL, HH);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
+      /* THE HULL REMEMBERS THE LIGHT (WOW #13): the nearest passing world
+         rim-lights her flank in its own color — one photographed scene */
+      const lit2 = opts && opts.lit;
+      if (lit2 && lit2.k > 0.02 && rimSpr) {
+        if (lit2.key !== rimKey) {                     /* re-tint on CHANGE, never per frame */
+          rimKey = lit2.key;
+          const rg4 = rimTint.getContext('2d');
+          rg4.globalCompositeOperation = 'source-over';
+          rg4.clearRect(0, 0, HL, HH);
+          rg4.drawImage(rimSpr, 0, 0);
+          rg4.globalCompositeOperation = 'source-in';
+          rg4.fillStyle = lit2.key;
+          rg4.fillRect(0, 0, HL, HH);
+        }
+        const off2 = -HL / 2 + (HL / 2 - (72 + 838) / 2);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = Math.min(0.6, lit2.k * 0.6);
+        if (lit2.side >= 0) g.drawImage(rimTint, HL / 2, 0, HL / 2, HH, off2 + HL / 2, -170, HL / 2, HH);
+        else g.drawImage(rimTint, 0, 0, HL / 2, HH, off2, -170, HL / 2, HH);
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
       }
@@ -468,15 +506,34 @@ const SphereForge = (() => {
       shu.dockY = y + bob + dlx * sa + dly * ca;
 
       /* ---------- the shuttle ---------- */
+      if (arriveReq && shu.mode === 'dock') {
+        /* THE DOCKING (WOW #19): first visit — the cradle was empty; she
+           burns in from the dark and takes it (the homecoming machinery,
+           so she flips and brakes into the berth as the instruments settle) */
+        shu.mode = 'return'; shu.t0 = clockMs;
+        shu.sx = x - R * 4.2; shu.sy = y + R * 2.3;
+        shu.px = shu.sx; shu.py = shu.sy;
+        shu.dur = arriveReq; shu.tn = 0; shu.th = -1;
+        arriveReq = 0;
+      }
       if (sortieReq) {
         /* a re-aim from a hold departs from the planet's LIVE position —
            the world kept moving while the traveler walked it */
         const from = shu.mode === 'dock' ? { x: shu.dockX, y: shu.dockY }
                    : (shu.mode === 'hold' && shu.get) ? moor(shu.get())
                    : { x: shu.px, y: shu.py };
-        shu.mode = 'fly'; shu.t0 = clockMs; shu.sx = from.x; shu.sy = from.y;
-        shu.get = sortieReq.get; shu.dur = sortieReq.ms;
-        shu.tn = 0; shu.th = -1;
+        if (sortieReq.undock && shu.mode === 'dock') {
+          /* THE FIRST UNDOCK (WOW #18): 360ms of ceremony — the clamps fall
+             away, the engine coughs twice and catches, she lifts a hair */
+          shu.mode = 'undock'; shu.t0 = clockMs;
+          shu.nextGet = sortieReq.get; shu.nextDur = sortieReq.ms;
+          specks[0].on = true; specks[0].x = shu.dockX - 4; specks[0].y = shu.dockY + 2; specks[0].vy = 0.004; specks[0].t0 = clockMs;
+          specks[1].on = true; specks[1].x = shu.dockX + 5; specks[1].y = shu.dockY + 2; specks[1].vy = 0.006; specks[1].t0 = clockMs;
+        } else {
+          shu.mode = 'fly'; shu.t0 = clockMs; shu.sx = from.x; shu.sy = from.y;
+          shu.get = sortieReq.get; shu.dur = sortieReq.ms;
+          shu.tn = 0; shu.th = -1;
+        }
         sortieReq = null;
       }
       if (recallReq) {
@@ -501,7 +558,17 @@ const SphereForge = (() => {
         }
       }
       let sx2 = shu.dockX, sy2 = shu.dockY, flying = false;
-      if (shu.mode === 'parade' && typeof ART !== 'undefined') {
+      if (shu.mode === 'undock') {
+        const k = Math.min(1, (clockMs - shu.t0) / 360);
+        sx2 = shu.dockX; sy2 = shu.dockY - 5 * k;      /* she lifts off the spine */
+        shu.cough = k < 0.22 ? k * 1.35 : k < 0.4 ? 0 : k < 0.72 ? (k - 0.4) * 1.8 : 0.85;
+        if (k >= 1) {
+          shu.mode = 'fly'; shu.t0 = clockMs;
+          shu.sx = sx2; shu.sy = sy2;
+          shu.get = shu.nextGet; shu.dur = shu.nextDur;
+          shu.tn = 0; shu.th = -1;
+        }
+      } else if (shu.mode === 'parade' && typeof ART !== 'undefined') {
         /* once around the gilded dial, past every arc the survey earned */
         const k = Math.min(1, (clockMs - shu.t0) / shu.dur);
         const a0 = Math.atan2((shu.dockY - ART.cy) / (ART.ry || 1), (shu.dockX - ART.cx) / (ART.rx || 1));
@@ -593,9 +660,24 @@ const SphereForge = (() => {
         if (retro) g.drawImage(glowSpr, -34, -11, 22, 22);
         else g.drawImage(glowSpr, -30, -9, 18, 18);
         g.globalAlpha = 1;
+      } else if (shu.mode === 'undock' && shu.cough > 0.02) {
+        g.globalAlpha = shu.cough;           /* two coughs, then the catch */
+        g.drawImage(glowSpr, -28, -8, 15, 15);
+        g.globalAlpha = 1;
       }
       g.drawImage(shuttleSpr, -22, -9);
       g.restore();
+      /* the fallen clamps, tumbling briefly into the dark */
+      for (const sp of specks) {
+        if (!sp.on) continue;
+        const age = clockMs - sp.t0;
+        if (age > 900) { sp.on = false; continue; }
+        sp.vy += 0.0003; sp.y += sp.vy * 16;
+        g.globalAlpha = 0.7 * (1 - age / 900);
+        g.fillStyle = 'rgba(201,163,92,1)';
+        g.fillRect(sp.x, sp.y, 1.6, 1.6);
+      }
+      g.globalAlpha = 1;
 
       /* the ripple: the wreck's sensor ring answers a hard knock */
       if (env > 0) {
@@ -723,8 +805,21 @@ const SphereForge = (() => {
     sortie(getTarget, ms) {
       if (rm()) return false;
       recallReq = false;                     /* a fresh departure outranks a pending recall */
-      sortieReq = { get: getTarget, ms: ms || 760 };
-      return true;
+      const undock = shu.mode === 'dock';    /* a cold start earns its ceremony (WOW #18) */
+      sortieReq = { get: getTarget, ms: ms || 760, undock };
+      return (ms || 760) + (undock ? 360 : 0);   /* travel() times the warp off the TOTAL */
+    },
+    /* THE DOCKING (WOW #19): called once by the first-visit approach */
+    arrive(ms) {
+      if (rm() || shu.arrived) return;
+      shu.arrived = true;
+      arriveReq = ms || 4200;
+    },
+    /* the patch-maker borrows her silhouette (WOW #24) */
+    stampHull(g, x, y, wpx) {
+      if (!hullSpr) return;
+      const hpx = wpx * (HH / HL);
+      g.drawImage(hullSpr, x - wpx / 2, y - hpx / 2, wpx, hpx);
     },
     /* the traveler backs out to orbit: bring her home from wherever the
        world has carried her (rm keeps travel instant — she is simply docked) */

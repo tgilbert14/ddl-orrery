@@ -140,23 +140,63 @@ const seasonTilt = (() => {   /* the local-time sky: a deterministic per-visit r
 /* nebula haze: two soft tinted blooms baked once, seated on the galactic band */
 let nebA = null, nebB = null;
 const neb1 = { x: 0, y: 0, s: 0 }, neb2 = { x: 0, y: 0, s: 0 };
+/* THE HOUR SETS THE KEY (WOW #21): the sky is graded by the visitor's own
+   hour, computed once at boot — pre-dawn cold and thin, evening brass-heavy,
+   deep night doubles the giants. Tomorrow's sky is genuinely not today's. */
+const HOUR = new Date().getHours();
+const HG = {
+  giantEvery: (HOUR >= 23 || HOUR < 5) ? 23 : 41,
+  warmTh: (HOUR >= 17 && HOUR < 23) ? 0.34 : (HOUR >= 5 && HOUR < 9) ? 0.10 : 0.20,
+  nebMul: (HOUR >= 23 || HOUR < 5) ? 0.75 : (HOUR >= 17 && HOUR < 23) ? 1.25 : 1,
+};
+
 function bakeNebula() {
   if (nebA) return;
+  /* KILL THE BANDING (WOW #26): a 4x4 Bayer tile baked over every dark
+     gradient — the rings OLED phones would show simply never exist */
+  const bayer = document.createElement('canvas'); bayer.width = bayer.height = 4;
+  const BM = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const bid = bayer.getContext('2d').createImageData(4, 4);
+  for (let i = 0; i < 16; i++) {
+    const v2 = BM[i] * 16;
+    bid.data[i * 4] = v2; bid.data[i * 4 + 1] = v2; bid.data[i * 4 + 2] = v2; bid.data[i * 4 + 3] = 10;
+  }
+  bayer.getContext('2d').putImageData(bid, 0, 0);
   const mk = (rgb) => {
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const g = c.getContext('2d');
     const gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-    gr.addColorStop(0, `rgba(${rgb},0.10)`);
-    gr.addColorStop(0.55, `rgba(${rgb},0.05)`);
+    gr.addColorStop(0, `rgba(${rgb},${(0.10 * HG.nebMul).toFixed(3)})`);
+    gr.addColorStop(0.55, `rgba(${rgb},${(0.05 * HG.nebMul).toFixed(3)})`);
     gr.addColorStop(1, `rgba(${rgb},0)`);
     g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    g.globalCompositeOperation = 'overlay';
+    g.fillStyle = g.createPattern(bayer, 'repeat');
+    g.fillRect(0, 0, 256, 256);
+    g.globalCompositeOperation = 'source-over';
     return c;
   };
   /* sea-glass + dim brass, not teal + violet: the canvas backdrop keeps the
      Deep Deco fiction (lamplight through water) instead of snapping to
      default-space-demo the instant JS boots (M3) */
   nebA = mk('80,180,160'); nebB = mk('201,163,92');
+  /* LAMPLIGHT THROUGH WATER (WOW #20): two vast faint shafts leaning down
+     the dark — the void becomes ocean, and the wreck reads sunk, not parked */
+  if (!shaftSpr) {
+    shaftSpr = document.createElement('canvas');
+    shaftSpr.width = 220; shaftSpr.height = 900;
+    const sg = shaftSpr.getContext('2d');
+    const gr2 = sg.createLinearGradient(0, 0, 220, 0);
+    gr2.addColorStop(0, 'rgba(239,228,200,0)');
+    gr2.addColorStop(0.5, 'rgba(239,228,200,0.045)');
+    gr2.addColorStop(1, 'rgba(239,228,200,0)');
+    sg.fillStyle = gr2; sg.fillRect(0, 0, 220, 900);
+    sg.globalCompositeOperation = 'overlay';
+    sg.fillStyle = sg.createPattern(bayer, 'repeat');
+    sg.fillRect(0, 0, 220, 900);
+  }
 }
+let shaftSpr = null;
 function buildStars() {
   /* a sky worth the name: ~3x the old density, a diagonal galactic band
      carrying a third of the field, and a few glinting giants */
@@ -176,7 +216,7 @@ function buildStars() {
       x = W / 2 + ca * u - sa * v;
       y = H / 2 + sa * u + ca * v;
     } else { x = rnd() * W; y = rnd() * H; }
-    const giant = i % 41 === 0;                        /* rare bright giants with a cross-glint */
+    const giant = i % HG.giantEvery === 0;             /* rare bright giants — deep night doubles them */
     stars.push({
       x, y,
       z: 0.35 + depth * 0.33,                          /* parallax factor */
@@ -187,7 +227,7 @@ function buildStars() {
          pale sea-glass — the retint that makes the fiction survive boot (M3).
          Giants keep the amber/blue pairing so the sky still has cold accents. */
       hue: giant ? (rnd() < 0.5 ? 'rgba(255,217,160,' : 'rgba(168,200,255,')
-         : rnd() < 0.20 ? 'rgba(201,163,92,' : rnd() < 0.45 ? 'rgba(190,220,225,' : 'rgba(239,228,200,',
+         : rnd() < HG.warmTh ? 'rgba(201,163,92,' : rnd() < 0.45 ? 'rgba(190,220,225,' : 'rgba(239,228,200,',
     });
   }
   /* the nebulae sit on the band spine, one each side of center */
@@ -198,6 +238,7 @@ function buildStars() {
 /* pointer parallax: latest target, applied once per frame (never per event).
    px/py carry the raw position for the cursor glow (spectacle pass). */
 const par = { x: 0, y: 0, tx: 0, ty: 0, px: -1e4, py: -1e4, gx: -1e4, gy: -1e4 };
+const lean = { x: 0, y: 0, k: 0 };         /* THE LEAN (WOW #26): the sky turns toward departures */
 if (finePointer) {
   addEventListener('pointermove', (e) => {
     par.tx = (e.clientX / W - 0.5) * 2; par.ty = (e.clientY / H - 0.5) * 2;
@@ -241,6 +282,8 @@ function drawWarpSwell(clockMs) {
 let strum = null;                                      /* { t0, hit: Uint8Array } while walking */
 const strumFlare = new Float32Array(WORLDS.length);
 let hoverT0 = 0;                                       /* the consideration beam's departure stamp */
+let swAngle = -9;                                      /* the sweep's live bearing (WOW #13) */
+const litObj = { k: 0, key: '', side: 1 };             /* the hull's dominant sun (WOW #13) */
 
 /* ---------- planet layout: parametric orbits on the shared clock ---------- */
 const anchors = new Map();
@@ -408,8 +451,21 @@ function planetPos(i, clockMs) {
 let hovered = null;
 function drawSky(dt, clockMs) {
   ctx.clearRect(0, 0, W, H);
-  par.x += (par.tx - par.x) * 0.06; par.y += (par.ty - par.y) * 0.06;
+  if (lean.k > 0.001) lean.k = Math.max(0, lean.k - dt / 2200);
+  par.x += (par.tx + lean.x * lean.k - par.x) * 0.06;
+  par.y += (par.ty + lean.y * lean.k - par.y) * 0.06;
   const t = clockMs / 1000;
+
+  /* LAMPLIGHT THROUGH WATER (WOW #20): the shafts pass BEHIND everything,
+     drifting at glacial speed; rm holds them at their designed rest */
+  if (shaftSpr && !warp.active) {
+    const drift = reduced() ? 0 : Math.sin(t * 0.05) * 26;
+    ctx.save();
+    ctx.rotate(-0.16);
+    ctx.drawImage(shaftSpr, W * 0.2 + drift, -H * 0.25, 220, H * 1.6);
+    ctx.drawImage(shaftSpr, W * 0.62 - drift, -H * 0.3, 280, H * 1.7);
+    ctx.restore();
+  }
 
   /* the nebulae ride behind everything (baked sprites, two blits) */
   if (nebA && !warp.active) {
@@ -482,6 +538,7 @@ function drawSky(dt, clockMs) {
        and one dot per frame; rm holds the dial still. */
     if (!reduced()) {
       const sw = (clockMs / 9000) * Math.PI * 2;
+      swAngle = sw;                                    /* the sweep lights what it touches (WOW #13) */
       ctx.strokeStyle = BRASS_STROKE;
       ctx.globalAlpha = 0.16;
       ctx.lineWidth = 2.6;
@@ -529,9 +586,17 @@ function drawSky(dt, clockMs) {
       }
       const hov = hovered === w.slug;
       /* the strum's touch: the world flares as the wave crosses it */
-      const fl = strumFlare[i] > 0 ? Math.max(0, 1 - (clockMs - strumFlare[i]) / 900) : 0;
+      let fl = strumFlare[i] > 0 ? Math.max(0, 1 - (clockMs - strumFlare[i]) / 900) : 0;
       const dx0 = p.x - ART.cx, dy0 = p.y - ART.cy, hyp = Math.hypot(dx0, dy0) || 1;
       const th = Math.atan2(dy0 / ART.ry, dx0 / ART.rx);
+      /* THE SWEEP LIGHTS WHAT IT TOUCHES (WOW #13): the radar bead's pass
+         leaves a brief glint on each world it crosses — the dial, the worlds
+         and the wreck become one physical instrument sharing one light */
+      if (swAngle > -8) {
+        let sd2 = Math.abs(((swAngle - th) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2));
+        if (sd2 > Math.PI) sd2 = Math.PI * 2 - sd2;
+        if (sd2 < 0.2) fl = Math.max(fl, (1 - sd2 / 0.2) * 0.55);
+      }
       /* the armature: a faint radius from the Artifact's limb out to the
          world's bearing, brighter on the near side and igniting on hover —
          the brass spokes an orrery is supposed to have (M3). Constant brass
@@ -606,9 +671,18 @@ function drawSky(dt, clockMs) {
       }
     };
     for (const e of ps) if (e.p.depth <= 0) drawWorld(e);
+    /* THE HULL REMEMBERS THE LIGHT (WOW #13): the nearest near-side world
+       is her dominant sun this frame — zero allocation, one reused object */
+    litObj.k = 0;
+    for (const e of ps) {
+      if (e.p.depth <= 0) continue;
+      const ddx = e.p.x - ART.cx;
+      const prox = 1 - Math.min(1, Math.hypot(ddx, e.p.y - ART.cy) / (ART.r * 3.2));
+      if (prox > litObj.k) { litObj.k = prox; litObj.key = e.w.tellStroke; litObj.side = ddx >= 0 ? 1 : -1; }
+    }
     if (window.SphereForge) {
       SphereForge.drawShadowPass(ctx, ART.cx, ART.cy, ART.r);
-      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced() });
+      SphereForge.draw(ctx, ART.cx, ART.cy, ART.r, clockMs, { rm: reduced(), lit: litObj.k > 0.02 ? litObj : null });
       SphereForge.drawSonar(ctx, ART.cx, ART.cy, ART.r, clockMs);
     }
     for (const e of ps) if (e.p.depth > 0) drawWorld(e);
@@ -777,7 +851,10 @@ function placeArtifactDom() {
     artLabel.style.setProperty('--ay', Math.round(ART.cy + ART.r + (desktop() ? 30 : 10) + sTop) + 'px');
   }
 }
-let artLast = 0, artTouches = 0, artRmT = null, artLabelLock = false;
+/* THE LADDER, RE-FORGED (WOW #23): the knocks are REMEMBERED across visits —
+   it is not a loop, it is a countdown */
+let artLast = 0, artRmT = null, artLabelLock = false;
+let artTouches = parseInt(keep.get('orrery-knocks') || '0', 10) || 0;
 /* the plate whispers for `ms`, then returns to whatever the survey arc has
    made the resting line (dataset.home is kept current by paint()) */
 function whisperArtLabel(text, ms) {
@@ -797,14 +874,19 @@ function touchArtifact() {
     return;
   }
   artTouches++;
+  keep.set('orrery-knocks', String(artTouches));
   if (window.SphereForge && !reduced()) {
     SphereForge.ripple();
-    /* provoke it enough and, for a moment, the plates part: you see what
-       is underneath (every third touch; the ripple masks the swap) — and
-       the plate finally says a word about it (M3) */
+    /* provoke it enough and, for a moment, the plates part — and sustained
+       attention CLIMBS: a glimpse at three, a longer look at six, and at
+       nine the plates hold while the plate admits it is counting (WOW #23) */
     if (artTouches % 3 === 0 && SphereForge.reveal) {
-      SphereForge.reveal(2600);
-      whisperArtLabel('Object 0 · that is not a shell', 2600);
+      const tier = Math.min(3, (artTouches / 3) | 0);
+      SphereForge.reveal([0, 2600, 4200, 5200][tier]);
+      whisperArtLabel([0,
+        'Object 0 · that is not a shell',
+        'Object 0 · the decks remember light',
+        'Object 0 · it is counting your knocks'][tier], [0, 2600, 4200, 5200][tier]);
     }
     if (!skyTask) Orrery.startAmbient();
   } else if (reduced()) {
@@ -814,7 +896,7 @@ function touchArtifact() {
     requestStatic();
     whisperArtLabel('Object 0 · it heard you', 2000);
   }
-  Orrery.events.dispatchEvent(new CustomEvent('artifact'));
+  Orrery.events.dispatchEvent(new CustomEvent('artifact', { detail: { n: artTouches } }));
 }
 /* SOUND THE DERELICT: hold the dead ship >=600ms and the strum begins; a
    quick tap stays the knock ladder. The click that trails a strum-press is
@@ -977,11 +1059,44 @@ surveyed.forEach(s => { const a = anchors.get(s); if (a) a.querySelector('.pa-ti
   let sealed = false;
   function showSeal() {                               /* reuse the konami seal's look; distinct node */
     if (sealed || plate.querySelector('.log-seal')) { sealed = true; return; }
-    const seal = document.createElement('span');
+    /* THE SURVEYOR'S PATCH (WOW #24): the seal can be HELD — click it and a
+       mission patch composes itself for download: her silhouette, the ring
+       of your eleven in the order YOU lit them. Proof you can carry out. */
+    const seal = document.createElement('button');
+    seal.type = 'button';
     seal.className = 'konami-seal log-seal';          /* inherits the gold visual + rm-gated glow */
-    seal.title = HONOR;
+    seal.title = HONOR + ' Click for your surveyor patch.';
+    seal.setAttribute('aria-label', 'Download your surveyor patch');
+    seal.addEventListener('click', downloadPatch);
     (plate.querySelector('.survey-plate') || plate).appendChild(seal);
     sealed = true;
+  }
+  function downloadPatch() {
+    const S3 = 1080, c = document.createElement('canvas');
+    c.width = S3; c.height = S3;
+    const g = c.getContext('2d');
+    g.fillStyle = '#060a18'; g.fillRect(0, 0, S3, S3);
+    g.strokeStyle = 'rgba(201,163,92,0.85)'; g.lineWidth = 6;
+    g.beginPath(); g.arc(S3 / 2, S3 / 2, S3 * 0.44, 0, 7); g.stroke();
+    g.lineWidth = 2;
+    g.beginPath(); g.arc(S3 / 2, S3 / 2, S3 * 0.29, 0, 7); g.stroke();
+    const order = [...surveyed].filter(s2 => bySlug[s2]);   /* YOUR order, remembered */
+    order.forEach((s2, i) => {
+      const a = -Math.PI / 2 + (i / Math.max(1, order.length)) * Math.PI * 2;
+      const x = S3 / 2 + Math.cos(a) * S3 * 0.365, y = S3 / 2 + Math.sin(a) * S3 * 0.365;
+      g.fillStyle = bySlug[s2].tellStroke;
+      g.beginPath(); g.arc(x, y, 17, 0, 7); g.fill();
+    });
+    if (window.SphereForge && SphereForge.stampHull) SphereForge.stampHull(g, S3 / 2, S3 / 2, S3 * 0.5);
+    c.toBlob((b) => {
+      if (!b) return;
+      const a2 = document.createElement('a');
+      a2.href = URL.createObjectURL(b);
+      /* glyphs only on the canvas (house law) — your name rides the filename */
+      a2.download = ((keep.get('orrery-worldname') || 'surveyor').toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'surveyor') + '-patch.png';
+      a2.click();
+      setTimeout(() => URL.revokeObjectURL(a2.href), 4000);
+    });
   }
 
   let lastN = countSurveyed();                          /* boot pose: never announced */
@@ -1177,9 +1292,17 @@ function travel(slug, fromBeat) {
         flight = SphereForge.sortie(() => ({ x: tx, y: ty, r: 16 }), 520);
       }
     }
-    const ms = flight ? (desktop() ? 760 : 520) : 300;
+    const ms = flight || 300;                          /* sortie returns the TOTAL, ceremony included */
     beatSlug = slug;
     SphereForge.setSkin(slug);
+    /* THE LEAN (WOW #26): the whole composition turns a few pixels toward
+       where she is going, then eases back after the flood */
+    if (desktop()) {
+      const lp2 = planetPos(wi, Ticker.clock);
+      lean.x = (lp2.x / W - 0.5) * 0.8;
+      lean.y = (lp2.y / H - 0.5) * 0.8;
+      lean.k = 1;
+    }
     if (!flight) SphereForge.ping();
     else Orrery.events.dispatchEvent(new CustomEvent('sortie'));
     if (!skyTask) Orrery.startAmbient();
@@ -1260,7 +1383,7 @@ function travelObject0() {
       Scenes.transitioning = false;
       travelTimer = null;
     }, 495);
-  }, flight ? 700 : 250);
+  }, flight || 250);                                   /* sortie returns the TOTAL flight time */
 }
 
 /* clicks on planet anchors always go through the router's namespace —
@@ -1381,8 +1504,11 @@ addEventListener('hashchange', () => {
   if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; Scenes.transitioning = false; }
   if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; beatSlug = null; }
   /* any route home recalls the shuttle from her hold at the world — this
-     also catches a Back/Esc mid-departure-beat, when the scene never left */
-  if (!/^#\/world\//.test(location.hash) && window.SphereForge && SphereForge.recall) {
+     also catches a Back/Esc mid-departure-beat, when the scene never left.
+     THE EXPEDITION (WOW #25): while the tour runs, breathers are cruise
+     legs — never phantom recalls. */
+  if (!/^#\/world\//.test(location.hash) && window.SphereForge && SphereForge.recall
+      && !(TourController && TourController.running)) {
     SphereForge.recall();
     if (!skyTask && !reduced()) Orrery.startAmbient();   /* the flight home needs frames */
   }
@@ -1479,7 +1605,21 @@ const TourController = (() => {
       plateSay('Stop ' + (leg.i + 1) + ' of ' + N + ' · ' + w.label + ' — ' + w.poem);
       travel(w.slug);
     }
-    else { expectedHash = '#/'; location.hash = '#/'; } /* orbit breather: home via the router */
+    else {
+      expectedHash = '#/'; location.hash = '#/';       /* orbit breather: home via the router */
+      /* THE EXPEDITION (WOW #25): the breather is a cruise leg — she is
+         already arcing toward the next world while the plate reads its poem */
+      const nxt = legs[ix + 1];
+      if (nxt && nxt.t === 'world' && window.SphereForge && SphereForge.sortie && desktop() && !reduced()) {
+        const wi2 = nxt.i;
+        setTimeout(() => {
+          if (running) SphereForge.sortie(() => {
+            const p3 = planetPos(wi2, Ticker.clock);
+            return { x: p3.x, y: p3.y, r: WORLDS[wi2].size * 0.74 * p3.sc };
+          }, 2200);
+        }, 300);
+      }
+    }
   }
   /* arrow-key steering: jump to the next/previous WORLD leg (skip breathers) */
   function stepWorld(dir) {
@@ -1501,6 +1641,9 @@ const TourController = (() => {
 
   function teardown() {                                  /* shared reset for stop + finish */
     running = false;
+    /* never strand her mid-cruise — but a cancel INSIDE a world leaves her
+       moored where the traveler actually is */
+    if (Scenes.current === 'hub' && window.SphereForge && SphereForge.recall) SphereForge.recall();
     Ticker.remove(tick);
     clearTimeout(armT); armT = null;
     rmCancel();
@@ -1718,6 +1861,10 @@ function runApproach() {
 
   /* ~2.2s in, the instrument calls once: the visual ring + its wet blip. The
      score answers only if it is truly running (the sonar handler guards ready). */
+  /* THE DOCKING (WOW #19): on the first approach the cradle is empty — your
+     ship burns in from the dark and takes it as the instruments settle */
+  if (window.SphereForge && SphereForge.arrive && !reduced()) SphereForge.arrive(4200);
+
   pingT = setTimeout(() => {
     if (done || document.hidden || Scenes.current !== 'hub') return;
     if (!skyTask) Orrery.startAmbient();         /* the ring needs the loop */
