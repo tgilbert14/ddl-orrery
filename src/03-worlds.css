@@ -62,6 +62,21 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
 .w-toy.is-running:hover, .w-toy.is-running:focus-visible { background: transparent; transform: none; }
 .w-toy.is-running:active { transform: translateY(1px) scale(0.97); }
 
+/* the naming plate (WOW #9): one input, earned by charting — Ruling 5's
+   single approved typed surface, styled like an instrument register */
+.w-name { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.w-name input {
+  background: rgba(6, 22, 18, 0.6);
+  color: var(--ink, #e8e3d5);
+  border: 1px solid var(--wa, currentColor);
+  border-radius: 4px;
+  font: 600 0.85rem/1.2 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 0.5rem 0.7rem;
+  min-width: 11ch; max-width: 16ch;
+}
+.w-name input:focus-visible { outline: 2px solid var(--wa, #64d5f5); outline-offset: 2px; }
+
 /* M4 — the verb worlds: a whisper of what the hand can do. The hint only
    exists where the verb does (animated JS path); brochure and rm never see
    it, so it can never promise an interaction that is not wired. */

@@ -601,6 +601,21 @@ html.js:not(.rm) .scene.is-active .world-card { animation: rise-in 0.7s var(--ea
 .w-toy.is-running:hover, .w-toy.is-running:focus-visible { background: transparent; transform: none; }
 .w-toy.is-running:active { transform: translateY(1px) scale(0.97); }
 
+/* the naming plate (WOW #9): one input, earned by charting — Ruling 5's
+   single approved typed surface, styled like an instrument register */
+.w-name { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.w-name input {
+  background: rgba(6, 22, 18, 0.6);
+  color: var(--ink, #e8e3d5);
+  border: 1px solid var(--wa, currentColor);
+  border-radius: 4px;
+  font: 600 0.85rem/1.2 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 0.5rem 0.7rem;
+  min-width: 11ch; max-width: 16ch;
+}
+.w-name input:focus-visible { outline: 2px solid var(--wa, #64d5f5); outline-offset: 2px; }
+
 /* M4 — the verb worlds: a whisper of what the hand can do. The hint only
    exists where the verb does (animated JS path); brochure and rm never see
    it, so it can never promise an interaction that is not wired. */
@@ -1557,6 +1572,10 @@ html.js .survey-log {
   border-color: rgba(var(--brass-rgb), 0.9);
   box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
 }
+.survey-dot.is-transit {                              /* the slot the log never had (WOW #14) */
+  background: #05070f;
+  border-color: rgba(var(--brass-rgb), 0.5);
+}
 /* forced-colors strips gradients and shadows: state must survive on borders */
 @media (forced-colors: active) {
   .survey-dot { border: 1px solid CanvasText; }
@@ -2081,6 +2100,14 @@ html.approaching #artifact-hit { pointer-events: none; }
         <p class="w-lore microlabel">Every chart drawn here leaves one object unmeasured, dead center.</p>
         <p class="w-note w-note--live microlabel">The survey drafts wherever you look.</p>
         <p class="w-note w-verb"><button class="w-toy" type="button">Sound the survey</button></p>
+        <!-- NAME THE WORLD (WOW #9): the one typed input the council approved
+             (Ruling 5). Hidden until five soundings earn the pen; the name
+             persists everywhere, forever. JS-only by construction. -->
+        <p class="w-note w-name" id="name-the-world" hidden>
+          <label class="microlabel" for="world-name">Designation</label>
+          <input id="world-name" type="text" maxlength="18" autocomplete="off" spellcheck="false" enterkeyhint="done">
+          <button class="w-toy" id="commit-name" type="button">Commit</button>
+        </p>
         <p class="w-cta">
           <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Name it with us</a>
         </p>
@@ -2800,6 +2827,22 @@ function drawSky(dt, clockMs) {
     ctx.drawImage(nebA, neb1.x - neb1.s / 2, neb1.y - neb1.s / 2, neb1.s, neb1.s);
     ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
   }
+
+  /* THE TRANSIT (WOW #14): drawn under the stars — a hole in the light with
+     one hair of brass at its edge. No glow, no label, no acknowledgment. */
+  if (Scenes.current === 'hub' && !warp.active && !reduced()) {
+    const tp = transitState();
+    if (tp >= 0 && clockMs - transit.caughtAt > 4000) {
+      const tx = -20 + (W + 40) * tp;
+      const ty = H * 0.42 - (tx - W * 0.5) * 0.35;     /* it rides the band's diagonal */
+      transit.on = true; transit.x = tx; transit.y = ty;
+      ctx.fillStyle = '#05070f';
+      ctx.beginPath(); ctx.arc(tx, ty, 4.2, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(201,163,92,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(tx, ty, 4.2, -0.6, 0.9); ctx.stroke();
+    } else transit.on = false;
+  } else transit.on = false;
 
   /* the flood converges on the destination's accent as the jump builds:
      streaks lift off star-white and land in the world's own color */
@@ -3611,6 +3654,87 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && Scenes.current !== 'hub' && !Scenes.transitioning) location.hash = '#/';
 });
 
+/* NAME THE WORLD (WOW #9): 'yours is still unnamed' is the fiction's one
+   direct second-person promise — five threaded soundings earn the pen, and
+   the name persists everywhere, forever: the hub row, the heading, the
+   survey dot, the Grand Tour's spoken line. */
+(() => {
+  const wrap = document.getElementById('name-the-world');
+  const input = document.getElementById('world-name');
+  const commitBtn = document.getElementById('commit-name');
+  if (!wrap || !input || !commitBtn) return;
+  const H2 = document.getElementById('h-uncharted');
+  const applyName = (name) => {
+    const w = bySlug.uncharted;
+    w.label = name;
+    w.poem = 'you named it ' + name;                   /* the tour speaks your word */
+    if (H2) H2.textContent = name;
+    const a = anchors.get('uncharted');
+    const b = a && a.querySelector('.pa-label b');
+    if (b) b.textContent = name;
+    const dot = document.querySelector('.survey-dot[data-world="uncharted"]');
+    if (dot) dot.title = name;
+  };
+  const saved = keep.get('orrery-worldname');
+  if (saved) { applyName(saved); wrap.hidden = false; input.value = saved; }
+  Orrery.events.addEventListener('charted', () => { wrap.hidden = false; });
+  const commitName = () => {
+    const v = (input.value || '').trim().slice(0, 18);
+    if (!v) return;
+    keep.set('orrery-worldname', v);
+    applyName(v);
+    Orrery.events.dispatchEvent(new CustomEvent('named'));
+  };
+  commitBtn.addEventListener('click', commitName);
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();                               /* Ruling 5: typing never leaks to scene keys */
+    if (e.key === 'Enter') commitName();
+  });
+})();
+
+/* THE TRANSIT (WOW #14): a twelfth body the site never admits to — dark,
+   unlit, a hole in the starlight crossing the band on a REAL-clock schedule,
+   deterministic per hour so two friends can both catch it. Click it and it
+   answers wrong. Three catches earn one whispered line. Never explained. */
+const transit = { caughtAt: -1e9, on: false, x: 0, y: 0 };
+function transitHash(n) {
+  let h = n ^ 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 16), 2246822507);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function transitState() {
+  const now = Date.now();
+  const h = transitHash(Math.floor(now / 3600000));
+  if (h % 3) return -1;                                /* most hours, nothing crosses */
+  const start = (h >>> 4) % 3200000 + 200000;          /* a 90s window inside the hour */
+  const p = (now % 3600000 - start) / 90000;
+  return p >= 0 && p <= 1 ? p : -1;
+}
+(() => {
+  const hubSec = Scenes.els.get('hub');
+  if (!hubSec) return;
+  hubSec.addEventListener('pointerdown', (e) => {
+    if (!transit.on || e.target.closest('a, button')) return;
+    if (Math.hypot(e.clientX - transit.x, e.clientY - transit.y) > 26) return;
+    transit.on = false; transit.caughtAt = Ticker.clock;
+    const n = (parseInt(keep.get('orrery-transit') || '0', 10) || 0) + 1;
+    keep.set('orrery-transit', String(n));
+    Orrery.events.dispatchEvent(new CustomEvent('transit'));
+    if (n === 3) whisperArtLabel('Object 0 · it is not the only one', 3600);
+    markTransitDot();
+  });
+})();
+function markTransitDot() {
+  const wrapD = document.querySelector('.survey-dots');
+  if (!wrapD || wrapD.querySelector('.is-transit')) return;
+  if ((parseInt(keep.get('orrery-transit') || '0', 10) || 0) < 1) return;
+  const d = document.createElement('span');
+  d.className = 'survey-dot is-transit';               /* a slot the log never had */
+  d.title = '—';
+  wrapD.appendChild(d);
+}
+
 /* ---------- router (deep links are LCP paths: no warp on arrival) ---------- */
 function route(instant = false) {
   const m = location.hash.match(/^#\/world\/([a-z-]+)/);
@@ -3851,6 +3975,7 @@ function bootOrrery() {
      the masthead greets you — three deliberate pulses, never explained. */
   const visits = (parseInt(keep.get('orrery-visits') || '0', 10) || 0) + 1;
   keep.set('orrery-visits', String(visits));
+  markTransitDot();                                    /* a returning catcher keeps the extra slot */
   if (visits >= 3 && window.SphereForge && SphereForge.greet && !reduced()) {
     setTimeout(() => {
       if (Scenes.current === 'hub') {
@@ -6498,7 +6623,8 @@ const WorldFX = (() => {
     [7,5,5,5,7],[2,6,2,2,7],[7,1,7,4,7],[7,1,7,1,7],[5,5,7,1,1],
     [7,4,7,1,7],[7,4,7,5,7],[7,1,1,2,2],[7,5,7,5,7],[7,5,7,1,7],
   ];
-  function arcScore(g, score, w) {                     /* right-aligned, cabinet-yellow */
+  function arcScore(g, score, w, y) {                  /* right-aligned, cabinet-yellow */
+    const Y0 = y || 16;
     let s2 = Math.min(999999, score) | 0;
     const digits = s2 === 0 ? [0] : [];
     while (s2 > 0) { digits.unshift(s2 % 10); s2 = (s2 / 10) | 0; }
@@ -6506,7 +6632,7 @@ const WorldFX = (() => {
     for (const d of digits) {
       const bm = ARC_DIG[d];
       for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++)
-        if (bm[r] & (4 >> c)) g.fillRect(x + c * 4, 16 + r * 4, 4, 4);
+        if (bm[r] & (4 >> c)) g.fillRect(x + c * 4, Y0 + r * 4, 4, 4);
       x += 16;
     }
   }
@@ -6571,16 +6697,21 @@ const WorldFX = (() => {
       for (let i = 0; i < 8; i++) shots.push({ on: false, x: 0, y: 0, ps: false });
       const expls = [];
       for (let i = 0; i < 6; i++) expls.push({ on: false, x: 0, y: 0, start: 0 });
+      const eshots = [];                               /* INSERT COIN: the cabinet shoots back */
+      for (let i = 0; i < 4; i++) eshots.push({ on: false, x: 0, y: 0 });
       return {
         w, h, N, SPR, CELL,
         gx: leftBound, gy: 128, dir: 1, leftBound, rightBound,
         topStart: 128, resetY: Math.floor(h * 0.60 / 4) * 4, canMove: rightBound > leftBound,
         stepTick: -1, stepMs: 480, stars, inv,
         shipX: w / 2 - 16, shipTargetX: w / 2 - 16, shipY: Math.floor((h - 76) / 4) * 4,
-        shots, expls, nextShot: -1,
+        shots, expls, eshots, nextShot: -1, nextEfire: -1,
         aimHold: -9e9, coolUntil: -9e9,
         fireHeld: false, fireDownAt: -9e9,
         score: 0, waveClearAt: 0,
+        lives: 3, over: false, respawnUntil: 0,        /* one credit; the coin buys another */
+        best: (typeof keep !== 'undefined' && parseInt(keep.get('orrery-arcadia-best') || '0', 10)) || 0,
+        coinBtn: document.querySelector('#world-arcadia .w-verb .w-toy'),
       };
     },
     frame(s, st, dt, clock) {
@@ -6590,7 +6721,7 @@ const WorldFX = (() => {
       const flip = tick & 1;
       if (tick !== st.stepTick) {
         st.stepTick = tick;
-        if (st.canMove) {
+        if (st.canMove && !st.over) {
           let nx = st.gx + st.dir * 8;
           if (nx > st.rightBound || nx < st.leftBound) {
             st.dir *= -1;
@@ -6612,7 +6743,7 @@ const WorldFX = (() => {
         st.gy = st.topStart;
         for (const iv of st.inv) iv.dead = false;
       }
-      if (!st.waveClearAt) for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
+      if (!st.waveClearAt && !st.over) for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
 
       /* the ship: chases the player's aim while a hand is on the stick;
          only wanders on its own once the hand has been gone a while (M4) */
@@ -6624,7 +6755,7 @@ const WorldFX = (() => {
       /* hold-to-autofire: the cannon answers as long as the hand is down
          (5s max burst so a stuck latch can never fire forever) */
       if (st.fireHeld && clock - st.fireDownAt > 5000) st.fireHeld = false;
-      if (st.fireHeld && clock >= st.coolUntil) {
+      if (!st.over && st.fireHeld && clock >= st.coolUntil) {
         st.coolUntil = clock + 140;
         if (arcFire(st, true)) verbEvent('shot');
       }
@@ -6632,8 +6763,46 @@ const WorldFX = (() => {
       /* attract mode: the cabinet plays itself only while nobody is at it */
       if (st.nextShot < 0) st.nextShot = clock + 3000 + Math.random() * 3000;
       if (clock > st.nextShot) {
-        if (clock - st.aimHold > 6000) arcFire(st, false);
+        if (!st.over && clock - st.aimHold > 6000) arcFire(st, false);
         st.nextShot = clock + 8000 + Math.random() * 6000;
+      }
+
+      /* INSERT COIN (WOW #11): the cabinet finally shoots back — a random
+         defender returns fire, and the pace tightens as the march does */
+      if (!st.over) {
+        if (st.nextEfire < 0) st.nextEfire = clock + 2600;
+        if (clock >= st.nextEfire) {
+          st.nextEfire = clock + (900 + Math.random() * 900) * (st.stepMs / 480);
+          let pick = -1, seen = 0;
+          for (let i = 0; i < st.N; i++) { if (st.inv[i].dead) continue; seen++; if (Math.random() < 1 / seen) pick = i; }
+          if (pick >= 0) for (const es of st.eshots) {
+            if (es.on) continue;
+            es.on = true; es.x = st.gx + pick * st.CELL + 14; es.y = st.gy + 30;
+            break;
+          }
+        }
+        for (const es of st.eshots) {
+          if (!es.on) continue;
+          es.y += 0.2 * dt;
+          if (es.y > h + 8) { es.on = false; continue; }
+          if (clock > st.respawnUntil
+              && es.y >= st.shipY - 4 && es.y <= st.shipY + 28
+              && Math.abs(es.x - (st.shipX + 14)) < 15) {
+            es.on = false;
+            for (const ex of st.expls) if (!ex.on) { ex.on = true; ex.x = st.shipX + 14; ex.y = st.shipY + 8; ex.start = clock; break; }
+            st.lives--;
+            st.respawnUntil = clock + 1600;            /* the next ship beams in blinking */
+            if (st.lives <= 0) {                       /* GAME OVER: the cabinet asks for a coin */
+              st.over = true; st.fireHeld = false;
+              if (st.score > st.best) {
+                st.best = st.score;
+                if (typeof keep !== 'undefined') keep.set('orrery-arcadia-best', String(st.best));
+              }
+              if (st.coinBtn) st.coinBtn.textContent = 'Insert coin';
+              verbEvent('gameover');
+            }
+          }
+        }
       }
 
       /* shots fly STRAIGHT (M4 killed the homing steer): a hit is a hit
@@ -6678,9 +6847,22 @@ const WorldFX = (() => {
       for (let i = 0; i < st.N; i++) if (!st.inv[i].dead) arcBlit(g, bmp, st.gx + i * st.CELL, gy);
 
       g.fillStyle = '#ffd23f';
+      if (st.over) g.globalAlpha = 0.3;                /* the ship waits for its coin */
+      else if (clock < st.respawnUntil) g.globalAlpha = 0.35 + 0.3 * (((clock / 220) | 0) & 1);
       arcBlit(g, PLAYER, Math.floor(st.shipX / 4) * 4, st.shipY);
+      g.globalAlpha = 1;
+      for (let li = 0; li < Math.max(0, st.lives - 1); li++)   /* the spare ships wait below */
+        arcBlit(g, PLAYER, 16 + li * 40, h - 40);
       for (const sh of st.shots) if (sh.on) g.fillRect(Math.floor(sh.x / 4) * 4, Math.floor(sh.y / 4) * 4, 4, 12);
+      g.fillStyle = '#ff8c5a';                         /* the cabinet's return fire */
+      for (const es of st.eshots) if (es.on) g.fillRect(Math.floor(es.x / 4) * 4, Math.floor(es.y / 4) * 4, 4, 10);
+      g.fillStyle = '#ffd23f';
       if (st.score > 0) arcScore(g, st.score, w);      /* the cabinet keeps your count */
+      if (st.best > 0) {                               /* and it never forgets its best */
+        g.fillStyle = 'rgba(255,210,63,0.35)';
+        arcScore(g, st.best, w, 40);
+        g.fillStyle = '#ffd23f';
+      }
 
       g.fillStyle = '#ff4757';
       for (const ex of st.expls) {
@@ -6698,6 +6880,7 @@ const WorldFX = (() => {
       st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
     },
     verb(s, st, x, y, clock) {
+      if (st.over) { arcCoin(st, clock); return; }     /* the tap IS the coin slot */
       st.aimHold = clock;
       st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
       st.fireHeld = true; st.fireDownAt = clock;
@@ -6716,6 +6899,18 @@ const WorldFX = (() => {
       arcStatic(g, r.width, r.height);
     },
   };
+  function arcCoin(st, clock) {                        /* one more credit (WOW #11) */
+    st.lives = 3; st.score = 0; st.over = false;
+    st.stepMs = 480; st.stepTick = -1;
+    st.gy = st.topStart; st.waveClearAt = 0;
+    for (const iv of st.inv) { iv.dead = false; iv.respawnAt = 0; }
+    for (const sh of st.shots) sh.on = false;
+    for (const es of st.eshots) es.on = false;
+    st.nextEfire = clock + 2600;
+    st.respawnUntil = clock + 1600;                    /* a breath of grace off the line */
+    if (st.coinBtn) st.coinBtn.textContent = 'Fire';
+    verbEvent('credit');
+  }
   function arcFire(st, playerShot) {
     for (const sh of st.shots) {
       if (sh.on) continue;
@@ -7010,6 +7205,7 @@ const WorldFX = (() => {
       st.wpHead = (st.wpHead + 1) % 7;
       st.wpx[st.wpHead] = x; st.wpy[st.wpHead] = y;
       if (st.wpN < 7) st.wpN++;
+      if (st.wpN >= 5) verbEvent('charted');           /* five soundings earn the pen (WOW #9) */
       verbEvent('ping');
     },
     rm() {                                     /* designed static pose: a survey abandoned mid-draft —
@@ -9317,6 +9513,36 @@ const Score = (() => {
        breathe (the visual flare peaks ~6s in — this chord is its downbeat) */
     [220, 277.2, 329.6].forEach((f, k) =>
       note(f, tAns + 2.1 + k * 0.05, 0.06, 3.2, 'sine', bus, 0, 0.55));
+  });
+
+  /* INSERT COIN (WOW #11): the coin drops bright and dry; the naming and
+     the transit each get the one voice the fiction owes them */
+  window.Orrery.events.addEventListener('credit', () => {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.02;
+    note(1318.5, t, 0.05, 0.06, 'square', dry, 0, 0);
+    note(1568, t + 0.07, 0.05, 0.1, 'square', dry, 0, 0);
+  });
+  window.Orrery.events.addEventListener('gameover', () => {
+    if (!ready()) return;
+    const v = ARR.arcadia, t = ctx.currentTime + 0.05;
+    [4, 2, 0].forEach((d, i) =>                        /* the march sits down, minor */
+      note(v.root * Math.pow(2, (v.scale[d] - 1) / 12), t + i * 0.16, 0.06, 0.3, 'square', dry, 0, 0));
+  });
+  /* NAME THE WORLD (WOW #9): the sus4 that refused to resolve all visit
+     finally lands its cadence — the world has a name now */
+  window.Orrery.events.addEventListener('named', () => {
+    if (!ready()) return;
+    const r = ARR.uncharted.root, t = ctx.currentTime + 0.02;
+    [5, 9, 12].forEach(s2 => note(r * Math.pow(2, s2 / 12), t, 0.07, 1.2, 'sine', bus, 0.25, 0.4));
+    [0, 7, 12, 16].forEach(s2 => note(r * Math.pow(2, s2 / 12), t + 0.9, 0.07, 2.6, 'triangle', bus, 0.2, 0.4));
+  });
+  /* THE TRANSIT (WOW #14): a detuned pair — the ping that is wrong */
+  window.Orrery.events.addEventListener('transit', () => {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.02;
+    note(277.2, t, 0.05, 0.9, 'sine', bus, 0.3, 0.7);
+    note(272.5, t + 0.03, 0.04, 1.1, 'sine', bus, 0.3, 0.7);
   });
 
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */

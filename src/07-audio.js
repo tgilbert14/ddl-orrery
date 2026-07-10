@@ -802,6 +802,36 @@ const Score = (() => {
       note(f, tAns + 2.1 + k * 0.05, 0.06, 3.2, 'sine', bus, 0, 0.55));
   });
 
+  /* INSERT COIN (WOW #11): the coin drops bright and dry; the naming and
+     the transit each get the one voice the fiction owes them */
+  window.Orrery.events.addEventListener('credit', () => {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.02;
+    note(1318.5, t, 0.05, 0.06, 'square', dry, 0, 0);
+    note(1568, t + 0.07, 0.05, 0.1, 'square', dry, 0, 0);
+  });
+  window.Orrery.events.addEventListener('gameover', () => {
+    if (!ready()) return;
+    const v = ARR.arcadia, t = ctx.currentTime + 0.05;
+    [4, 2, 0].forEach((d, i) =>                        /* the march sits down, minor */
+      note(v.root * Math.pow(2, (v.scale[d] - 1) / 12), t + i * 0.16, 0.06, 0.3, 'square', dry, 0, 0));
+  });
+  /* NAME THE WORLD (WOW #9): the sus4 that refused to resolve all visit
+     finally lands its cadence — the world has a name now */
+  window.Orrery.events.addEventListener('named', () => {
+    if (!ready()) return;
+    const r = ARR.uncharted.root, t = ctx.currentTime + 0.02;
+    [5, 9, 12].forEach(s2 => note(r * Math.pow(2, s2 / 12), t, 0.07, 1.2, 'sine', bus, 0.25, 0.4));
+    [0, 7, 12, 16].forEach(s2 => note(r * Math.pow(2, s2 / 12), t + 0.9, 0.07, 2.6, 'triangle', bus, 0.2, 0.4));
+  });
+  /* THE TRANSIT (WOW #14): a detuned pair — the ping that is wrong */
+  window.Orrery.events.addEventListener('transit', () => {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.02;
+    note(277.2, t, 0.05, 0.9, 'sine', bus, 0.3, 0.7);
+    note(272.5, t + 0.03, 0.04, 1.1, 'sine', bus, 0.3, 0.7);
+  });
+
   /* the unresolved cadence resolves only at the CTA: a plagal-ish landing */
   const cta = document.querySelector('.cta-btn');
   if (cta) cta.addEventListener('click', () => {

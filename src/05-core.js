@@ -417,6 +417,22 @@ function drawSky(dt, clockMs) {
     ctx.drawImage(nebB, neb2.x - neb2.s / 2, neb2.y - neb2.s / 2, neb2.s, neb2.s);
   }
 
+  /* THE TRANSIT (WOW #14): drawn under the stars — a hole in the light with
+     one hair of brass at its edge. No glow, no label, no acknowledgment. */
+  if (Scenes.current === 'hub' && !warp.active && !reduced()) {
+    const tp = transitState();
+    if (tp >= 0 && clockMs - transit.caughtAt > 4000) {
+      const tx = -20 + (W + 40) * tp;
+      const ty = H * 0.42 - (tx - W * 0.5) * 0.35;     /* it rides the band's diagonal */
+      transit.on = true; transit.x = tx; transit.y = ty;
+      ctx.fillStyle = '#05070f';
+      ctx.beginPath(); ctx.arc(tx, ty, 4.2, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(201,163,92,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(tx, ty, 4.2, -0.6, 0.9); ctx.stroke();
+    } else transit.on = false;
+  } else transit.on = false;
+
   /* the flood converges on the destination's accent as the jump builds:
      streaks lift off star-white and land in the world's own color */
   let wsc = '';
@@ -1227,6 +1243,87 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && Scenes.current !== 'hub' && !Scenes.transitioning) location.hash = '#/';
 });
 
+/* NAME THE WORLD (WOW #9): 'yours is still unnamed' is the fiction's one
+   direct second-person promise — five threaded soundings earn the pen, and
+   the name persists everywhere, forever: the hub row, the heading, the
+   survey dot, the Grand Tour's spoken line. */
+(() => {
+  const wrap = document.getElementById('name-the-world');
+  const input = document.getElementById('world-name');
+  const commitBtn = document.getElementById('commit-name');
+  if (!wrap || !input || !commitBtn) return;
+  const H2 = document.getElementById('h-uncharted');
+  const applyName = (name) => {
+    const w = bySlug.uncharted;
+    w.label = name;
+    w.poem = 'you named it ' + name;                   /* the tour speaks your word */
+    if (H2) H2.textContent = name;
+    const a = anchors.get('uncharted');
+    const b = a && a.querySelector('.pa-label b');
+    if (b) b.textContent = name;
+    const dot = document.querySelector('.survey-dot[data-world="uncharted"]');
+    if (dot) dot.title = name;
+  };
+  const saved = keep.get('orrery-worldname');
+  if (saved) { applyName(saved); wrap.hidden = false; input.value = saved; }
+  Orrery.events.addEventListener('charted', () => { wrap.hidden = false; });
+  const commitName = () => {
+    const v = (input.value || '').trim().slice(0, 18);
+    if (!v) return;
+    keep.set('orrery-worldname', v);
+    applyName(v);
+    Orrery.events.dispatchEvent(new CustomEvent('named'));
+  };
+  commitBtn.addEventListener('click', commitName);
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();                               /* Ruling 5: typing never leaks to scene keys */
+    if (e.key === 'Enter') commitName();
+  });
+})();
+
+/* THE TRANSIT (WOW #14): a twelfth body the site never admits to — dark,
+   unlit, a hole in the starlight crossing the band on a REAL-clock schedule,
+   deterministic per hour so two friends can both catch it. Click it and it
+   answers wrong. Three catches earn one whispered line. Never explained. */
+const transit = { caughtAt: -1e9, on: false, x: 0, y: 0 };
+function transitHash(n) {
+  let h = n ^ 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 16), 2246822507);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function transitState() {
+  const now = Date.now();
+  const h = transitHash(Math.floor(now / 3600000));
+  if (h % 3) return -1;                                /* most hours, nothing crosses */
+  const start = (h >>> 4) % 3200000 + 200000;          /* a 90s window inside the hour */
+  const p = (now % 3600000 - start) / 90000;
+  return p >= 0 && p <= 1 ? p : -1;
+}
+(() => {
+  const hubSec = Scenes.els.get('hub');
+  if (!hubSec) return;
+  hubSec.addEventListener('pointerdown', (e) => {
+    if (!transit.on || e.target.closest('a, button')) return;
+    if (Math.hypot(e.clientX - transit.x, e.clientY - transit.y) > 26) return;
+    transit.on = false; transit.caughtAt = Ticker.clock;
+    const n = (parseInt(keep.get('orrery-transit') || '0', 10) || 0) + 1;
+    keep.set('orrery-transit', String(n));
+    Orrery.events.dispatchEvent(new CustomEvent('transit'));
+    if (n === 3) whisperArtLabel('Object 0 · it is not the only one', 3600);
+    markTransitDot();
+  });
+})();
+function markTransitDot() {
+  const wrapD = document.querySelector('.survey-dots');
+  if (!wrapD || wrapD.querySelector('.is-transit')) return;
+  if ((parseInt(keep.get('orrery-transit') || '0', 10) || 0) < 1) return;
+  const d = document.createElement('span');
+  d.className = 'survey-dot is-transit';               /* a slot the log never had */
+  d.title = '—';
+  wrapD.appendChild(d);
+}
+
 /* ---------- router (deep links are LCP paths: no warp on arrival) ---------- */
 function route(instant = false) {
   const m = location.hash.match(/^#\/world\/([a-z-]+)/);
@@ -1467,6 +1564,7 @@ function bootOrrery() {
      the masthead greets you — three deliberate pulses, never explained. */
   const visits = (parseInt(keep.get('orrery-visits') || '0', 10) || 0) + 1;
   keep.set('orrery-visits', String(visits));
+  markTransitDot();                                    /* a returning catcher keeps the extra slot */
   if (visits >= 3 && window.SphereForge && SphereForge.greet && !reduced()) {
     setTimeout(() => {
       if (Scenes.current === 'hub') {

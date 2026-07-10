@@ -1030,7 +1030,8 @@ const WorldFX = (() => {
     [7,5,5,5,7],[2,6,2,2,7],[7,1,7,4,7],[7,1,7,1,7],[5,5,7,1,1],
     [7,4,7,1,7],[7,4,7,5,7],[7,1,1,2,2],[7,5,7,5,7],[7,5,7,1,7],
   ];
-  function arcScore(g, score, w) {                     /* right-aligned, cabinet-yellow */
+  function arcScore(g, score, w, y) {                  /* right-aligned, cabinet-yellow */
+    const Y0 = y || 16;
     let s2 = Math.min(999999, score) | 0;
     const digits = s2 === 0 ? [0] : [];
     while (s2 > 0) { digits.unshift(s2 % 10); s2 = (s2 / 10) | 0; }
@@ -1038,7 +1039,7 @@ const WorldFX = (() => {
     for (const d of digits) {
       const bm = ARC_DIG[d];
       for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++)
-        if (bm[r] & (4 >> c)) g.fillRect(x + c * 4, 16 + r * 4, 4, 4);
+        if (bm[r] & (4 >> c)) g.fillRect(x + c * 4, Y0 + r * 4, 4, 4);
       x += 16;
     }
   }
@@ -1103,16 +1104,21 @@ const WorldFX = (() => {
       for (let i = 0; i < 8; i++) shots.push({ on: false, x: 0, y: 0, ps: false });
       const expls = [];
       for (let i = 0; i < 6; i++) expls.push({ on: false, x: 0, y: 0, start: 0 });
+      const eshots = [];                               /* INSERT COIN: the cabinet shoots back */
+      for (let i = 0; i < 4; i++) eshots.push({ on: false, x: 0, y: 0 });
       return {
         w, h, N, SPR, CELL,
         gx: leftBound, gy: 128, dir: 1, leftBound, rightBound,
         topStart: 128, resetY: Math.floor(h * 0.60 / 4) * 4, canMove: rightBound > leftBound,
         stepTick: -1, stepMs: 480, stars, inv,
         shipX: w / 2 - 16, shipTargetX: w / 2 - 16, shipY: Math.floor((h - 76) / 4) * 4,
-        shots, expls, nextShot: -1,
+        shots, expls, eshots, nextShot: -1, nextEfire: -1,
         aimHold: -9e9, coolUntil: -9e9,
         fireHeld: false, fireDownAt: -9e9,
         score: 0, waveClearAt: 0,
+        lives: 3, over: false, respawnUntil: 0,        /* one credit; the coin buys another */
+        best: (typeof keep !== 'undefined' && parseInt(keep.get('orrery-arcadia-best') || '0', 10)) || 0,
+        coinBtn: document.querySelector('#world-arcadia .w-verb .w-toy'),
       };
     },
     frame(s, st, dt, clock) {
@@ -1122,7 +1128,7 @@ const WorldFX = (() => {
       const flip = tick & 1;
       if (tick !== st.stepTick) {
         st.stepTick = tick;
-        if (st.canMove) {
+        if (st.canMove && !st.over) {
           let nx = st.gx + st.dir * 8;
           if (nx > st.rightBound || nx < st.leftBound) {
             st.dir *= -1;
@@ -1144,7 +1150,7 @@ const WorldFX = (() => {
         st.gy = st.topStart;
         for (const iv of st.inv) iv.dead = false;
       }
-      if (!st.waveClearAt) for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
+      if (!st.waveClearAt && !st.over) for (const iv of st.inv) if (iv.dead && clock > iv.respawnAt) iv.dead = false;
 
       /* the ship: chases the player's aim while a hand is on the stick;
          only wanders on its own once the hand has been gone a while (M4) */
@@ -1156,7 +1162,7 @@ const WorldFX = (() => {
       /* hold-to-autofire: the cannon answers as long as the hand is down
          (5s max burst so a stuck latch can never fire forever) */
       if (st.fireHeld && clock - st.fireDownAt > 5000) st.fireHeld = false;
-      if (st.fireHeld && clock >= st.coolUntil) {
+      if (!st.over && st.fireHeld && clock >= st.coolUntil) {
         st.coolUntil = clock + 140;
         if (arcFire(st, true)) verbEvent('shot');
       }
@@ -1164,8 +1170,46 @@ const WorldFX = (() => {
       /* attract mode: the cabinet plays itself only while nobody is at it */
       if (st.nextShot < 0) st.nextShot = clock + 3000 + Math.random() * 3000;
       if (clock > st.nextShot) {
-        if (clock - st.aimHold > 6000) arcFire(st, false);
+        if (!st.over && clock - st.aimHold > 6000) arcFire(st, false);
         st.nextShot = clock + 8000 + Math.random() * 6000;
+      }
+
+      /* INSERT COIN (WOW #11): the cabinet finally shoots back — a random
+         defender returns fire, and the pace tightens as the march does */
+      if (!st.over) {
+        if (st.nextEfire < 0) st.nextEfire = clock + 2600;
+        if (clock >= st.nextEfire) {
+          st.nextEfire = clock + (900 + Math.random() * 900) * (st.stepMs / 480);
+          let pick = -1, seen = 0;
+          for (let i = 0; i < st.N; i++) { if (st.inv[i].dead) continue; seen++; if (Math.random() < 1 / seen) pick = i; }
+          if (pick >= 0) for (const es of st.eshots) {
+            if (es.on) continue;
+            es.on = true; es.x = st.gx + pick * st.CELL + 14; es.y = st.gy + 30;
+            break;
+          }
+        }
+        for (const es of st.eshots) {
+          if (!es.on) continue;
+          es.y += 0.2 * dt;
+          if (es.y > h + 8) { es.on = false; continue; }
+          if (clock > st.respawnUntil
+              && es.y >= st.shipY - 4 && es.y <= st.shipY + 28
+              && Math.abs(es.x - (st.shipX + 14)) < 15) {
+            es.on = false;
+            for (const ex of st.expls) if (!ex.on) { ex.on = true; ex.x = st.shipX + 14; ex.y = st.shipY + 8; ex.start = clock; break; }
+            st.lives--;
+            st.respawnUntil = clock + 1600;            /* the next ship beams in blinking */
+            if (st.lives <= 0) {                       /* GAME OVER: the cabinet asks for a coin */
+              st.over = true; st.fireHeld = false;
+              if (st.score > st.best) {
+                st.best = st.score;
+                if (typeof keep !== 'undefined') keep.set('orrery-arcadia-best', String(st.best));
+              }
+              if (st.coinBtn) st.coinBtn.textContent = 'Insert coin';
+              verbEvent('gameover');
+            }
+          }
+        }
       }
 
       /* shots fly STRAIGHT (M4 killed the homing steer): a hit is a hit
@@ -1210,9 +1254,22 @@ const WorldFX = (() => {
       for (let i = 0; i < st.N; i++) if (!st.inv[i].dead) arcBlit(g, bmp, st.gx + i * st.CELL, gy);
 
       g.fillStyle = '#ffd23f';
+      if (st.over) g.globalAlpha = 0.3;                /* the ship waits for its coin */
+      else if (clock < st.respawnUntil) g.globalAlpha = 0.35 + 0.3 * (((clock / 220) | 0) & 1);
       arcBlit(g, PLAYER, Math.floor(st.shipX / 4) * 4, st.shipY);
+      g.globalAlpha = 1;
+      for (let li = 0; li < Math.max(0, st.lives - 1); li++)   /* the spare ships wait below */
+        arcBlit(g, PLAYER, 16 + li * 40, h - 40);
       for (const sh of st.shots) if (sh.on) g.fillRect(Math.floor(sh.x / 4) * 4, Math.floor(sh.y / 4) * 4, 4, 12);
+      g.fillStyle = '#ff8c5a';                         /* the cabinet's return fire */
+      for (const es of st.eshots) if (es.on) g.fillRect(Math.floor(es.x / 4) * 4, Math.floor(es.y / 4) * 4, 4, 10);
+      g.fillStyle = '#ffd23f';
       if (st.score > 0) arcScore(g, st.score, w);      /* the cabinet keeps your count */
+      if (st.best > 0) {                               /* and it never forgets its best */
+        g.fillStyle = 'rgba(255,210,63,0.35)';
+        arcScore(g, st.best, w, 40);
+        g.fillStyle = '#ffd23f';
+      }
 
       g.fillStyle = '#ff4757';
       for (const ex of st.expls) {
@@ -1230,6 +1287,7 @@ const WorldFX = (() => {
       st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
     },
     verb(s, st, x, y, clock) {
+      if (st.over) { arcCoin(st, clock); return; }     /* the tap IS the coin slot */
       st.aimHold = clock;
       st.shipTargetX = Math.max(16, Math.min(s.w - 48, x - 16));
       st.fireHeld = true; st.fireDownAt = clock;
@@ -1248,6 +1306,18 @@ const WorldFX = (() => {
       arcStatic(g, r.width, r.height);
     },
   };
+  function arcCoin(st, clock) {                        /* one more credit (WOW #11) */
+    st.lives = 3; st.score = 0; st.over = false;
+    st.stepMs = 480; st.stepTick = -1;
+    st.gy = st.topStart; st.waveClearAt = 0;
+    for (const iv of st.inv) { iv.dead = false; iv.respawnAt = 0; }
+    for (const sh of st.shots) sh.on = false;
+    for (const es of st.eshots) es.on = false;
+    st.nextEfire = clock + 2600;
+    st.respawnUntil = clock + 1600;                    /* a breath of grace off the line */
+    if (st.coinBtn) st.coinBtn.textContent = 'Fire';
+    verbEvent('credit');
+  }
   function arcFire(st, playerShot) {
     for (const sh of st.shots) {
       if (sh.on) continue;
@@ -1542,6 +1612,7 @@ const WorldFX = (() => {
       st.wpHead = (st.wpHead + 1) % 7;
       st.wpx[st.wpHead] = x; st.wpy[st.wpHead] = y;
       if (st.wpN < 7) st.wpN++;
+      if (st.wpN >= 5) verbEvent('charted');           /* five soundings earn the pen (WOW #9) */
       verbEvent('ping');
     },
     rm() {                                     /* designed static pose: a survey abandoned mid-draft —

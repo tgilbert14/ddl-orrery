@@ -391,6 +391,14 @@
         <p class="w-lore microlabel">Every chart drawn here leaves one object unmeasured, dead center.</p>
         <p class="w-note w-note--live microlabel">The survey drafts wherever you look.</p>
         <p class="w-note w-verb"><button class="w-toy" type="button">Sound the survey</button></p>
+        <!-- NAME THE WORLD (WOW #9): the one typed input the council approved
+             (Ruling 5). Hidden until five soundings earn the pen; the name
+             persists everywhere, forever. JS-only by construction. -->
+        <p class="w-note w-name" id="name-the-world" hidden>
+          <label class="microlabel" for="world-name">Designation</label>
+          <input id="world-name" type="text" maxlength="18" autocomplete="off" spellcheck="false" enterkeyhint="done">
+          <button class="w-toy" id="commit-name" type="button">Commit</button>
+        </p>
         <p class="w-cta">
           <a class="cta-btn" href="https://desertdatalabs.com/contact.html" rel="noopener">Name it with us</a>
         </p>

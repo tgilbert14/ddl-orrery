@@ -550,6 +550,10 @@ html.js .survey-log {
   border-color: rgba(var(--brass-rgb), 0.9);
   box-shadow: 0 0 5px rgba(255, 205, 90, 0.5);
 }
+.survey-dot.is-transit {                              /* the slot the log never had (WOW #14) */
+  background: #05070f;
+  border-color: rgba(var(--brass-rgb), 0.5);
+}
 /* forced-colors strips gradients and shadows: state must survive on borders */
 @media (forced-colors: active) {
   .survey-dot { border: 1px solid CanvasText; }
