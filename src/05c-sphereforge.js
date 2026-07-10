@@ -239,6 +239,7 @@ const SphereForge = (() => {
   let greetT0 = -1e9, greetReq = false;    /* the third-visit greeting (WOW #12) */
   let stirT0 = -1e9, stirReq = false;      /* the two-minute liturgy (WOW #12) */
   let heartCueAt = -1e9, groanCueAt = -1e9; /* the conductor's cues (WOW #8), perf-clock */
+  let tOn = false, tX = 0, tY = 0;          /* the vigil's live position (v8: tap her = recall) */
   let studyA = null, studyLit = -1;        /* the bridge's study list, baked per survey */
   /* she moors off the world's limb, never on its face (WOW #7) */
   const moor = (tgt) => ({ x: tgt.x + (tgt.r || 0) * 0.95, y: tgt.y - (tgt.r || 0) * 1.15 });
@@ -773,6 +774,7 @@ const SphereForge = (() => {
        crosses YOUR sky — a tiny silhouette, a short amber trail, one glint at
        mid-crossing. Called by the world-FX harness; draws only mid-transit. */
     drawTransit(g, w, h, clockMs) {
+      tOn = false;                                     /* refreshed every frame she is drawn */
       if (!inited || shu.mode !== 'hold') return;
       const PERIOD = 41000, DUR = 5600;
       const ph = clockMs % PERIOD;
@@ -797,6 +799,11 @@ const SphereForge = (() => {
         g.drawImage(glowSpr, x - 9, y - 9, 18, 18);
         g.globalAlpha = 1;
       }
+      tOn = true; tX = x; tY = y;                      /* she is touchable while she crosses */
+    },
+    /* TOUCH YOUR SHIP AND SHE COMES FOR YOU (v8): the vigil is the recall */
+    transitHit(x, y) {
+      return tOn && Math.hypot(x - tX, y - tY) < 36;
     },
 
     /* your vessel departs: fly to a live target over ms, then HOLD there —

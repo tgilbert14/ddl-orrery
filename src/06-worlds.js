@@ -57,7 +57,14 @@ const WorldFX = (() => {
             if (activeName !== name || e.button > 0) return;
             if (e.target.closest('a, button')) return;
             const r = surf.c.getBoundingClientRect();
-            fx[name].verb(surf, state, e.clientX - r.left, e.clientY - r.top, window.Orrery.ticker.clock);
+            const vx = e.clientX - r.left, vy = e.clientY - r.top;
+            /* TOUCH YOUR SHIP AND SHE COMES FOR YOU (v8): the vigil speck is
+               your ride home — tapping her IS the recall, taken diegetically */
+            if (window.SphereForge && SphereForge.transitHit && SphereForge.transitHit(vx, vy)) {
+              location.hash = '#/';
+              return;
+            }
+            fx[name].verb(surf, state, vx, vy, window.Orrery.ticker.clock);
           };
           sec.addEventListener('pointerdown', verbDown);
         }
