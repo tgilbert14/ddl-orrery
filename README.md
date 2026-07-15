@@ -36,6 +36,12 @@ your own local hour. The heartbeat window lands exactly on the thump in your hea
 
 **Live:** https://tgilbert14.github.io/ddl-orrery/
 
+Preview branch: v9 “The Recovered Transmission” adds a six-beat scroll prologue before the
+orrery. It turns the wreck into a question, decodes the eleven signals, establishes that every
+world is a verb, reveals the survey memory, and then hands the visitor the original instrument.
+It runs once per tab, stays out of deep links and the no-JS brochure, and can be replayed with
+`?story=1` for demos and review.
+
 | World | Signature |
 |---|---|
 | Dust Sea | two suns down; the amber sea, and the colossus that rises where you strike |

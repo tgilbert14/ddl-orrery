@@ -10,10 +10,13 @@ const SRC = path.join(__dirname, 'src');
    from it by extension, in this order — add a fragment here and only here. */
 const parts = [
   '01-tokens.css',
+  '01b-prologue.css',
   '02-hub.css',
   '03-worlds.css',
   '03b-deco.css',
+  '04a-prologue.html',
   '04-body.html',
+  '04b-prologue.js',
   '05-core.js',
   '05b-planetforge.js',
   '05c-sphereforge.js',
@@ -36,16 +39,16 @@ const page = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Orrery · a Desert Data Labs experience</title>
-<meta name="description" content="Eleven worlds, hand-built from code: a desert giant under two suns, a neon metropolis, glyph rain, the hadal deep, a cabinet world, dancing auroras, a hall of predictive mathematics, a zero-gravity drillyard, a living storm, a chain of signal-fires, and one world still unnamed. Travel between them.">
+<meta name="description" content="Something dead is keeping time. Decode the transmission, enter an impossible clock, and survey eleven hand-built worlds orbiting a derelict ship.">
 <meta property="og:title" content="The Orrery · Desert Data Labs">
-<meta property="og:description" content="Eleven worlds orbit a golden artifact that changes its face when you look at it. Warp between hand-built universes, each with its own weather, physics, and music.">
+<meta property="og:description" content="Something dead is keeping time. Eleven worlds. One clock. One unopened hold.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tgilbert14.github.io/ddl-orrery/">
-<meta property="og:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">
+<meta property="og:image" content="https://tgilbert14.github.io/ddl-orrery/og-card-v2.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://tgilbert14.github.io/ddl-orrery/og-card.png">
+<meta name="twitter:image" content="https://tgilbert14.github.io/ddl-orrery/og-card-v2.png">
 <meta name="theme-color" content="#060a18">
 <link rel="preload" href="assets/cinzel-subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='14' fill='%23f97366'/%3E%3Cellipse cx='32' cy='32' rx='26' ry='8' fill='none' stroke='%234af3ff' stroke-width='3' transform='rotate(-18 32 32)'/%3E%3C/svg%3E">
