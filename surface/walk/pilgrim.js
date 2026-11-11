@@ -39,6 +39,7 @@ export const PILGRIM = {
   restHand: [0.35, 1.17, 0.315],
   shoulderR: [0.05, 1.37, 0.17],
   hemBack: 0.36, hemWidth: 0.05,
+  neckY: 1.47, headLean: 0.22,   // above the neck the head takes this share of the body's lean
 };
 
 // tag a geometry's vertices with (part, low, theta, w); fn(i, x, y, z) -> [low, theta, w]
@@ -90,7 +91,8 @@ function buildBody() {
     { folds: 0.07, nv: 20, colF: () => C.cloth2 }), 1));
   // the hood
   parts.push(tag(hood({ c: [0.075, 1.625, 0], r: [0.14, 0.15, 0.128], wind: Z, cowl: 0.12, brim: 0.035,
-    tip: { dir: [-0.55, 0.84, 0], len: 0.26, sharp: 1.8, bend: 0.0, droop: 0.07 } }), 2, () => [0, 0, 0]));
+    // a soft, heavy cowl: figure A's point, shorter and rounder, drooping back under its own weight
+    tip: { dir: [-0.68, 0.73, 0], len: 0.15, sharp: 1.25, bend: 0.0, droop: 0.085 } }), 2, () => [0, 0, 0]));
   // sleeves: w = 0 at the shoulder, 1 at the cuff
   const sleeve = (pts, r0, r1, part) => tag(tube(pts, (t) => lerp(r0, r1, t * t), C.cloth, { nu: 14, nv: 20 }), part, (i) => [0, (i % 14) / 14 * Math.PI * 2, Math.floor(i / 14) / 20]);
   parts.push(sleeve([V3(0.05, 1.37, 0.17), V3(0.13, 1.17, 0.26), V3(0.27, 1.17, 0.30)], 0.062, 0.085, 3));
@@ -212,8 +214,13 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const wB = smoothstep(0.1, 1.1, p0.y);
     p.y.addAssign(uPose.x.mul(wB));
     p.z.addAssign(uPose.y.mul(wB));
-    p.x.addAssign(uPose.z.mul(p0.y));
-    p.z.addAssign(uPose.w.mul(p0.y));
+    // the lean is a shear of the body up to the neck; above it the head is carried on the neck and
+    // counter-rotates most of the lean, so the hood keeps its shape and stays nearly upright
+    const yN = float(PILGRIM.neckY);
+    const ly = mix(p0.y, yN.add(p0.y.sub(yN).mul(PILGRIM.headLean)), isHood).toVar();
+    p.x.addAssign(uPose.z.mul(ly));
+    p.z.addAssign(uPose.w.mul(ly));
+    p.y.subAssign(p0.x.sub(0.075).mul(uPose.z).add(p0.z.mul(uPose.w)).mul(PILGRIM.headLean).mul(isHood));
     // the hem lies on the local slope of the sand, a little buried
     const kg = float(1.0).sub(smoothstep(0.0, 0.5, p0.y));
     p.y.addAssign(uGround.x.mul(p.x).add(uGround.y.mul(p.z)).sub(uSlide.w).mul(kg));
@@ -339,7 +346,8 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
   const toWorld = (lx, ly, lz, out = new THREE.Vector3()) => out.set(lx, ly, lz).applyMatrix4(M);
 
   // local offsets of a point at height y after the body's motion (bob, sway, lean)
-  const bodyAt = (lx, ly, lz) => [lx + st.leanF * ly, ly + st.bob * sstep(0.1, 1.1, ly), lz + st.sway * sstep(0.1, 1.1, ly) + st.leanS * ly];
+  const leanY = (ly) => (ly > PILGRIM.neckY ? PILGRIM.neckY + (ly - PILGRIM.neckY) * PILGRIM.headLean : ly);
+  const bodyAt = (lx, ly, lz) => [lx + st.leanF * leanY(ly), ly + st.bob * sstep(0.1, 1.1, ly), lz + st.sway * sstep(0.1, 1.1, ly) + st.leanS * leanY(ly)];
 
   function setTime(name) {
     const L = LAMP[name] || LAMP.dusk;

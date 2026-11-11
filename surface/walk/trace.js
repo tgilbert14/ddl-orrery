@@ -7,7 +7,9 @@
 //   G  how disturbed the sand is, 0..1 (ripples are trodden out; it heals with the dent)
 //   B  how fast this texel heals (1 in a trough, up to ~2.4 on an exposed crest; set by the stamp)
 //   A  third person: a slide scar's avalanched sand (0..1; it heals with the dent), darkened at any
-//      distance so the scar reads where its low relief does not
+//      distance so the scar reads where its low relief does not; the pour (pour.js) folds the sand
+//      its tongues drop into A and G, so the scar keeps their lobed edge. The ground also draws the
+//      pour's flowing sand (hook below)
 // One pass per frame at most, and only when something changed: it copies the old window into the
 // new one (integer texel shift), heals it (4 times a second: the dent fills, and a 4-neighbour blur
 // softens its walls; a half float cannot hold a per-frame decay of 1/1500, a quarter-second step it
@@ -18,7 +20,8 @@
 // the ground is at (u, 1 - v): the logical coordinate L is the writing quad's uv().
 
 import * as THREE from 'three/webgpu';
-import { Fn, If, uniform, texture, uv, vec2, vec4, float, clamp, smoothstep, max, min, abs, dot, length, exp, mix, positionLocal, step } from 'three/tsl';
+import { Fn, If, uniform, texture, uv, vec2, vec4, float, clamp, smoothstep, max, min, abs, dot, length, exp, mix, positionLocal, step, floor, fract, hash } from 'three/tsl';
+import { POUR } from './pour.js';
 
 export const TRACE = {
   N: 1024,            // texels a side
@@ -31,10 +34,10 @@ export const TRACE = {
   slots: 4,           // stamps per pass
   farTone: 0,         // third person: where the relief no longer reads (a pixel wider than ~2 texels),
                       // trodden sand is darkened by up to this much, so a trail still reads 40 m off
-  scarTone: 0.2,      // third person: a slide scar's avalanched sand is this much darker, at any distance
+  scarTone: 0.26,     // third person: a slide scar's avalanched sand is this much darker, at any distance
 };
 
-export function createTrace(renderer) {
+export function createTrace(renderer, pour = null) {
   const { N, size } = TRACE;
   const texel = size / N;
   const mk = () => {
@@ -53,6 +56,7 @@ export function createTrace(renderer) {
   // ---- the update pass
   const uShift = uniform(new THREE.Vector2());   // (new centre - old centre) / size
   const uHeal = uniform(new THREE.Vector2());    // (step seconds, 1 if this pass heals)
+  const uTC = uniform(new THREE.Vector2());      // world centre of the window being written (the pour fold)
   const slotA = [], slotB = [], slotC = [];
   for (let i = 0; i < TRACE.slots; i++) {
     slotA.push(uniform(new THREE.Vector4()));  // x, z (metres from the new centre), dir x, dir z
@@ -121,6 +125,14 @@ export function createTrace(renderer) {
         });
       });
     }
+    // third person: the pour's stopped sand (its lobes) becomes avalanched sand here, kept long after
+    if (pour) {
+      If(pour.uOn.greaterThan(0.5), () => {
+        const pl = pour.at(uTC.add(p)).toVar();
+        const pd = pour.S(pl).y.mul(pour.inside(pl)).toVar();
+        If(pd.greaterThan(0.01), () => { c.assign(vec4(c.x, max(c.y, pd), c.z, max(c.w, pd))); });
+      });
+    }
     return c;
   })();
   const scene = new THREE.Scene();
@@ -166,6 +178,7 @@ export function createTrace(renderer) {
         slotC[i].value.set(e.x1 - nx, e.z1 - nz, e.berm ?? 0, e.scar ?? 0);
       }
     }
+    uTC.value.set(nx, nz);
     src.value = rts[cur].texture;
     const dst = 1 - cur;
     renderer.setRenderTarget(rts[dst]); renderer.render(scene, cam); renderer.setRenderTarget(null);
@@ -219,6 +232,41 @@ export function createTrace(renderer) {
     // relief fades with distance; the disturbed tone takes over (dents darker than the rim)
     if (TRACE.farTone > 0) out.tone = float(1.0).sub(res.z.mul(float(1.0).sub(near.div(max(inWin, 1e-3)))).mul(TRACE.farTone).mul(smoothstep(0.0, -0.012, res.w).mul(0.6).add(0.4)))
       .mul(float(1.0).sub(scar.mul(TRACE.scarTone)));
+    if (pour) {
+      // the pour: flowing sand in relief (its body and rounded front catch the light), darker and
+      // rougher than the face, with a grain speckle that creeps downslope with it
+      const pl = pour.at(xz).toVar();
+      const pin = pour.inside(pl).mul(pour.uOn).toVar();
+      const pg = vec2(0.0).toVar(), ptone = float(1.0).toVar(), pdis = float(0.0).toVar();
+      If(pin.greaterThan(0.0), () => {
+        const pc = pour.S(pl).toVar();
+        const m = pc.x.mul(pin).toVar();
+        If(m.greaterThan(0.002), () => {
+          const pnear = float(1.0).sub(smoothstep(0.03, 0.12, fw)).toVar();
+          // grains: a 2 cm lattice carried along the flow (two phases cross-faded: a flow map)
+          const rel = pl.sub(0.5).mul(pour.size).toVar();   // metres from the pour's centre (a whole number of cells)
+          const T = 0.5, ph = fract(pour.uT.div(T)).toVar(), ph2 = fract(pour.uT.div(T).add(0.5)).toVar();
+          const cell = (o) => { const q = floor(rel.sub(o).div(0.025).add(2000.0)); return hash(q.x.add(q.y.mul(4096.0))); };
+          const g1 = cell(pc.zw.mul(ph.mul(T))), g2 = cell(pc.zw.mul(ph2.mul(T)));
+          const gw = float(1.0).sub(abs(ph.mul(2.0).sub(1.0)));
+          const grain = mix(g2, g1, gw).sub(0.5).mul(pnear.mul(0.7).add(0.3)).toVar();
+          const body = smoothstep(0.0, 0.14, m.add(grain.mul(0.1))).toVar();     // a grainy edge, never a ruled one
+          pdis.assign(smoothstep(0.0, 0.08, m));
+          // the tongue's slope: relief near, and a pale rounded front (fresh grains rolling over)
+          const e = 1 / POUR.N;
+          const gx = pour.S(pl.add(vec2(e, 0.0))).x.sub(pour.S(pl.sub(vec2(e, 0.0))).x);
+          const gz = pour.S(pl.add(vec2(0.0, e))).x.sub(pour.S(pl.sub(vec2(0.0, e))).x);
+          const gm = vec2(gx, gz).mul(pin).toVar();
+          const vd = pc.zw.div(max(length(pc.zw), 0.05));
+          const rim = smoothstep(0.04, 0.3, dot(gm, vd).negate()).mul(smoothstep(0.1, 0.5, length(pc.zw))).toVar();
+          ptone.assign(float(1.0).sub(body.mul(0.42)).add(grain.mul(body).mul(0.5)).add(rim.mul(0.16).mul(grain.add(0.8))));
+          pg.assign(gm.mul(POUR.relief / (2 * POUR.size / POUR.N)).mul(pnear));
+        });
+      });
+      out.grad = out.grad.add(pg);
+      out.disturb = max(out.disturb, pdis);
+      out.tone = (out.tone || float(1.0)).mul(ptone);
+    }
     return out;
   }
 

@@ -8,13 +8,15 @@
 // to 6.8 m running. Before the spring, the boom end is raised (and if that is not enough, shortened)
 // so the straight line to the pivot clears the sand, and after it the camera is held above the sand.
 // The view aims above the figure, so it sits in the lower third, a little left of centre.
-// Reduced motion: a fixed 8 m boom, no pull, no swing behind the walker, no slide view.
+// Reduced motion: a fixed 8 m boom, no pull, no swing behind the walker; the slide view is a cut
+// (state.cut is raised for one frame; main.js cross-fades it from a still of the frame before).
 //
 // Sliding (the showpiece): the camera eases (0.8 s in, 1.2 s out) to a low three-quarter side view,
 // about 6.8 m off the figure across the fall line, a little uphill of square, with its eye a little
 // below the figure's head, looking across and down the face so its foot is in frame. The side is
 // picked once when the slide begins (sunward, then downwind, then wherever the camera already is)
-// and held. The player's orbit still turns it (as an offset), and the tilt is limited in every mode.
+// and held. The player's orbit still turns it (as an offset), and the tilt is limited in every mode;
+// sliding, the view looks down no further than slidePitchMin, so the horizon or the dune's foot stays.
 
 import { height } from '../look-test/height.js';
 
@@ -25,6 +27,8 @@ export const FOLLOW = {
   clear: 0.6, hardClear: 0.35,
   maxSteep: 0.72,             // the boom is shortened rather than raised above this angle (rad)
   pitchMin: -0.62, pitchMax: 0.35,   // the view's pitch, every mode (rad)
+  slidePitchMin: -0.36,       // sliding, the view looks down no further than this, so the horizon or the dune's foot stays in frame
+  slideElevMax: 0.3,          // sliding, the player's tilt offset (rad)
   // the slide view
   slideIn: 0.8, slideOut: 1.2, slideDist: 6.2, slideUp: 1.2, slideBack: 0.12, slideAim: 2.6, slideAimUp: 0.75,
   frameDown: 8.5 * Math.PI / 180, frameSide: 4.5 * Math.PI / 180,
@@ -42,7 +46,7 @@ export function createFollow({ reduced = false } = {}) {
     piv: [0, 0, 0], pv: [0, 0, 0], cam: [0, 0, 0], cv: [0, 0, 0],
     still: 0, sinceLook: 99, init: false, raised: 0, shortened: 0,
     look: [0, 0, 0], viewYaw: 0, viewPitch: 0, base: [0, 0, 0],
-    sm: 0, slideOn: false, slideSide: 1, slideOff: 0, slideElev: 0, sdir: [1, 0], fig: [0, 0, 0], gv: 0, lv: [0, 0],
+    sm: 0, cut: false, slideOn: false, slideSide: 1, slideOff: 0, slideElev: 0, sdir: [1, 0], fig: [0, 0, 0], gv: 0, lv: [0, 0],
   };
 
   function boomEnd(piv, yaw, elev, L) {
@@ -103,7 +107,8 @@ export function createFollow({ reduced = false } = {}) {
     if (dt > 0 && f.slide) { const kv = 1 - Math.exp(-dt / 0.3); s.lv[0] += (f.slide[0] - s.lv[0]) * kv; s.lv[1] += (f.slide[1] - s.lv[1]) * kv; }
     // the slide view: on with hysteresis, eased linearly in and out (smoothstepped where it is used)
     const sv = f.slide ? Math.hypot(f.slide[0], f.slide[1]) : 0;
-    if (!reduced) {
+    const wasOn = s.slideOn;
+    {
       if (!s.slideOn && f.sliding > 0.14 && sv > 0.3) {
         s.slideOn = true;
         s.sdir = [f.slide[0] / sv, f.slide[1] / sv];
@@ -126,14 +131,16 @@ export function createFollow({ reduced = false } = {}) {
         s.sdir = [s.sdir[0] + (f.slide[0] / sv - s.sdir[0]) * k, s.sdir[1] + (f.slide[1] / sv - s.sdir[1]) * k];
         const l = Math.hypot(s.sdir[0], s.sdir[1]) || 1; s.sdir = [s.sdir[0] / l, s.sdir[1] / l];
       }
-      s.sm = clamp(s.sm + (s.slideOn ? dt / FOLLOW.slideIn : -dt / FOLLOW.slideOut), 0, 1);
-    } else s.sm = 0;
+      // reduced motion: no swing round; the view cuts (main.js cross-fades the cut)
+      if (reduced) { s.sm = s.slideOn ? 1 : 0; if (s.slideOn !== wasOn) s.cut = true; }
+      else s.sm = clamp(s.sm + (s.slideOn ? dt / FOLLOW.slideIn : -dt / FOLLOW.slideOut), 0, 1);
+    }
     const sm = s.sm * s.sm * (3 - 2 * s.sm);
     if (look.dx || look.dy) {
       s.sinceLook = 0;
       if (s.slideOn) {   // in the slide view the player's orbit is an offset to it
         s.slideOff = clamp(s.slideOff + look.dx, -1.4, 1.4);
-        s.slideElev = clamp(s.slideElev - look.dy, -0.1, 0.45);
+        s.slideElev = clamp(s.slideElev - look.dy, -0.1, FOLLOW.slideElevMax);
       } else { s.yaw = wrapPi(s.yaw + look.dx); s.elev = clamp(s.elev - look.dy, FOLLOW.elevMin, FOLLOW.elevMax); }
     } else s.sinceLook += dt;
     const moving = f.speed > 0.3;
@@ -189,6 +196,11 @@ export function createFollow({ reduced = false } = {}) {
       const wy = yT > s.cam[1] ? FOLLOW.omegaUp : FOLLOW.omegaDown;
       [s.cam[1], s.cv[1]] = spring(s.cam[1], s.cv[1], yT, wy + (FOLLOW.omega - wy) * sm, dt);
     }
+    if (s.cut) {   // a cut: no glide to the new view
+      s.cam = b.c.slice(); s.cv = [0, 0, 0];
+      const nyc = needY(s.piv, s.cam[0], s.cam[2]);
+      s.cam[1] = Math.max(b.c[1], b.c[1] + (nyc - b.c[1]) * (1 - 0.6 * sm));
+    }
     const floor = height(s.cam[0], s.cam[2]) + FOLLOW.hardClear;
     if (s.cam[1] < floor) { s.cam[1] = floor; s.cv[1] = Math.max(0, s.cv[1]); }
     aim();
@@ -205,13 +217,13 @@ export function createFollow({ reduced = false } = {}) {
     }
     const dx = tx - s.cam[0], dy = ty - s.cam[1], dz = tz - s.cam[2];
     s.viewYaw = Math.atan2(dz, dx) - FOLLOW.frameSide * (1 - sm);
-    s.viewPitch = clamp(Math.atan2(dy, Math.hypot(dx, dz)) + FOLLOW.frameDown * (1 - sm), FOLLOW.pitchMin, FOLLOW.pitchMax);
+    s.viewPitch = clamp(Math.atan2(dy, Math.hypot(dx, dz)) + FOLLOW.frameDown * (1 - sm), FOLLOW.pitchMin + (FOLLOW.slidePitchMin - FOLLOW.pitchMin) * sm, FOLLOW.pitchMax);
   }
 
   return {
     state: s, update, snap,
     setYaw(y) { s.yaw = y; },
-    resetSlide() { s.sm = 0; s.slideOn = false; s.slideOff = 0; s.slideElev = 0; s.lv = [0, 0]; s.gv = 0; },
+    resetSlide() { s.sm = 0; s.cut = false; s.slideOn = false; s.slideOff = 0; s.slideElev = 0; s.lv = [0, 0]; s.gv = 0; },
     get position() { return s.cam; },
     // camera-relative axes for the controls (the boom's yaw, not the framing offset)
     get forward() { return [Math.cos(s.yaw), Math.sin(s.yaw)]; },

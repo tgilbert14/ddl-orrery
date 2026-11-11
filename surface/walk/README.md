@@ -43,7 +43,9 @@ still, and comes in a little while running. It never goes under the sand: it is 
 be the boom is shortened, rather than climbing above 41 degrees) so that its lines to the Pilgrim's
 middle and to its feet clear the dunes, and it is always held 0.35 m above the sand under it. The
 tilt you can give it is limited (-5 to 29 degrees) and the view's pitch is held between -36 and 20
-degrees, so it never ends up looking straight down. Moving without turning the camera for 1.6 s, it
+degrees, so it never ends up looking straight down; in the slide view it looks down no further than
+-20.6 degrees (and the tilt offset there is at most 17 degrees), so the horizon or the dune's foot
+stays in frame. Moving without turning the camera for 1.6 s, it
 swings slowly round behind the walk.
 
 Sliding, the camera eases over 0.8 s to a low three-quarter side view: 6.2 m off the figure across
@@ -53,7 +55,9 @@ picked once as the slide starts (sunward, then downwind, then the side the camer
 and held. Its lag is fed forward, so the figure stays framed at full slide speed. Orbiting during a
 slide turns it as an offset. When the slide ends it eases back over 1.2 s from where it is (it does
 not swing round), and the swing behind the walk takes over. With reduced motion it is a plain
-follow: no pull, no swing, no slide view (the pitch limits still apply).
+follow (no pull, no swing behind the walk), and the slide view is a cut instead of a swing: the
+frame before the cut is kept on top and fades out over 0.4 s, in and out of the slide (the pitch
+limits still apply).
 
 First person (`?view=first`, or V): W A S D move along your view, the mouse or right thumb looks, Q
 and E turn, everything else as above.
@@ -100,7 +104,9 @@ A hint line fades out after your first movement.
   Third person, a slide leaves no prints: it leaves a scar, a broad shallow groove (0.3 to 0.6 m
   wide, 4 to 9 cm deep, both with the slide's speed) with raised edges, and its avalanched sand is
   kept in the map's fourth channel and darkened 20% at any distance, so the scar reads from the
-  foot of the face, where its low relief alone does not.
+  foot of the face, where its low relief alone does not. The pour (`pour.js`) folds the sand it
+  leaves behind into that fourth channel and into the disturbed channel, so the scar keeps the
+  lobed edge of the tongues that made it.
 - `pilgrim.js`: the Pilgrim in motion, all procedural, no skeleton. One body mesh whose positionNode
   moves each rest point with the gait, the wind, the slide and the slope. The walk reads from behind
   without legs: a 3.4 cm bob (lowest at each footfall, with a small extra dip and a forward pitch as
@@ -124,21 +130,38 @@ A hint line fades out after your first movement.
   the face and crouches, and the cloak lifts, streams uphill and flaps. The capsule shadow and
   contact darkening (figure.js's ground hook) follow the pose every frame. It also stamps the staff
   marks, the hem's drag line and the staff's drag line while sliding into the trace map.
+  The hood is a soft, heavy cowl: figure A's point, shorter (0.15 m against 0.26) and rounder,
+  drooping back under its own weight. The body's lean is a shear up to the neck (1.47 m); above it
+  the head takes only 22% of the lean, as a rotation, so the hood keeps its outline and stays nearly
+  upright walking, running, climbing and sliding. Its opening stays the dark hollow it was.
+- `pour.js`: the slip face avalanching around a slide. A small flow simulation in a 512 x 512 texture
+  (5 cm texels, 25.6 m, following the figure in whole texels): flowing sand, the sand it has dropped,
+  and the flow's velocity. Each frame the sand is advected along its own velocity (semi-Lagrangian),
+  spread a little sideways, driven toward the fall line (from the ground's own height formula) at a
+  speed that grows with the slope and the sand's thickness, and drained: thin or slow sand drops
+  out. The figure sets sand loose at its feet and either side in pulses that vary across its width,
+  thrown a little ahead at its own speed and fanned out, and the walls of its groove slump behind it.
+  So the face fails in a sheet that breaks into tongues; their thick heads lead with round fronts,
+  they spread, slow where the face eases and stop. The ground draws the flowing sand in relief,
+  darker and rougher than the face, with a pale front and a 2.5 cm grain speckle that creeps
+  downslope with it (a flow map), and smothers the ripples under it; the stopped sand goes into the
+  trace map. The passes run while sliding and for 8 s after.
 - `follow.js`: the third-person camera.
-- `puffs.js`: sand thrown up: a low puff at each walking footfall drifting downwind, bigger kicks
-  running, and while sliding a wide, dense sheet of dark streaks pouring down the face ahead of and
-  beside the hem (each one kept on the sand), a bow-wave lip thrown up at the feet, small avalanching
-  tongues set off beside and behind that run down the face past the figure, and a low dust trail
-  hanging behind, all scaled with the slide's speed. A fixed pool of 384 sprites in one draw,
-  simulated on the CPU (about 250 live at full slide). With reduced motion the slide's sand stays
-  (it is the interaction); the footfall puffs and kicks do not.
+- `puffs.js`: sand thrown up, sand-coloured and lit like the sand under it (the key sun's dune
+  shadow and the face turning from it, worked out once per sprite): at each footfall a low spray of
+  grains thrown back and to the sides that falls back within about 0.4 s (barely there walking), with
+  a faint dust tail drifting downwind running; sliding, grains bouncing and fanning out sideways from
+  the feet and hem, and a thin pale haze drifting downwind. Grain sprites are clusters of separate
+  grains, never soft puffs. A fixed pool of 384 sprites in one draw, simulated on the CPU. With
+  reduced motion the slide's sand stays (it is the interaction); the footfall kicks do not.
 - `air.js`: a faint veil of drifting sand along the wind, in the ground shader.
 - `times.js`: one sun placement per time of day, fixed in the world.
 - `input.js`: keys, mouse, touch, tap-to-walk, V.
 - `main.js`: boot, the loop, the view switch, the time cross-fade, the pixel-ratio governor, the
   readout, device loss (re-initialises at most twice, then the poster), and the script handle
   `window.__walk` (now also `setView('first'|'third')`, `orbit(yawDeg, elevDeg, holdS)`,
-  `setPose({ ..., camYawDeg })`, and `view`, `cam`, `figure` and `puffs` in `state()`).
+  `setPose({ ..., camYawDeg })`, `cameraOverride({ p, t, fov } | null)` for stills, `pourStats()`,
+  and `view`, `cam`, `figure` and `puffs` in `state()`).
 - `sound.js`: written separately. It is loaded with a dynamic import, and the page works without it.
   Its calls are unchanged; in third person the wind's direction is taken relative to the Pilgrim's
   heading, not the camera's, so the listener stays with the figure.
@@ -210,6 +233,24 @@ About 0.2 to 0.3 ms a frame more than HEAD: the normal's two extra displaced poi
 stage and the larger sprite pool (384, about 250 live at full slide). `view=first` and the
 `figure=a&shot=behind` still were byte-identical to HEAD 402cd4c. The console was empty on WebGPU,
 WebGL2, reduced motion and first person.
+
+### The pour, the kicks and the hood, 11 Nov 2026
+
+The same 600 m route and method (1440x900 CSS at DPR 2, 15,120 frames, each timed until the GPU
+finished), with a re-run of HEAD 820970b in the same session.
+
+| Run | All frames, median / p99 / worst | Plain frames, walk / run (median / worst) |
+|---|---|---|
+| HEAD 820970b, third person, WebGPU | 5.5 / 7.7 / 9.3 ms | 5.5 / 7.9, 5.5 / 7.2 ms |
+| this change, third person, WebGPU | 5.7 / 7.1 / 8.6 ms | 5.7 / 7.6, 5.5 / 7.0 ms |
+| HEAD 820970b, third person, WebGL2 | 5.5 / 8.1 / 9.5 ms | 5.5 / 8.7, 5.4 / 8.1 ms |
+| this change, third person, WebGL2 | 5.3 / 7.3 / 8.8 ms | 5.2 / 7.6, 5.1 / 7.3 ms |
+
+Within run-to-run noise of HEAD. A first WebGPU pass of this change measured 6.3 / 14.3 ms (median /
+worst), its worst frames all in a slow first 30 s; the row above is a second pass, after the trace
+pass stopped sampling the pour while it is idle. `view=first` and `figure=a&shot=behind` were
+byte-identical to HEAD 820970b. The console was empty on WebGPU, WebGL2, reduced motion and first
+person.
 
 ## Not built yet
 

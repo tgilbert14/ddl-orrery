@@ -150,7 +150,9 @@ async function buildGraphics() {
     return rt;
   };
   const rtA = makeShadowRT(), rtB = makeShadowRT();
-  const trace = traceMod.createTrace(renderer);
+  // third person: the pour (sand avalanching down a slip face around a slide), folded into the trace
+  const pour = START_VIEW === 'third' && !FIGURE ? (await import('./pour.js')).createPour(renderer) : null;
+  const trace = traceMod.createTrace(renderer, pour);
   const uCam = clip.createClipUniform();
   const values = { ...timeNow, uGroundY: ws.ground };
   const mats = createTslMaterials(values, {
@@ -164,6 +166,7 @@ async function buildGraphics() {
     },
   }, rtA.texture);
 
+  if (pour) pour.setHeight(mats.fns.heightD);
   const scene = new THREE.Scene();
   const { SKY } = await import('../look-test/params.js');
   const sky = new THREE.Mesh(new THREE.SphereGeometry(SKY.rSky, 64, 32), mats.sky);
@@ -183,7 +186,7 @@ async function buildGraphics() {
     if (isGPU) await renderer.backend.device.queue.onSubmittedWorkDone();
     else gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
   };
-  const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod,
+  const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, pour, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
   if (pilMod) {
     g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced });
@@ -206,8 +209,16 @@ async function buildGraphics() {
 function setAllTime(groundY) { applyBlend(G.mats.set, timeNow, null, 0, groundY); }
 
 let lookOv = null;   // a script may look elsewhere for a frame without turning the walker
+let camOv = null;    // a script may place the third-person camera itself (stills): { p, t, fov }
 function placeCamera() {
   if (G.pil) G.pil.setTime(timeNow.name);
+  if (G.pil && viewMode === 'third' && camOv) {   // a script's fixed camera (stills only)
+    const cam = G.camera, o = camOv;
+    cam.position.set(o.p[0], o.p[1], o.p[2]); cam.lookAt(o.t[0], o.t[1], o.t[2]);
+    if (o.fov && cam.fov !== o.fov) { cam.fov = o.fov; cam.updateProjectionMatrix(); }
+    G.sky.position.copy(cam.position); G.uCam.value.set(o.p[0] + meshOff[0], o.p[2] + meshOff[1]);
+    return;
+  }
   if (G.pil && viewMode === 'third') {
     const F = G.follow.state, c = F.cam, cam = G.camera;
     cam.position.set(c[0], c[1], c[2]);
@@ -431,13 +442,40 @@ function tickThird(dt, intent) {
   const out = [];
   for (const e of events) {
     if (e.type === 'foot' && e.slide > 0.5) { e.noPrint = true; out.push(e); continue; }
-    if (e.type === 'slide') { const k = ws.sliding; out.push({ ...e, depth: 0.04 + 0.05 * k, width: 0.32 + 0.3 * k, berm: 0.85, scar: Math.min(1, 0.3 + k) }); continue; }
+    if (e.type === 'slide') { const k = ws.sliding; out.push({ ...e, depth: 0.035 + 0.04 * k, width: 0.28 + 0.2 * k, berm: 0.85, scar: 0.12 + 0.18 * k }); continue; }
     out.push(e);
   }
   return out;
 }
+// reduced motion: the slide view is a cut, cross-faded from a still of the frame before it
+let fadeEl = null, fadeT = 0;
+const FADE = 0.4;
+const prevPose = { p: null, q: null };
+function crossFadeCut() {
+  const cam = G.camera, c = G.renderer.domElement;
+  if (!prevPose.p) return;
+  const p = cam.position.clone(), qn = cam.quaternion.clone();
+  cam.position.copy(prevPose.p); cam.quaternion.copy(prevPose.q); cam.updateMatrixWorld(true);
+  G.renderer.render(G.scene, cam);
+  if (!fadeEl) {
+    fadeEl = document.createElement('canvas');
+    fadeEl.style.pointerEvents = 'none';
+    stage.append(fadeEl);
+  }
+  fadeEl.width = c.width; fadeEl.height = c.height;
+  try { fadeEl.getContext('2d').drawImage(c, 0, 0); fadeT = FADE; } catch { fadeT = 0; }
+  fadeEl.style.opacity = fadeT > 0 ? '1' : '0';
+  cam.position.copy(p); cam.quaternion.copy(qn); cam.updateMatrixWorld(true);
+}
+function tickFade(dt) {
+  if (!fadeEl || fadeT <= 0) return;
+  fadeT = Math.max(0, fadeT - dt);
+  fadeEl.style.opacity = String(fadeT / FADE);
+}
+
 function tick(dt) {
   const t0 = performance.now();
+  if (G.pil) { if (!prevPose.p) { prevPose.p = G.camera.position.clone(); prevPose.q = G.camera.quaternion.clone(); } else { prevPose.p.copy(G.camera.position); prevPose.q.copy(G.camera.quaternion); } }
   const intent = G.fig && G.fig.state.placed ? {} : input.read();
   if (intent.tap) {
     const hit = pick(intent.tap.ndcX, intent.tap.ndcY);
@@ -455,13 +493,20 @@ function tick(dt) {
   if (G.fig) G.fig.trail(events, ws, G.trace);
   if (!reduced) simTime += dt;
   placeCamera();
-  if (third) G.puffs.update(dt, ws, windNow(), G.camera, reduced);
+  if (third && G.follow.state.cut) { G.follow.state.cut = false; crossFadeCut(); }
+  tickFade(dt);
+  if (third) {
+    // the key sun for the sand's sprites: whichever of the two is brighter
+    const c1 = timeNow.uSun1Col, c2 = timeNow.uSun2Col, b1 = c1[0] + c1[1] + c1[2], b2 = c2[0] + c2[1] + c2[2];
+    G.puffs.update(dt, ws, windNow(), G.camera, reduced, b1 >= b2 ? timeNow.uSun1Dir : timeNow.uSun2Dir);
+  }
   updateTime(dt);
   const fogBase = ws.ground;
   const f = timeFade && timeFade.phase === 'fading' ? null : timeNow;
   if (f) { G.mats.set('uFog', [f.uFog[0], f.uFog[1], f.uFog[2], fogBase]); G.mats.set('uGroundY', fogBase); }
   const bakeDid = G.shadows.update(dt, [ws.x, ws.z], [ws.vx + ws.sx, ws.vz + ws.sz], timeNow.shadow, reduced);
   // figure look test: the prints do not heal, so the 20 m approach reads as if just walked
+  if (G.pour) G.pour.update(dt, { x: ws.x, z: ws.z, sx: ws.sx, sz: ws.sz, amount: third ? ws.sliding : 0, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz) });
   const tc = traceCentre();
   const traceDid = G.trace.update(dt, tc[0], tc[1], !G.fig);
   G.mats.set('uTime', simTime);
@@ -562,6 +607,7 @@ async function startGraphics() {
   G.shadows.reset([ws.x, ws.z], timeNow.shadow);
   G.trace.update(0, ws.x, ws.z, false, true);   // compiles the trace pass
   G.shadows.warm();                              // compiles the sliced bake
+  G.pour?.warm();                                // compiles the pour (third person)
   G.renderer.render(G.scene, G.camera);
   await G.drain();
   if (G.fig && !testMode) { hintEl.hidden = true; await figureWalk(); }
@@ -607,6 +653,7 @@ if (FIGURE) {
   };
 }
 API.lookOverride = (v) => { lookOv = v; };
+API.cameraOverride = (v) => { camOv = v; if (!v && G) resize(); };
 API.setView = (m) => setView(m);
 // orbit the camera as a script; holdS keeps it from swinging back behind the walker for that long
 API.orbit = (yawDeg, elevDeg, holdS = 0) => { if (!G || !G.follow) return; const F = G.follow.state; if (yawDeg !== undefined && yawDeg !== null) F.yaw = yawDeg * DEG; if (elevDeg !== undefined && elevDeg !== null) F.elev = elevDeg * DEG; F.sinceLook = -holdS; };
@@ -618,7 +665,7 @@ API.setPose = (p) => {
   walker.setPose(p);
   figYaw = ws.yaw; figAngVel = 0; traceC = null;
   if (G && G.pil) { G.pil.reset(); G.puffs.clear(); G.follow.setYaw(p.camYawDeg !== undefined ? p.camYawDeg * DEG : ws.yaw); G.follow.state.init = false; G.follow.state.still = 0; G.follow.resetSlide(); primeThird(); }
-  if (G) { placeCamera(); G.shadows.cancelJobs(); G.shadows.reset([ws.x, ws.z], timeNow.shadow); if (p.clearTrace !== false) G.trace.clear(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); }
+  if (G) { placeCamera(); G.shadows.cancelJobs(); G.shadows.reset([ws.x, ws.z], timeNow.shadow); if (p.clearTrace !== false) { G.trace.clear(); G.pour?.clear(); } const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); }
 };
 API.setTime = (name, instant = true) => setTime(name, instant);
 // step n frames at a fixed dt with the loop paused; each frame is timed from its start until the
@@ -660,6 +707,20 @@ API.traceProbe = async (x, z, r = 0.6) => {
   const wx = c[0] + ((bi + 0.5) / N - 0.5) * T.size;
   const wzA = c[1] + ((bj + 0.5) / N - 0.5) * T.size, wzB = c[1] + ((N - bj - 0.5) / N - 0.5) * T.size;
   return { deepest: best, i: bi, j: bj, worldX: wx, worldZifRowsUp: wzA, worldZifRowsDown: wzB, expect: { x, z }, texel, typed: data.constructor.name };
+};
+
+// the pour's contents: mass, stopped sand and speed, summed and at their largest (debugging)
+API.pourStats = async () => {
+  if (!G || !G.pour) return null;
+  const rt = G.pour.target(), N = rt.width;
+  const d = await G.renderer.readRenderTargetPixelsAsync(rt, 0, 0, N, N);
+  const rowLen = d.length / N, f = (v) => (d instanceof Uint16Array ? G.THREE.DataUtils.fromHalfFloat(v) : v);
+  let mSum = 0, mMax = 0, dSum = 0, dMax = 0, vMax = 0, n = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const o = j * rowLen + i * 4, m = f(d[o]), dd = f(d[o + 1]), v = Math.hypot(f(d[o + 2]), f(d[o + 3]));
+    mSum += m; dSum += dd; if (m > mMax) mMax = m; if (dd > dMax) dMax = dd; if (v > vMax) vMax = v; if (m > 0.05) n++;
+  }
+  return { on: G.pour.active, passes: G.pour.passes, mSum: +mSum.toFixed(1), mMax: +mMax.toFixed(3), cellsOver5: n, dSum: +dSum.toFixed(1), dMax: +dMax.toFixed(3), vMax: +vMax.toFixed(2) };
 };
 
 // the two shadow maps' contents, summarised by row bands (debugging and the regression check)
