@@ -1,9 +1,9 @@
 // WebGPURenderer path (WebGPU, or WebGL2 with forceWebGL): the Dust Sea ground, sky, shadow-map
 // bake and probes as TSL node materials. Same maths as height.js and glsl-material.js, same order:
-//   hash2 -> vnoise -> vnoiseD -> duneProfile -> duneProfileD -> heightLow -> heightLowD
-//   -> height -> heightD                                                (ground formula)
-//   shadowMarch -> horizonMarch -> sunSky -> starField -> haboob -> skyColor -> fogAmount
-//   -> sandDensity -> blowingSand -> sunOnSand -> aces -> srgbEncode   (light, sky, air, output)
+//   hash2 -> vnoise -> vnoiseD -> duneProfile -> duneProfileD -> slipProfileD -> slipProfile
+//   -> heightLow -> heightLowD -> height -> heightD                                                (ground formula)
+//   shadowMarch -> horizonMarch -> sunSky -> starField -> wallHit -> domes -> haboob -> skyColor -> fogAmount
+//   -> sandHaze -> ribbons -> sunOnSand -> aces -> srgbEncode          (light, sky, air, output)
 // Every TSL name used here is in the webgpu-tsl cheat sheet or was checked against the exports of
 // surface/vendor/three-r186/three.tsl.js (atan with two arguments, textureLevel, acos, log, exp).
 //
@@ -15,11 +15,11 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, Loop, Break, select, uint, int, float, vec2, vec3, vec4, uniform, varying,
-  floor, mix, smoothstep, clamp, max, min, pow, exp, log, cos, sin, acos, atan, tan, normalize, dot,
+  floor, mix, smoothstep, clamp, max, min, pow, exp, log, sqrt, cos, sin, acos, atan, tan, normalize, dot,
   length, abs, step, fwidth, positionLocal, positionWorld, cameraPosition, uv, screenCoordinate,
   textureLevel,
 } from 'three/tsl';
-import { G, SH, SHMAP, SKY, SAND, STORM, GRID, DEG, UNIFORM_TYPES } from './params.js';
+import { G, SH, SHMAP, SKY, SAND, STORM, GRID, CAM, DEG, UNIFORM_TYPES } from './params.js';
 
 const WX = Math.cos(G.windDeg * DEG), WZ = Math.sin(G.windDeg * DEG);
 const W2X = Math.cos(G.dir2Deg * DEG), W2Z = Math.sin(G.dir2Deg * DEG);
@@ -97,80 +97,118 @@ export function createTslMaterials(values, opts, shadowTex) {
       h.mul(float(1.0).sub(h)).negate());
   }).setLayout({ name: 'duneProfileD', type: 'vec3', inputs: [{ name: 't', type: 'float' }, { name: 'k', type: 'float' }] });
 
+  // round three: the primary dune in metres (see height.js): windward W, slip face S at the angle
+  // of repose, floor bm, apron smax(S, bm), brink smin(W, apron). tg is tan(leeDeg).
+  const LEE_T = Math.tan(G.leeDeg * DEG);
+  const KB_SLOPE = (G.roundLo - G.roundHi) / (G.A1 * (1 - G.ampBase));
+  const XC = G.crest * G.L1;
+  const slipProfileD = Fn(([x, amp, bm]) => {
+    const dx = x.sub(XC).toVar();
+    const u = dx.div(amp.mul(G.windK)).add(1.0).toVar();
+    const uc = clamp(u, 0.0, 1.0).toVar();
+    const P = uc.mul(uc).mul(float(3.0).sub(uc.mul(2.0))).toVar();
+    const dP = select(u.lessThan(1.0), uc.mul(6.0).mul(float(1.0).sub(uc)), float(0.0)).toVar();
+    const W = amp.mul(P).add(bm).toVar();
+    const Wx = dP.div(G.windK);
+    const Wa = P.sub(dP.mul(u.sub(1.0)));
+    const S = amp.sub(dx.mul(LEE_T)).toVar();
+    const kA = amp.mul(G.apronF).toVar();
+    const hA = clamp(S.sub(bm).div(kA).mul(0.5).add(0.5), 0.0, 1.0).toVar();
+    const L = bm.add(S.sub(bm).mul(hA)).add(kA.mul(hA).mul(float(1.0).sub(hA))).toVar();
+    const Lx = hA.mul(-LEE_T);
+    const La = hA.add(hA.mul(float(1.0).sub(hA)).mul(G.apronF));
+    const Lb = float(1.0).sub(hA);
+    const kB = amp.sub(G.A1 * G.ampBase).mul(KB_SLOPE).add(G.roundHi).toVar();
+    const hB = clamp(L.sub(W).div(kB).mul(0.5).add(0.5), 0.0, 1.0).toVar();
+    const omb = float(1.0).sub(hB).toVar();
+    return vec4(
+      L.add(W.sub(L).mul(hB)).sub(kB.mul(hB).mul(omb)),
+      hB.mul(Wx).add(omb.mul(Lx)),
+      hB.mul(Wa).add(omb.mul(La)).sub(hB.mul(omb).mul(KB_SLOPE)),
+      hB.add(omb.mul(Lb)));
+  }).setLayout({ name: 'slipProfileD', type: 'vec4', inputs: [{ name: 'x', type: 'float' }, { name: 'amp', type: 'float' }, { name: 'bm', type: 'float' }] });
+
+  const slipProfile = Fn(([x, amp, bm]) => {
+    const dx = x.sub(XC).toVar();
+    const u = dx.div(amp.mul(G.windK)).add(1.0).toVar();
+    const uc = clamp(u, 0.0, 1.0).toVar();
+    const W = amp.mul(uc.mul(uc).mul(float(3.0).sub(uc.mul(2.0)))).add(bm).toVar();
+    const S = amp.sub(dx.mul(LEE_T)).toVar();
+    const kA = amp.mul(G.apronF).toVar();
+    const hA = clamp(S.sub(bm).div(kA).mul(0.5).add(0.5), 0.0, 1.0).toVar();
+    const L = bm.add(S.sub(bm).mul(hA)).add(kA.mul(hA).mul(float(1.0).sub(hA))).toVar();
+    const kB = amp.sub(G.A1 * G.ampBase).mul(KB_SLOPE).add(G.roundHi).toVar();
+    const hB = clamp(L.sub(W).div(kB).mul(0.5).add(0.5), 0.0, 1.0).toVar();
+    return L.add(W.sub(L).mul(hB)).sub(kB.mul(hB).mul(float(1.0).sub(hB)));
+  }).setLayout({ name: 'slipProfile', type: 'float', inputs: [{ name: 'x', type: 'float' }, { name: 'amp', type: 'float' }, { name: 'bm', type: 'float' }] });
+
   const heightLow = Fn(([p]) => {
     const x = p.x, z = p.y;
-    const a = x.mul(WX).add(z.mul(WZ));
-    const c = x.negate().mul(WZ).add(z.mul(WX));
-    const wa = vnoise(p.mul(G.warp1F)).mul(G.warp1A).add(vnoise(p.mul(G.warp2F).add(vec2(31.7, -11.3))).mul(G.warp2A)).toVar();
+    const a = x.mul(WX).add(z.mul(WZ)).toVar();
+    const c = x.negate().mul(WZ).add(z.mul(WX)).toVar();
+    const wa = vnoise(vec2(c.mul(G.warp1F), a.mul(G.warp1F * G.warpAlong))).mul(G.warp1A)
+      .add(vnoise(vec2(c.mul(G.warp2F).add(31.7), a.mul(G.warp2F * G.warpAlong).sub(11.3))).mul(G.warp2A)).toVar();
     const wc = vnoise(p.mul(G.warp1F).add(vec2(57.1, 9.2))).mul(G.warp1A);
-    const w3 = vnoise(p.mul(G.warp3F).add(vec2(-19.4, 23.9))).mul(G.warp3A);
+    const w3 = vnoise(vec2(c.mul(G.warp3F).sub(19.4), a.mul(G.warp3F * G.warpAlong).add(23.9))).mul(G.warp3A);
     const a2 = a.add(wa).add(w3).toVar(), c2 = c.add(wc).toVar();
     const swell = vnoise(p.mul(G.swellF).add(vec2(3.3, 7.7))).mul(G.swellA).toVar();
-    const s = a2.div(G.L1).toVar();
-    const k = floor(s).toVar();
-    const t = s.sub(k);
-    const amp = vnoise(vec2(c2.mul(G.ampF), k.mul(0.731).add(0.5))).mul(0.5).add(0.5).mul(1.0 - G.ampBase).add(G.ampBase).mul(G.A1);
-    const kk = vnoise(vec2(c2.mul(G.roundF), k.mul(0.917).add(1.7))).mul(0.5).add(0.5).mul(G.roundHi - G.roundLo).add(G.roundLo);
-    const h1 = amp.mul(duneProfile(t, kk)).toVar();
     const s2 = x.mul(W2X).add(z.mul(W2Z)).add(wa.mul(0.5)).div(G.L2).toVar();
     const k2 = floor(s2).toVar();
     const t2 = s2.sub(k2);
     const amp2 = vnoise(vec2(x.negate().mul(W2Z).add(z.mul(W2X)).mul(G.amp2F), k2.mul(0.613).add(2.5))).mul(0.5).add(0.5).mul(G.A2);
-    const h2 = amp2.mul(duneProfile(t2, float(G.round2)));
-    return swell.add(h1).add(h2);
+    const bm = amp2.mul(duneProfile(t2, float(G.round2))).add(vnoise(p.mul(G.det1F).add(vec2(1.3, -4.1))).mul(G.det1A)).toVar();
+    const k = floor(a2.div(G.L1)).toVar();
+    const amp = vnoise(vec2(c2.mul(G.ampF), k.mul(0.731).add(0.5))).mul(0.5).add(0.5).mul(1.0 - G.ampBase).add(G.ampBase).mul(G.A1);
+    return swell.add(slipProfile(a2.sub(k.mul(G.L1)), amp, bm));
   }).setLayout({ name: 'heightLow', type: 'float', inputs: [{ name: 'p', type: 'vec2' }] });
 
   const heightLowD = Fn(([p]) => {
     const x = p.x, z = p.y;
-    const a = x.mul(WX).add(z.mul(WZ));
-    const c = x.negate().mul(WZ).add(z.mul(WX));
-    const nA = vnoiseD(p.mul(G.warp1F)).toVar();
-    const nB = vnoiseD(p.mul(G.warp2F).add(vec2(31.7, -11.3))).toVar();
+    const a = x.mul(WX).add(z.mul(WZ)).toVar();
+    const c = x.negate().mul(WZ).add(z.mul(WX)).toVar();
+    // warps sampled at (c F, a F warpAlong); their gradients in (c, a) are rotated back to (x, z)
+    const nA = vnoiseD(vec2(c.mul(G.warp1F), a.mul(G.warp1F * G.warpAlong))).toVar();
+    const nB = vnoiseD(vec2(c.mul(G.warp2F).add(31.7), a.mul(G.warp2F * G.warpAlong).sub(11.3))).toVar();
+    const n3 = vnoiseD(vec2(c.mul(G.warp3F).sub(19.4), a.mul(G.warp3F * G.warpAlong).add(23.9))).toVar();
     const wa = nA.x.mul(G.warp1A).add(nB.x.mul(G.warp2A)).toVar();
-    const gwa = nA.yz.mul(G.warp1A * G.warp1F).add(nB.yz.mul(G.warp2A * G.warp2F)).toVar();
+    const wac = nA.y.mul(G.warp1A * G.warp1F).add(nB.y.mul(G.warp2A * G.warp2F)).toVar();
+    const waa = nA.z.mul(G.warp1A * G.warp1F).add(nB.z.mul(G.warp2A * G.warp2F)).mul(G.warpAlong).toVar();
+    const gwa = vec2(wac.mul(-WZ).add(waa.mul(WX)), wac.mul(WX).add(waa.mul(WZ))).toVar();
+    const w3c = n3.y.mul(G.warp3A * G.warp3F), w3a = n3.z.mul(G.warp3A * G.warp3F * G.warpAlong);
     const nC = vnoiseD(p.mul(G.warp1F).add(vec2(57.1, 9.2))).toVar();
-    const n3 = vnoiseD(p.mul(G.warp3F).add(vec2(-19.4, 23.9))).toVar();
     const a2 = a.add(wa).add(n3.x.mul(G.warp3A)).toVar();
     const c2 = c.add(nC.x.mul(G.warp1A)).toVar();
-    const ga2 = vec2(WX, WZ).add(gwa).add(n3.yz.mul(G.warp3A * G.warp3F)).toVar();
+    const ga2 = vec2(WX, WZ).add(gwa).add(vec2(w3c.mul(-WZ).add(w3a.mul(WX)), w3c.mul(WX).add(w3a.mul(WZ)))).toVar();
     const gc2 = vec2(-WZ, WX).add(nC.yz.mul(G.warp1A * G.warp1F)).toVar();
     const nS = vnoiseD(p.mul(G.swellF).add(vec2(3.3, 7.7))).toVar();
-    const s = a2.div(G.L1).toVar();
-    const k = floor(s).toVar();
-    const t = s.sub(k);
-    const nAmp = vnoiseD(vec2(c2.mul(G.ampF), k.mul(0.731).add(0.5))).toVar();
-    const amp = nAmp.x.mul(0.5).add(0.5).mul(1.0 - G.ampBase).add(G.ampBase).mul(G.A1).toVar();
-    const gamp = gc2.mul(nAmp.y.mul(G.A1 * (1 - G.ampBase) * 0.5 * G.ampF)).toVar();
-    const nK = vnoiseD(vec2(c2.mul(G.roundF), k.mul(0.917).add(1.7))).toVar();
-    const kk = nK.x.mul(0.5).add(0.5).mul(G.roundHi - G.roundLo).add(G.roundLo).toVar();
-    const gkk = gc2.mul(nK.y.mul((G.roundHi - G.roundLo) * 0.5 * G.roundF)).toVar();
-    const pr = duneProfileD(t, kk).toVar();
-    const h1 = amp.mul(pr.x);
-    const gh1 = gamp.mul(pr.x).add(ga2.mul(pr.y.div(G.L1)).add(gkk.mul(pr.z)).mul(amp));
     const s2 = x.mul(W2X).add(z.mul(W2Z)).add(wa.mul(0.5)).div(G.L2).toVar();
     const k2 = floor(s2).toVar();
     const t2 = s2.sub(k2);
     const nA2 = vnoiseD(vec2(x.negate().mul(W2Z).add(z.mul(W2X)).mul(G.amp2F), k2.mul(0.613).add(2.5))).toVar();
     const amp2 = nA2.x.mul(0.5).add(0.5).mul(G.A2).toVar();
     const pr2 = duneProfileD(t2, float(G.round2)).toVar();
-    const h2 = amp2.mul(pr2.x);
-    const gh2 = vec2(-W2Z, W2X).mul(nA2.y.mul(G.A2 * 0.5 * G.amp2F).mul(pr2.x))
-      .add(vec2(W2X, W2Z).add(gwa.mul(0.5)).mul(pr2.y.mul(amp2).div(G.L2)));
-    return vec3(nS.x.mul(G.swellA).add(h1).add(h2), nS.yz.mul(G.swellA * G.swellF).add(gh1).add(gh2));
+    const d1 = vnoiseD(p.mul(G.det1F).add(vec2(1.3, -4.1))).toVar();
+    const bm = amp2.mul(pr2.x).add(d1.x.mul(G.det1A)).toVar();
+    const gbm = vec2(-W2Z, W2X).mul(nA2.y.mul(G.A2 * 0.5 * G.amp2F).mul(pr2.x))
+      .add(vec2(W2X, W2Z).add(gwa.mul(0.5)).mul(pr2.y.mul(amp2).div(G.L2)))
+      .add(d1.yz.mul(G.det1A * G.det1F)).toVar();
+    const k = floor(a2.div(G.L1)).toVar();
+    const nAmp = vnoiseD(vec2(c2.mul(G.ampF), k.mul(0.731).add(0.5))).toVar();
+    const amp = nAmp.x.mul(0.5).add(0.5).mul(1.0 - G.ampBase).add(G.ampBase).mul(G.A1).toVar();
+    const gamp = gc2.mul(nAmp.y.mul(G.A1 * (1 - G.ampBase) * 0.5 * G.ampF)).toVar();
+    const pr = slipProfileD(a2.sub(k.mul(G.L1)), amp, bm).toVar();
+    return vec3(nS.x.mul(G.swellA).add(pr.x),
+      nS.yz.mul(G.swellA * G.swellF).add(ga2.mul(pr.y)).add(gamp.mul(pr.z)).add(gbm.mul(pr.w)));
   }).setLayout({ name: 'heightLowD', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] });
 
   const height = Fn(([p]) => {
-    return heightLow(p)
-      .add(vnoise(p.mul(G.det1F).add(vec2(1.3, -4.1))).mul(G.det1A))
-      .add(vnoise(p.mul(G.det2F).add(vec2(-7.9, 2.2))).mul(G.det2A));
+    return heightLow(p).add(vnoise(p.mul(G.det2F).add(vec2(-7.9, 2.2))).mul(G.det2A));
   }).setLayout({ name: 'height', type: 'float', inputs: [{ name: 'p', type: 'vec2' }] });
 
   const heightD = Fn(([p]) => {
     const lo = heightLowD(p).toVar();
-    const d1 = vnoiseD(p.mul(G.det1F).add(vec2(1.3, -4.1))).toVar();
     const d2 = vnoiseD(p.mul(G.det2F).add(vec2(-7.9, 2.2))).toVar();
-    return vec3(lo.x.add(d1.x.mul(G.det1A)).add(d2.x.mul(G.det2A)),
-      lo.yz.add(d1.yz.mul(G.det1A * G.det1F)).add(d2.yz.mul(G.det2A * G.det2F)));
+    return vec3(lo.x.add(d2.x.mul(G.det2A)), lo.yz.add(d2.yz.mul(G.det2A * G.det2F)));
   }).setLayout({ name: 'heightD', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] });
 
   // ---------------------------------------------------------------- light, sky, air, output
@@ -233,57 +271,98 @@ export function createTslMaterials(values, opts, shadowTex) {
   // The functions below read uniforms, so they are inlined JavaScript helpers (no setLayout):
   // in r186 a uniform referenced inside a setLayout function is declared under the wrong name.
 
-  // relative azimuth of a view direction (radians, + to the right of the view heading)
-  const relAz = (rd) => {
-    const hd = normalize(rd.xz.add(vec2(1e-6, 0.0)));
-    return atan(dot(hd, U.uWallRight), dot(hd, U.uWallFwd));
-  };
-
-  // billows: smooth domes on domes, 0..1 (lit as a bumpy surface facing the viewer)
-  // each octave is rotated (and scaled) against the last so the value-noise lattice never lines up
-  const billow = (w) => {
-    const w2 = vec2(w.x.mul(1.7).sub(w.y.mul(1.2)), w.x.mul(1.2).add(w.y.mul(1.7))).add(vec2(5.2, 1.3));
-    const w3 = vec2(w2.x.mul(1.7).sub(w2.y.mul(1.2)), w2.x.mul(1.2).add(w2.y.mul(1.7))).add(vec2(1.7, 8.9));
-    return vnoise(w).mul(0.55).add(vnoise(w2).mul(0.3)).add(vnoise(w3).mul(0.15)).mul(0.5).add(0.5);
-  };
-
-  // The haboob: a sheet of dust at distance D, in metres on the sheet (X along, Y up).
-  // Returns colour and opacity.
-  const haboob = (rd) => {
+  // Where a view direction meets the haboob's front line: vec4(distance, s along the front, Y up the
+  // wall, cover). cover is 0 off the wall's ends, thinning over STORM.farFade at the far end.
+  const wallHit = (rd) => {
     const hd = normalize(rd.xz.add(vec2(1e-6, 0.0))).toVar();
-    const phi = atan(dot(hd, U.uWallRight), dot(hd, U.uWallFwd)).toVar();
-    const q = rd.y.div(max(length(rd.xz), 1e-3));
-    const D = U.uWallGeo.z, H0 = U.uWallGeo.w;
-    const X = phi.mul(D).toVar(), Y = q.mul(D).toVar();
-    const along = clamp(phi.sub(U.uWallGeo.x).div(U.uWallGeo.y), 0.0, 1.0).toVar();
-    const taper = pow(along, 1.4);
-    const top = H0.mul(taper).mul(float(1.0)
-      .add(vnoise(vec2(X.mul(STORM.topF[0]), 3.1)).mul(STORM.topA[0]))
-      .add(abs(vnoise(vec2(X.mul(STORM.topF[1]), 7.3))).mul(2.0).sub(1.0).mul(STORM.topA[1]))
-      .add(abs(vnoise(vec2(X.mul(STORM.topF[2]), 1.9))).mul(2.0).sub(1.0).mul(STORM.topA[2]))).toVar();
-    const wisp = vnoise(vec2(X, Y).div(38.0).add(vec2(2.0, 6.0))).mul(STORM.edgeSoft * 1.6);
-    const edge = top.sub(Y).add(wisp).toVar();
-    // the far (left) end is thin: the front recedes into haze there
-    const a = smoothstep(-STORM.edgeSoft, STORM.edgeSoft, edge).mul(smoothstep(0.0, STORM.endSoft, along)).toVar();
-    // lobes, lit from the side each sun is on and from above; creases between lobes stay dark
-    const w = vec2(X, Y.sub(X.mul(0.1))).mul(STORM.lobeF).toVar();
-    const B = billow(w).toVar();
-    const Bx = billow(w.add(vec2(0.12, 0.0)));
-    const By = billow(w.add(vec2(0.0, 0.12)));
-    const N = normalize(vec3(B.sub(Bx).mul(STORM.bump), B.sub(By).mul(STORM.bump), 1.0)).toVar();
-    const tng = vec2(hd.y.negate(), hd.x);
-    const yn = clamp(Y.div(max(top, 1.0)), -1.0, 1.2).toVar();
-    const vert = smoothstep(-0.2, 1.0, yn).toVar();
-    const occ = mix(0.45, 1.0, B);
-    const rimBand = exp(max(edge, 0.0).negate().div(STORM.edgeSoft * 2.2)).toVar();
+    const den = dot(hd, U.uWallN).toVar();
+    const d = U.uWallGeo.x.div(max(den, 1e-4)).toVar();
+    const s = dot(hd, U.uWallT).mul(d).toVar();
+    const Y = rd.y.div(max(length(rd.xz), 1e-3)).mul(d);
+    const cover = step(1e-4, den).mul(smoothstep(U.uWallGeo.y, U.uWallGeo.y.add(STORM.farFade), s))
+      .mul(clamp(U.uWallGeo.w.sub(s).div(300.0).add(0.5), 0.0, 1.0));
+    return vec4(d, s, Y, cover);
+  };
+
+  // One octave of domes in cell units: each cell holds a hemisphere of radius 0.75..1.0 at a
+  // jittered centre; a smooth maximum joins them, so neighbouring lobes meet in a narrow crease.
+  // Returns vec3(height 0..1, d/dp.x, d/dp.y).
+  const domes = Fn(([p]) => {
+    const ip = floor(p).toVar();
+    const best = float(0.0).toVar();
+    const g = vec2(0.0).toVar();
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) {
+        const cx = int(ip.x).add(int(i)).toVar(), cy = int(ip.y).add(int(j)).toVar();
+        const ctr = ip.add(vec2(i + 0.5, j + 0.5)).add(vec2(hash2(cx, cy), hash2(cx.add(int(57)), cy)).sub(0.5).mul(0.6));
+        const r = hash2(cx, cy.add(int(113))).mul(0.25).add(0.75);
+        const dv = p.sub(ctr).toVar();
+        const h = sqrt(max(r.mul(r).sub(dot(dv, dv)), 0.0)).toVar();
+        // smooth maximum: lobes meet in a narrow rounded crease
+        const m = clamp(h.sub(best).div(STORM.crease).mul(0.5).add(0.5), 0.0, 1.0).toVar();
+        g.assign(mix(g, dv.negate().div(max(h, 0.2)), m));
+        best.assign(mix(best, h, m).add(m.mul(float(1.0).sub(m)).mul(STORM.crease)));
+      }
+    }
+    return vec3(best, g);
+  }).setLayout({ name: 'domes', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] });
+
+  // cauliflower billows: octaves of domes, each rotated against the last. Returns vec3(B normalised
+  // to about 0..1, then the weighted dome slopes along s and Y: each dome's own slope, so a small
+  // lobe is as round as a big one and only its weight makes it shallower; w: the two largest octaves
+  // alone, which shape the top edge, so fine lobes never float off it as specks).
+  const BROT = [0.5, 1.33, 2.21, 3.12], BOFF = [[0, 0], [5.2, 1.3], [1.7, 8.9], [8.3, 2.8]];
+  const BSUM = STORM.bAmp.reduce((x, y) => x + y, 0);
+  const billows = (S, Y) => {
+    const acc = vec4(0.0).toVar();
+    for (let i = 0; i < STORM.bScale.length; i++) {
+      const c = Math.cos(BROT[i]), sn = Math.sin(BROT[i]), k = 1 / STORM.bScale[i], A = STORM.bAmp[i] / BSUM;
+      const n = domes(vec2(S.mul(c * k).sub(Y.mul(sn * k)).add(BOFF[i][0]), S.mul(sn * k).add(Y.mul(c * k)).add(BOFF[i][1]))).toVar();
+      acc.addAssign(vec4(n.x.mul(A), n.y.mul(c).add(n.z.mul(sn)).mul(A), n.z.mul(c).sub(n.y.mul(sn)).mul(A), i < 2 ? n.x.mul(A) : float(0.0)));
+    }
+    return acc;
+  };
+
+  // The haboob: a wall standing on its front line, in metres on the wall. Returns colour and cover.
+  const haboob = (rd) => {
+    const w = wallHit(rd).toVar();
+    const d = w.x, S = w.y, Y = w.z.toVar();
+    const H = vnoise(vec2(S.mul(STORM.topF[0]), 3.1)).mul(STORM.topA[0])
+      .add(vnoise(vec2(S.mul(STORM.topF[1]), 7.3)).mul(STORM.topA[1])).add(1.0).mul(U.uWallGeo.z)
+      .mul(smoothstep(U.uWallGeo.y, U.uWallGeo.y.add(STORM.farFade), S).mul(0.45).add(0.55)).toVar(); // lower toward the far end
+    // one pixel in metres on the wall, taken before any branch (derivatives need uniform control flow)
+    const px = length(fwidth(rd)).mul(d).div(max(length(rd.xz), 1e-3)).toVar();
+    // billows only where the wall can show; below its foot the skirt covers everything
+    const B = vec4(0.5, 0.0, 0.0, 0.4).toVar();
+    If(Y.greaterThan(-STORM.skirtH * 0.5).and(w.w.greaterThan(0.0)), () => { B.assign(billows(S, Y.mul(STORM.bFlat))); });
+    B.z.assign(B.z.mul(STORM.bFlat));
+    // signed metres inside the wall's top edge; the billows push the edge in and out at every scale
+    const e = H.sub(Y).add(B.w.sub(0.4).mul(STORM.bulge)).toVar();
+    // crisp: the edge is antialiased over one pixel, whatever the distance
+    const a = clamp(e.div(max(px, 1e-3)).add(0.5), 0.0, 1.0).mul(w.w).toVar();
+    // the rolling nose: a roll of billows along the base, lit on top, with a dark crease above it
+    const Yr = vnoise(vec2(S.div(170.0), 5.5)).mul(0.3).add(1.0).mul(STORM.shelfY).toVar();
+    const below = step(Y, Yr);
+    const shelfTilt = below.mul(exp(max(Yr.sub(Y), 0.0).negate().div(30.0))).mul(1.3);
+    const crease = float(1.0).sub(float(1.0).sub(below).mul(exp(max(Y.sub(Yr), 0.0).negate().div(28.0))).mul(0.25));
+    // normal in the wall's frame (x along the front toward its near end, y up, z toward the camera);
+    // the top rounds over toward the sky so the upper lobes catch light
+    const tilt = exp(max(e, 0.0).negate().div(STORM.tiltR)).mul(STORM.tilt).add(shelfTilt);
+    const N = normalize(vec3(B.y.mul(-STORM.depth), B.z.mul(-STORM.depth).add(tilt), 1.0)).toVar();
+    const occ = smoothstep(0.12, 0.72, B.x).mul(1.0 - STORM.occLo).add(STORM.occLo).mul(crease).toVar();
+    const dens = smoothstep(0.0, H.mul(0.7), Y).mul(0.65).add(0.35).toVar(); // darker, denser low
+    const rimBand = exp(max(e, 0.0).negate().div(STORM.rimW)).toVar();
     const lit = (L, C) => {
-      const Lw = normalize(vec3(dot(L.xz, tng), max(L.y, 0.0).add(0.45), dot(L.xz, hd).negate()));
-      const face = clamp(dot(N, Lw).mul(0.6).add(0.4), 0.0, 1.0);
-      const behind = max(dot(L.xz, hd), 0.0);
-      const rim = rimBand.mul(behind).mul(pow(max(dot(rd, L), 0.0), 6.0)).mul(2.2);
-      return C.mul(face.mul(vert).mul(vert).mul(occ).add(rim));
+      const Lw = vec3(dot(L.xz, U.uWallT), L.y, dot(L.xz, U.uWallN).negate()).toVar();
+      const diff = max(dot(N, Lw).add(STORM.wrap).div(1.0 + STORM.wrap), 0.0);
+      const rim = rimBand.mul(max(Lw.z.negate(), 0.0)).mul(pow(max(dot(rd, L), 0.0), 4.0)).mul(3.0);
+      return C.mul(diff.mul(occ).mul(dens.mul(0.5).add(0.5)).add(rim));
     };
-    const col = U.uWallBase.mul(mix(0.6, 1.6, vert)).mul(B.mul(0.6).add(0.7)).add(lit(U.uSun1Dir, U.uWallSun1)).add(lit(U.uSun2Dir, U.uWallSun2));
+    const col = U.uWallBase.mul(dens).mul(B.x.mul(0.5).add(0.75)).mul(crease)
+      .add(lit(U.uSun1Dir, U.uWallSun1)).add(lit(U.uSun2Dir, U.uWallSun2)).toVar();
+    // haze between camera and wall, and the skirt: the base dissolves into the dust over the ground
+    col.assign(mix(col, U.uHorizon, float(1.0).sub(exp(d.mul(-STORM.aerial)))));
+    col.assign(mix(col, U.uHorizon.mul(0.85), float(1.0).sub(smoothstep(-10.0, STORM.skirtH, Y))));
     return vec4(col, a);
   };
 
@@ -304,13 +383,15 @@ export function createTslMaterials(values, opts, shadowTex) {
   // distance + height fog; in the storm the distance part thickens toward the wall and the ground
   // beyond the wall's foot is inside it
   const fogAmount = (ro, rd, dist) => {
-    const wallSide = smoothstep(U.uWallGeo.x, U.uWallGeo.x.add(U.uWallGeo.y.mul(0.8)), relAz(rd)).mul(U.uStorm).toVar();
+    const w = wallHit(rd).toVar();
+    const wallSide = w.w.mul(U.uStorm).toVar();
     const dens = mix(U.uFog.x, U.uStormFog.y, wallSide).mul(dist).toVar();
     const k = U.uFog.z;
     const ry = max(rd.y.mul(k).mul(dist), -20.0).toVar();
     const fr = select(abs(ry).lessThan(1e-4), float(1.0).sub(ry.mul(0.5)), float(1.0).sub(exp(ry.negate())).div(ry));
     dens.addAssign(U.uFog.y.mul(exp(ro.y.sub(U.uFog.w).mul(k).negate())).mul(dist).mul(fr));
-    return max(float(1.0).sub(exp(dens.negate())), wallSide.mul(smoothstep(U.uStormFog.z, U.uStormFog.w, dist)));
+    // ground toward the wall's foot disappears into its skirt; beyond the foot it is inside the wall
+    return max(float(1.0).sub(exp(dens.negate())), wallSide.mul(smoothstep(w.x.mul(0.25), w.x.mul(0.97), dist)));
   };
 
   // blowing sand: densest in the lowest half metre, following the ground; downwind of a crest the
@@ -330,40 +411,47 @@ export function createTslMaterials(values, opts, shadowTex) {
     return r.mul(r).mul(float(3.0).sub(r.mul(2.0)));
   };
 
-  // With the shadow map on, the ground height and the spill height come from its B and A channels
-  // (baked once with the shadows); otherwise from the formula, two evaluations per sample.
-  const sandDensity = (q) => {
-    const sw = U.uStormWind;
-    const a = dot(q.xz, sw).toVar(), c = dot(q.xz, vec2(sw.y.negate(), sw.x)).toVar();
-    const hg = float(0.0).toVar(), href = float(0.0).toVar();
-    if (opts.shadows === 'map') {
-      const m = textureLevel(shadowTex, shadowUV(q.xz), float(0.0)).toVar();
-      hg.assign(m.z); href.assign(m.w);
-    } else {
-      hg.assign(height(q.xz));
-      href.assign(max(hg, height(q.xz.sub(sw.mul(STORM.spill))).sub(STORM.spill * STORM.spillDrop)));
-    }
-    const above = q.y.sub(href);
-    const cs = c.add(vnoise(vec2(a.mul(STORM.snakeF), c.mul(0.02).add(4.0))).mul(STORM.snakeA));
-    const streak = smoothstep(0.2, 0.65, vnoise(vec2(a.mul(STORM.alongF), cs.mul(STORM.acrossF))));
-    // broad sheets come and go but never vanish, so there is always some sand moving
-    const sheet = smoothstep(-0.8, 0.5, vnoise(vec2(a, c).mul(STORM.sheetF).add(vec2(2.0, 9.0)))).mul(0.7).add(0.3).toVar();
-    const hs = sheet.mul(0.8).add(0.6).mul(STORM.sandH);
-    return step(-0.05, q.y.sub(hg)).mul(exp(max(above, 0.0).negate().div(hs))).mul(sheet).mul(streak.mul(0.94).add(0.06));
+  // the low haze of blowing sand: an exponential layer above a base height, integrated in closed
+  // form along the last len metres of the ray (looking down, the layer is densest at the far end)
+  const sandHaze = (rd, len, aboveBase) => {
+    const ky = max(rd.y.negate(), 1e-3).div(STORM.hazeH).toVar();
+    const L = min(len, STORM.hazeMax);
+    return float(1.0).sub(exp(exp(aboveBase.negate().div(STORM.hazeH)).mul(float(1.0).sub(exp(ky.negate().mul(L)))).div(ky).mul(-STORM.hazeRho)));
   };
 
-  const blowingSand = (ro, rd, tEnd) => {
-    const tau = float(0.0).toVar();
-    const t1 = clamp(tEnd, STORM.sandNear * 1.01, STORM.sandFar).toVar();
-    const lr = log(t1.div(STORM.sandNear)).toVar();
-    const j = hash2(int(screenCoordinate.x).add(int(7)), int(screenCoordinate.y).add(int(3))).toVar();
-    Loop(STORM.sandSteps, ({ i }) => {
-      const f = float(i).add(j).div(STORM.sandSteps);
-      const t = exp(lr.mul(f)).mul(STORM.sandNear).toVar();
-      const dt = t.mul(lr).div(STORM.sandSteps);
-      tau.addAssign(sandDensity(ro.add(rd.mul(t))).mul(STORM.sandTau).mul(dt).mul(step(t, t1)));
-    });
-    return float(1.0).sub(exp(tau.negate()));
+  // streamers on the ground: iso-lines of a meandering noise stretched along the storm wind.
+  // One family: the distance to a level line is measured in metres (|n - level| / |grad n|), so a
+  // strand keeps its width where the noise flattens out; it fades to its mean once a pixel is wider.
+  const ribFamily = (ra, cm, F, px, seed) => {
+    const nd = vnoiseD(vec2(ra.div(F.along), cm.div(F.across)).add(vec2(seed, seed * 1.7))).toVar();
+    const gm = max(length(vec2(nd.y.div(F.along), nd.z.div(F.across))), 1e-3).toVar();
+    const line = (lvl) => {
+      const dm = abs(nd.x.sub(lvl)).div(gm);
+      const core = float(1.0).sub(smoothstep(px.mul(-0.5).add(F.w), px.mul(0.5).add(F.w), dm));
+      const halo = float(1.0).sub(smoothstep(0.0, px.add(F.w * STORM.ribHalo), dm)).mul(0.3);
+      return max(core, halo);
+    };
+    let lines = line(F.levels[0]);
+    for (let i = 1; i < F.levels.length; i++) lines = max(lines, line(F.levels[i]));
+    // only where a line runs along the wind: where a level line turns back it would draw a hook
+    const align = smoothstep(0.86, 0.97, abs(nd.z.div(F.across)).div(gm));
+    // strands break up along their length
+    const brk = smoothstep(-0.45, 0.35, vnoise(vec2(ra.div(F.brk), cm.div(F.across).mul(0.9)).add(vec2(3.0 + seed, 1.0))));
+    return mix(lines.mul(brk).mul(align), float(STORM.ribMean), smoothstep(F.w * 0.8, F.w * 3.0, px)).mul(F.a);
+  };
+  const ribbons = (xz, grad, dist, fw) => {
+    const sw = U.uStormWind;
+    const ra = dot(xz, sw).toVar(), rc = dot(xz, vec2(sw.y.negate(), sw.x)).toVar();
+    const cm = rc.add(vnoise(vec2(ra.mul(STORM.ribMeanderF), rc.mul(0.05).add(4.0))).mul(STORM.ribMeanderA))
+      .add(vnoise(vec2(ra.mul(STORM.ribMeanderF * 3.7), rc.mul(0.21).add(9.0))).mul(STORM.ribMeanderA * 0.3)).toVar();
+    const px = fw.mul(0.7).toVar();
+    // the broad sheets give way to the fine strands near the feet, where they would read as stripes
+    const r = max(ribFamily(ra, cm, STORM.ribFine, px, 0.0), ribFamily(ra, cm.add(rc.mul(0.15)), STORM.ribBroad, px, 13.0).mul(smoothstep(3.0, 12.0, dist)));
+    const gust = smoothstep(-0.5, 0.45, vnoise(vec2(ra, rc).mul(STORM.ribGustF).add(vec2(7.0, 3.0)))).mul(0.65).add(0.35);
+    // the wind keeps sand moving over gentle ground either way; only a steep lee (a slip face turned
+    // away from the wind) is sheltered
+    const expo = float(1.0).sub(smoothstep(0.25, 0.5, dot(grad, sw).negate()).mul(0.85));
+    return r.mul(gust).mul(expo).mul(float(1.0).sub(smoothstep(STORM.ribFar * 0.45, STORM.ribFar, dist))).mul(STORM.ribGain);
   };
 
   // the colour of the sand in the air: each sun that reaches the ground, scattered forward
@@ -432,11 +520,10 @@ export function createTslMaterials(values, opts, shadowTex) {
     } else {
       // analytic gradient; the 11 m undulation's slope fades once a pixel spans metres (it would alias)
       const lo = heightLowD(xz).toVar();
-      const d1 = vnoiseD(xz.mul(G.det1F).add(vec2(1.3, -4.1))).toVar();
       const d2 = vnoiseD(xz.mul(G.det2F).add(vec2(-7.9, 2.2))).toVar();
-      h0.assign(lo.x.add(d1.x.mul(G.det1A)).add(d2.x.mul(G.det2A)));
+      h0.assign(lo.x.add(d2.x.mul(G.det2A)));
       const fade2 = float(1.0).sub(smoothstep(1.5, 5.0, fw));
-      grad.assign(lo.yz.add(d1.yz.mul(G.det1A * G.det1F)).add(d2.yz.mul(fade2.mul(G.det2A * G.det2F))));
+      grad.assign(lo.yz.add(d2.yz.mul(fade2.mul(G.det2A * G.det2F))));
     }
     const sp = vec3(xz.x, h0, xz.y).toVar();
 
@@ -488,7 +575,8 @@ export function createTslMaterials(values, opts, shadowTex) {
     const fogCol = mix(skyColor(rd, float(0.0)), U.uFogCol, U.uFogColMix.mul(0.6));
     col.assign(mix(col, fogCol, fog));
     If(U.uStorm.greaterThan(0.5), () => {
-      col.assign(mix(col, sandColor(rd), blowingSand(ro, rd, dist)));
+      col.assign(mix(col, mix(sandColor(rd), vec3(dot(sandColor(rd), vec3(0.3333))), 0.25).mul(1.1), clamp(ribbons(xz, grad, dist, fw), 0.0, 1.0)));
+      col.assign(mix(col, sandColor(rd), sandHaze(rd, dist, float(0.0))));
     });
 
     return vec4(finish(col), 1.0);
@@ -501,7 +589,9 @@ export function createTslMaterials(values, opts, shadowTex) {
     const rd = normalize(positionWorld.sub(ro)).toVar();
     const col = skyColor(rd, float(1.0)).toVar();
     If(U.uStorm.greaterThan(0.5), () => {
-      col.assign(mix(col, sandColor(rd), blowingSand(ro, rd, float(1e5))));
+      // seen from the eye the layer is 1.7 m down; at the horizon the sky meets far ground seen through
+      // the bottom of the layer, so the base eases to 0 there and the two join without a line
+      col.assign(mix(col, sandColor(rd), sandHaze(rd.mul(-1.0), float(1e5), smoothstep(0.0, 0.04, rd.y).mul(CAM.eye))));
     });
     return vec4(finish(col), 1.0);
   })();
@@ -520,15 +610,9 @@ export function createTslMaterials(values, opts, shadowTex) {
     const n = normalize(vec3(hd.y.negate(), 1.0, hd.z.negate()));
     const p = vec3(xz.x, hd.x, xz.y).add(n.mul(SH.lift)).toVar();
     const s1 = float(-8.0).toVar(), s2 = float(-8.0).toVar();
-    // B: the ground height; A: the height blowing sand rides at (a crest's height carried a few
-    // metres downwind of it). Only the storm uses them, and only a storm target has B and A.
-    const href = hd.x.toVar();
-    If(U.uStorm.greaterThan(0.5), () => {
-      href.assign(max(hd.x, height(xz.sub(U.uStormWind.mul(STORM.spill))).sub(STORM.spill * STORM.spillDrop)));
-    });
     If(U.uSun1Col.x.add(U.uSun1Col.y).add(U.uSun1Col.z).greaterThan(0.0), () => { s1.assign(horizonMarch(p, U.uSun1Dir, float(1.0).div(tan(max(U.uSun1Sky.w.mul(SH.penumbra), 0.002))))); });
     If(U.uSun2Col.x.add(U.uSun2Col.y).add(U.uSun2Col.z).greaterThan(0.0), () => { s2.assign(horizonMarch(p, U.uSun2Dir, float(1.0).div(tan(max(U.uSun2Sky.w.mul(SH.penumbra), 0.002))))); });
-    return vec4(s1, s2, hd.x, href);
+    return vec4(s1, s2, 0.0, 1.0);
   })();
 
   // ---------------------------------------------------------------- probe materials

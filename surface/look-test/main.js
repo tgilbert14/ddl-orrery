@@ -12,8 +12,10 @@
 //   bake=once (default; a still bakes once) | every (bench only: re-bake before every frame)
 //        | sliceN (bench only: bake one Nth of the map's rows before every frame, the cost of a
 //          re-bake spread over N frames)
+//   aa=0 (round three, cost only): no MSAA, to see what antialiasing costs each renderer
+//   grid=N, shmap=WxH, heading=deg, stand=x,z,r, sun1/sun2=relAz,elev: tuning overrides
 
-import { CAM, GRID, SKY, SHMAP, TIMES, WEATHERS, DEG, lookUniforms } from './params.js';
+import { CAM, GRID, SKY, SHMAP, TIMES, WEATHERS, VIEWS, DEG, lookUniforms } from './params.js';
 import { height, heightLow, heightD, findCrest, WIND } from './height.js';
 import { createGlslMaterials } from './glsl-material.js';
 
@@ -116,6 +118,8 @@ async function run() {
     bakeSlices: /^slice(\d+)$/.test(q.get('bake') || '') ? +q.get('bake').slice(5) : 0,
   };
   // shmap=WxH overrides the shadow-map size (for measuring the bake cost against edge quality)
+  // grid=N overrides the number of grid segments around the camera (for measuring mesh cost)
+  if (/^\d{3,4}$/.test(q.get('grid') || '')) GRID.segments = +q.get('grid');
   const shm = /^(\d{3,4})x(\d{3,4})$/.exec(q.get('shmap') || '');
   if (shm) { SHMAP.w = +shm[1]; SHMAP.h = +shm[2]; }
   if (!RENDERERS.includes(rName) || !TIMES[time] || !WEATHERS[weather]
@@ -128,26 +132,37 @@ async function run() {
   // ---- where to stand: the JS height formula picks a crest and puts the eye 1.7 m above it
   // Stand CAM.back metres upwind of the crest top, on the windward slope: from the brink itself
   // the 31 degree slipface falls away faster than the lowest ray in frame and no near sand shows.
-  const top = findCrest();
+  // a look may stand on another crest (VIEWS[look].stand = [cx, cz, search radius]); stand=cx,cz,r
+  // overrides it (tuning only)
+  const sm = /^(-?[\d.]+),(-?[\d.]+),([\d.]+)$/.exec(q.get('stand') || '');
+  const view = VIEWS[`${time}/${weather}`] || {};
+  const stand = sm ? [+sm[1], +sm[2], +sm[3]] : view.stand;
+  const top = stand ? findCrest(stand[0], stand[1], stand[2]) : findCrest();
   const sx = top.x - WIND[0] * CAM.back, sz = top.z - WIND[1] * CAM.back;
   const crest = { x: sx, z: sz, h: height(sx, sz) };
   const eye = [crest.x, crest.h + CAM.eye, crest.z];
-  // sun1=relAz,elev / sun2=relAz,elev: tuning overrides (degrees, relative to the view heading)
+  // a look's own sun placement (VIEWS), then sun1=relAz,elev / sun2=relAz,elev: tuning overrides
+  // (degrees, relative to the view heading)
+  for (const k of ['sun1', 'sun2']) if (view[k]) Object.assign(TIMES[time][k], view[k]);
   for (const k of ['sun1', 'sun2']) {
     const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(q.get(k) || '');
     if (m) Object.assign(TIMES[time][k], { relAz: +m[1], elev: +m[2] });
   }
-  const values = lookUniforms(time, weather, CAM.headingDeg);
+  // the view heading: a look may set its own (VIEWS); heading=deg overrides (tuning only)
+  const headingDeg = /^-?[\d.]+$/.test(q.get('heading') || '') ? +q.get('heading') : (view.headingDeg ?? CAM.headingDeg);
+  const pitchDeg = view.pitchDeg ?? CAM.pitchDeg;
+  const values = lookUniforms(time, weather, headingDeg);
+  if (view.exposure) values.uExposure = view.exposure;
   values.uGroundY = crest.h;
   values.uFog = [values.uFog[0], values.uFog[1], values.uFog[2], crest.h];
 
   // ---- renderer: load only the build this path needs
   let THREE, renderer, mats, backend, shadowRT = null;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  // the shadow map: half floats, one horizon value per sun (RG); a storm adds the ground and spill
-  // heights the blowing sand reads (RGBA). Bearing wraps around, distance clamps.
+  // the shadow map: half floats, one horizon value per sun (RG). Round three: the storm no longer
+  // adds ground and spill heights (its sand is drawn on the ground). Bearing wraps around, distance clamps.
   const makeShadowRT = (RT) => {
-    const format = weather === 'storm' ? THREE.RGBAFormat : THREE.RGFormat;
+    const format = THREE.RGFormat;
     const rt = new RT(SHMAP.w, SHMAP.h, { depthBuffer: false, generateMipmaps: false, type: THREE.HalfFloatType, format });
     rt.texture.type = THREE.HalfFloatType; rt.texture.format = format;
     rt.texture.minFilter = THREE.LinearFilter; rt.texture.magFilter = THREE.LinearFilter;
@@ -157,14 +172,14 @@ async function run() {
   try {
     if (rName === 'classic') {
       THREE = await import('three');
-      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer = new THREE.WebGLRenderer({ antialias: q.get('aa') !== '0', powerPreference: 'high-performance' });
       if (opts.shadows === 'map') shadowRT = makeShadowRT(THREE.WebGLRenderTarget);
       mats = createGlslMaterials(THREE, values, opts, shadowRT?.texture ?? null);
       backend = 'WebGL2 (classic WebGLRenderer, GLSL)';
     } else {
       THREE = await import('three/webgpu');
       const { createTslMaterials } = await import('./tsl-material.js');
-      renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: rName === 'webgl2', powerPreference: 'high-performance' });
+      renderer = new THREE.WebGPURenderer({ antialias: q.get('aa') !== '0', forceWebGL: rName === 'webgl2', powerPreference: 'high-performance' });
       await renderer.init();
       if (opts.shadows === 'map') shadowRT = makeShadowRT(THREE.RenderTarget);
       mats = createTslMaterials(values, opts, shadowRT?.texture ?? null);
@@ -199,13 +214,13 @@ async function run() {
   scene.add(sky, ground);
 
   const aspect = window.innerWidth / window.innerHeight;
-  const camera = new THREE.PerspectiveCamera(aspect < 1 ? CAM.vfovPortrait : CAM.vfov, aspect, CAM.near, CAM.far);
+  const camera = new THREE.PerspectiveCamera(aspect < 1 ? (view.vfovPortrait ?? CAM.vfovPortrait) : (view.vfov ?? CAM.vfov), aspect, CAM.near, CAM.far);
   camera.position.set(...eye);
   const aim = (headingDeg) => {
-    const h = headingDeg * DEG, p = CAM.pitchDeg * DEG;
+    const h = headingDeg * DEG, p = pitchDeg * DEG;
     camera.lookAt(eye[0] + Math.cos(h) * Math.cos(p), eye[1] + Math.sin(p), eye[2] + Math.sin(h) * Math.cos(p));
   };
-  aim(CAM.headingDeg);
+  aim(headingDeg);
   const isGPU = renderer.backend?.isWebGPUBackend === true;
   const gl = rName === 'classic' ? renderer.getContext() : (isGPU ? null : renderer.backend.gl);
   const px = new Uint8Array(4);
@@ -257,7 +272,7 @@ async function run() {
     canvas: [renderer.domElement.width, renderer.domElement.height],
     css: [window.innerWidth, window.innerHeight],
     dpr,
-    camera: { x: +eye[0].toFixed(2), y: +eye[1].toFixed(3), z: +eye[2].toFixed(2), headingDeg: CAM.headingDeg, vfov: camera.fov },
+    camera: { x: +eye[0].toFixed(2), y: +eye[1].toFixed(3), z: +eye[2].toFixed(2), headingDeg, vfov: camera.fov },
     grid: { vertices: grid.vertices, triangles: grid.triangles },
   });
 
@@ -274,7 +289,7 @@ async function run() {
     const frame = (i) => {
       if (opts.bakeEvery && shadowRT) bake(eye[0], eye[2]);
       if (opts.bakeSlices && shadowRT) bakeSlice(i % opts.bakeSlices, opts.bakeSlices);
-      aim(CAM.headingDeg + (i % 40) * 0.01); renderer.render(scene, camera);
+      aim(headingDeg + (i % 40) * 0.01); renderer.render(scene, camera);
     };
     for (let i = 0; i < WARM; i++) frame(i);
     await gpuFinish();
@@ -306,7 +321,7 @@ async function run() {
     }
   }
 
-  aim(CAM.headingDeg);
+  aim(headingDeg);
   renderer.render(scene, camera);
   await gpuFinish();
   await nextFrame(); await nextFrame();

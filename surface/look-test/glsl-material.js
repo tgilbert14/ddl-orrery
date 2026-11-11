@@ -1,15 +1,43 @@
 // Classic WebGLRenderer path: the Dust Sea ground, sky, shadow-map bake and probes as GLSL ES 3.00
 // ShaderMaterials. The maths mirrors height.js and tsl-material.js function for function, in order:
-//   hash2 -> vnoise -> vnoiseD -> duneProfile -> duneProfileD -> heightLow -> heightLowD
-//   -> height -> heightD                                                (ground formula)
-//   shadowMarch -> horizonMarch -> sunSky -> starField -> haboob -> skyColor -> fogAmount
-//   -> sandDensity -> blowingSand -> sunOnSand -> aces -> srgbEncode   (light, sky, air, output)
+//   hash2 -> vnoise -> vnoiseD -> duneProfile -> duneProfileD -> slipProfileD -> slipProfile
+//   -> heightLow -> heightLowD -> height -> heightD                                                (ground formula)
+//   shadowMarch -> horizonMarch -> sunSky -> starField -> wallHit -> domes -> haboob -> skyColor -> fogAmount
+//   -> sandHaze -> ribbons -> sunOnSand -> aces -> srgbEncode          (light, sky, air, output)
 // Every constant comes from params.js through the #define block below. The debug switches
 // (opts: shadows, normal, ripples) become #defines too; see tsl-material.js for their meaning.
 
-import { G, SH, SHMAP, SKY, SAND, STORM, GRID, DEG, UNIFORM_TYPES } from './params.js';
+import { G, SH, SHMAP, SKY, SAND, STORM, GRID, CAM, DEG, UNIFORM_TYPES } from './params.js';
 
 const f = (x) => { const s = String(x); return /[.eE]/.test(s) ? s : s + '.0'; };
+
+// the billow octaves, unrolled with their constants (same rotations and offsets as tsl-material.js)
+const BROT = [0.5, 1.33, 2.21, 3.12], BOFF = [[0, 0], [5.2, 1.3], [1.7, 8.9], [8.3, 2.8]];
+// the 3 x 3 dome cells, unrolled as tsl-material.js unrolls them (measured: no change in frame time
+// against the nested loop on this Mac; kept so the two paths have the same shape)
+function domeCells() {
+  const out = [];
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+    out.push(`  { int cx = int(ip.x) + (${i}), cy = int(ip.y) + (${j});
+    vec2 ctr = ip + vec2(${f(i + 0.5)}, ${f(j + 0.5)}) + (vec2(hash2(cx, cy), hash2(cx + 57, cy)) - 0.5) * 0.6;
+    float r = hash2(cx, cy + 113) * 0.25 + 0.75;
+    vec2 dv = p - ctr;
+    float h = sqrt(max(r * r - dot(dv, dv), 0.0));
+    float m = clamp((h - best) / CREASE * 0.5 + 0.5, 0.0, 1.0);
+    g = mix(g, -dv / max(h, 0.2), m);
+    best = mix(best, h, m) + m * (1.0 - m) * CREASE; }`);
+  }
+  return out.join('\n');
+}
+
+function billowOctaves() {
+  const sum = STORM.bAmp.reduce((x, y) => x + y, 0);
+  return STORM.bScale.map((sc, i) => {
+    const c = f(Math.cos(BROT[i])), sn = f(Math.sin(BROT[i])), k = f(1 / sc), A = f(STORM.bAmp[i] / sum);
+    return `  { vec3 n = domes(vec2(S * (${c} * ${k}) - Y * (${sn} * ${k}) + ${f(BOFF[i][0])}, S * (${sn} * ${k}) + Y * (${c} * ${k}) + ${f(BOFF[i][1])}));
+    acc += vec4(n.x, n.y * ${c} + n.z * ${sn}, n.z * ${c} - n.y * ${sn}, ${i < 2 ? 'n.x' : '0.0'}) * ${A}; }`;
+  }).join('\n');
+}
 
 function defines(opts) {
   const W = [Math.cos(G.windDeg * DEG), Math.sin(G.windDeg * DEG)];
@@ -19,7 +47,9 @@ function defines(opts) {
     WARP1F: G.warp1F, WARP1A: G.warp1A, WARP2F: G.warp2F, WARP2A: G.warp2A, WARP3F: G.warp3F, WARP3A: G.warp3A,
     SWELLF: G.swellF, SWELLA: G.swellA,
     L1: G.L1, A1: G.A1, AMPBASE: G.ampBase, AMPF: G.ampF, CREST: G.crest,
-    ROUNDLO: G.roundLo, ROUNDHI: G.roundHi, ROUNDF: G.roundF,
+    ROUNDLO: G.roundLo, ROUNDHI: G.roundHi, WARPALONG: G.warpAlong,
+    XC: G.crest * G.L1, WINDK: G.windK, APRONF: G.apronF, LEE_T: Math.tan(G.leeDeg * DEG),
+    KB_SLOPE: (G.roundLo - G.roundHi) / (G.A1 * (1 - G.ampBase)),
     L2: G.L2, A2: G.A2, AMP2F: G.amp2F, ROUND2: G.round2,
     DET1F: G.det1F, DET1A: G.det1A, DET2F: G.det2F, DET2A: G.det2A,
     RIPL: G.ripL, RIPSLOPE: G.ripSlope, RIPAMPF: G.ripAmpF, RIPWARPF: G.ripWarpF, RIPWARPA: G.ripWarpA,
@@ -31,16 +61,20 @@ function defines(opts) {
     SKY_K: SKY.k, STAR_SCALE: SKY.starScale, STAR_THRESH: SKY.starThresh, STAR_SIZE: SKY.starSize,
     RETRO: SAND.retro, SHEEN: SAND.sheen, FWD: SAND.fwd, SHEENPOW: SAND.sheenPow,
     AOLO: SAND.aoLo,
-    TOPF0: STORM.topF[0], TOPF1: STORM.topF[1], TOPF2: STORM.topF[2],
-    TOPA0: STORM.topA[0], TOPA1: STORM.topA[1], TOPA2: STORM.topA[2],
-    LOBEF: STORM.lobeF, EDGESOFT: STORM.edgeSoft, ENDSOFT: STORM.endSoft, BUMP: STORM.bump,
-    SAND_NEAR: STORM.sandNear, SAND_FAR: STORM.sandFar, SAND_H: STORM.sandH, SAND_TAU: STORM.sandTau,
-    SPILL: STORM.spill, SPILLDROP: STORM.spillDrop, ALONGF: STORM.alongF, ACROSSF: STORM.acrossF,
-    SNAKEF: STORM.snakeF, SNAKEA: STORM.snakeA, SHEETF: STORM.sheetF, SAND_STEPSF: STORM.sandSteps,
+    TOPF0: STORM.topF[0], TOPF1: STORM.topF[1], TOPA0: STORM.topA[0], TOPA1: STORM.topA[1],
+    BULGE: STORM.bulge, DEPTH: STORM.depth, TILT: STORM.tilt, TILTR: STORM.tiltR, OCCLO: STORM.occLo,
+    RIMW: STORM.rimW, WRAPW: STORM.wrap, BFLAT: STORM.bFlat, CREASE: STORM.crease, FARFADE: STORM.farFade, SHELFY: STORM.shelfY, SKIRTH: STORM.skirtH, AERIAL: STORM.aerial,
+    RF_ALONG: STORM.ribFine.along, RF_ACROSS: STORM.ribFine.across, RF_W: STORM.ribFine.w, RF_BRK: STORM.ribFine.brk, RF_A: STORM.ribFine.a,
+    RF_L0: STORM.ribFine.levels[0], RF_L1: STORM.ribFine.levels[1], RF_L2: STORM.ribFine.levels[2],
+    RB_ALONG: STORM.ribBroad.along, RB_ACROSS: STORM.ribBroad.across, RB_W: STORM.ribBroad.w, RB_BRK: STORM.ribBroad.brk, RB_A: STORM.ribBroad.a,
+    RB_L0: STORM.ribBroad.levels[0], RB_L1: STORM.ribBroad.levels[1],
+    RIB_MF: STORM.ribMeanderF, RIB_MA: STORM.ribMeanderA, RIB_MEAN: STORM.ribMean, RIB_HALO: STORM.ribHalo,
+    RIB_GAIN: STORM.ribGain, RIB_GF: STORM.ribGustF, RIB_FAR: STORM.ribFar,
+    HAZE_RHO: STORM.hazeRho, HAZE_H: STORM.hazeH, HAZE_MAX: STORM.hazeMax, CAM_EYE: CAM.eye,
     GRID_RMAX: GRID.rMax,
   };
   return Object.entries(d).map(([k, v]) => `#define ${k} ${f(v)}`).join('\n') +
-    `\n#define SH_STEPS ${SH.steps}\n#define SAND_STEPS ${STORM.sandSteps}\n` +
+    `\n#define SH_STEPS ${SH.steps}\n` +
     `#define SHADOWS_${opts.shadows.toUpperCase()} 1\n` +
     (opts.normal === 'fd' ? '#define NORMAL_FD 1\n' : '') +
     (opts.ripples ? '#define RIPPLES 1\n' : '');
@@ -109,81 +143,114 @@ vec3 duneProfileD(float t, float k) {
   return vec3(down + (up - down) * h - k * h * (1.0 - h), ddown + (dup - ddown) * h, -(h * (1.0 - h)));
 }
 
+// round three: the primary dune in metres (see height.js): windward W, slip face S at the angle
+// of repose, floor bm, apron smax(S, bm), brink smin(W, apron). Returns (h, d/dx, d/damp, d/dbm).
+vec4 slipProfileD(float x, float amp, float bm) {
+  float dx = x - XC;
+  float u = dx / (amp * WINDK) + 1.0;
+  float uc = clamp(u, 0.0, 1.0);
+  float P = uc * uc * (3.0 - uc * 2.0);
+  float dP = u < 1.0 ? uc * 6.0 * (1.0 - uc) : 0.0;
+  float W = amp * P + bm;
+  float Wx = dP / WINDK;
+  float Wa = P - dP * (u - 1.0);
+  float S = amp - dx * LEE_T;
+  float kA = amp * APRONF;
+  float hA = clamp((S - bm) / kA * 0.5 + 0.5, 0.0, 1.0);
+  float L = bm + (S - bm) * hA + kA * hA * (1.0 - hA);
+  float Lx = hA * -LEE_T;
+  float La = hA + hA * (1.0 - hA) * APRONF;
+  float Lb = 1.0 - hA;
+  float kB = (amp - A1 * AMPBASE) * KB_SLOPE + ROUNDHI;
+  float hB = clamp((L - W) / kB * 0.5 + 0.5, 0.0, 1.0);
+  float omb = 1.0 - hB;
+  return vec4(L + (W - L) * hB - kB * hB * omb, hB * Wx + omb * Lx, hB * Wa + omb * La - hB * omb * KB_SLOPE, hB + omb * Lb);
+}
+
+float slipProfile(float x, float amp, float bm) {
+  float dx = x - XC;
+  float u = dx / (amp * WINDK) + 1.0;
+  float uc = clamp(u, 0.0, 1.0);
+  float W = amp * (uc * uc * (3.0 - uc * 2.0)) + bm;
+  float S = amp - dx * LEE_T;
+  float kA = amp * APRONF;
+  float hA = clamp((S - bm) / kA * 0.5 + 0.5, 0.0, 1.0);
+  float L = bm + (S - bm) * hA + kA * hA * (1.0 - hA);
+  float kB = (amp - A1 * AMPBASE) * KB_SLOPE + ROUNDHI;
+  float hB = clamp((L - W) / kB * 0.5 + 0.5, 0.0, 1.0);
+  return L + (W - L) * hB - kB * hB * (1.0 - hB);
+}
+
 float heightLow(vec2 p) {
   float x = p.x, z = p.y;
   float a = x * WX + z * WZ;
   float c = -x * WZ + z * WX;
-  float wa = vnoise(p * WARP1F) * WARP1A + vnoise(p * WARP2F + vec2(31.7, -11.3)) * WARP2A;
+  float wa = vnoise(vec2(c * WARP1F, a * (WARP1F * WARPALONG))) * WARP1A
+    + vnoise(vec2(c * WARP2F + 31.7, a * (WARP2F * WARPALONG) - 11.3)) * WARP2A;
   float wc = vnoise(p * WARP1F + vec2(57.1, 9.2)) * WARP1A;
-  float w3 = vnoise(p * WARP3F + vec2(-19.4, 23.9)) * WARP3A;
+  float w3 = vnoise(vec2(c * WARP3F - 19.4, a * (WARP3F * WARPALONG) + 23.9)) * WARP3A;
   float a2 = a + wa + w3, c2 = c + wc;
   float swell = vnoise(p * SWELLF + vec2(3.3, 7.7)) * SWELLA;
-  float s = a2 / L1;
-  float k = floor(s);
-  float t = s - k;
-  float amp = ((vnoise(vec2(c2 * AMPF, k * 0.731 + 0.5)) * 0.5 + 0.5) * (1.0 - AMPBASE) + AMPBASE) * A1;
-  float kk = (vnoise(vec2(c2 * ROUNDF, k * 0.917 + 1.7)) * 0.5 + 0.5) * (ROUNDHI - ROUNDLO) + ROUNDLO;
-  float h1 = amp * duneProfile(t, kk);
   float s2 = (x * W2X + z * W2Z + wa * 0.5) / L2;
   float k2 = floor(s2);
   float t2 = s2 - k2;
   float amp2 = (vnoise(vec2((-x * W2Z + z * W2X) * AMP2F, k2 * 0.613 + 2.5)) * 0.5 + 0.5) * A2;
-  float h2 = amp2 * duneProfile(t2, ROUND2);
-  return swell + h1 + h2;
+  float bm = amp2 * duneProfile(t2, ROUND2) + vnoise(p * DET1F + vec2(1.3, -4.1)) * DET1A;
+  float k = floor(a2 / L1);
+  float amp = ((vnoise(vec2(c2 * AMPF, k * 0.731 + 0.5)) * 0.5 + 0.5) * (1.0 - AMPBASE) + AMPBASE) * A1;
+  return swell + slipProfile(a2 - k * L1, amp, bm);
 }
 
 vec3 heightLowD(vec2 p) {
   float x = p.x, z = p.y;
   float a = x * WX + z * WZ;
   float c = -x * WZ + z * WX;
-  vec3 nA = vnoiseD(p * WARP1F);
-  vec3 nB = vnoiseD(p * WARP2F + vec2(31.7, -11.3));
+  // warps sampled at (c F, a F warpAlong); their gradients in (c, a) are rotated back to (x, z)
+  vec3 nA = vnoiseD(vec2(c * WARP1F, a * (WARP1F * WARPALONG)));
+  vec3 nB = vnoiseD(vec2(c * WARP2F + 31.7, a * (WARP2F * WARPALONG) - 11.3));
+  vec3 n3 = vnoiseD(vec2(c * WARP3F - 19.4, a * (WARP3F * WARPALONG) + 23.9));
   float wa = nA.x * WARP1A + nB.x * WARP2A;
-  vec2 gwa = nA.yz * (WARP1A * WARP1F) + nB.yz * (WARP2A * WARP2F);
+  float wac = nA.y * (WARP1A * WARP1F) + nB.y * (WARP2A * WARP2F);
+  float waa = (nA.z * (WARP1A * WARP1F) + nB.z * (WARP2A * WARP2F)) * WARPALONG;
+  vec2 gwa = vec2(wac * -WZ + waa * WX, wac * WX + waa * WZ);
+  float w3c = n3.y * (WARP3A * WARP3F), w3a = n3.z * (WARP3A * WARP3F * WARPALONG);
   vec3 nC = vnoiseD(p * WARP1F + vec2(57.1, 9.2));
-  vec3 n3 = vnoiseD(p * WARP3F + vec2(-19.4, 23.9));
   float a2 = a + wa + n3.x * WARP3A;
   float c2 = c + nC.x * WARP1A;
-  vec2 ga2 = vec2(WX, WZ) + gwa + n3.yz * (WARP3A * WARP3F);
+  vec2 ga2 = vec2(WX, WZ) + gwa + vec2(w3c * -WZ + w3a * WX, w3c * WX + w3a * WZ);
   vec2 gc2 = vec2(-WZ, WX) + nC.yz * (WARP1A * WARP1F);
   vec3 nS = vnoiseD(p * SWELLF + vec2(3.3, 7.7));
-  float s = a2 / L1;
-  float k = floor(s);
-  float t = s - k;
-  vec3 nAmp = vnoiseD(vec2(c2 * AMPF, k * 0.731 + 0.5));
-  float amp = ((nAmp.x * 0.5 + 0.5) * (1.0 - AMPBASE) + AMPBASE) * A1;
-  vec2 gamp = gc2 * (nAmp.y * (A1 * (1.0 - AMPBASE) * 0.5 * AMPF));
-  vec3 nK = vnoiseD(vec2(c2 * ROUNDF, k * 0.917 + 1.7));
-  float kk = (nK.x * 0.5 + 0.5) * (ROUNDHI - ROUNDLO) + ROUNDLO;
-  vec2 gkk = gc2 * (nK.y * ((ROUNDHI - ROUNDLO) * 0.5 * ROUNDF));
-  vec3 pr = duneProfileD(t, kk);
-  float h1 = amp * pr.x;
-  vec2 gh1 = gamp * pr.x + (ga2 * (pr.y / L1) + gkk * pr.z) * amp;
   float s2 = (x * W2X + z * W2Z + wa * 0.5) / L2;
   float k2 = floor(s2);
   float t2 = s2 - k2;
   vec3 nA2 = vnoiseD(vec2((-x * W2Z + z * W2X) * AMP2F, k2 * 0.613 + 2.5));
   float amp2 = (nA2.x * 0.5 + 0.5) * A2;
   vec3 pr2 = duneProfileD(t2, ROUND2);
-  float h2 = amp2 * pr2.x;
-  vec2 gh2 = vec2(-W2Z, W2X) * (nA2.y * (A2 * 0.5 * AMP2F) * pr2.x) + (vec2(W2X, W2Z) + gwa * 0.5) * (pr2.y * amp2 / L2);
-  return vec3(nS.x * SWELLA + h1 + h2, nS.yz * (SWELLA * SWELLF) + gh1 + gh2);
+  vec3 d1 = vnoiseD(p * DET1F + vec2(1.3, -4.1));
+  float bm = amp2 * pr2.x + d1.x * DET1A;
+  vec2 gbm = vec2(-W2Z, W2X) * (nA2.y * (A2 * 0.5 * AMP2F) * pr2.x) + (vec2(W2X, W2Z) + gwa * 0.5) * (pr2.y * amp2 / L2)
+    + d1.yz * (DET1A * DET1F);
+  float k = floor(a2 / L1);
+  vec3 nAmp = vnoiseD(vec2(c2 * AMPF, k * 0.731 + 0.5));
+  float amp = ((nAmp.x * 0.5 + 0.5) * (1.0 - AMPBASE) + AMPBASE) * A1;
+  vec2 gamp = gc2 * (nAmp.y * (A1 * (1.0 - AMPBASE) * 0.5 * AMPF));
+  vec4 pr = slipProfileD(a2 - k * L1, amp, bm);
+  return vec3(nS.x * SWELLA + pr.x, nS.yz * (SWELLA * SWELLF) + ga2 * pr.y + gamp * pr.z + gbm * pr.w);
 }
 
 float height(vec2 p) {
-  return heightLow(p) + vnoise(p * DET1F + vec2(1.3, -4.1)) * DET1A + vnoise(p * DET2F + vec2(-7.9, 2.2)) * DET2A;
+  return heightLow(p) + vnoise(p * DET2F + vec2(-7.9, 2.2)) * DET2A;
 }
 
 vec3 heightD(vec2 p) {
   vec3 lo = heightLowD(p);
-  vec3 d1 = vnoiseD(p * DET1F + vec2(1.3, -4.1));
   vec3 d2 = vnoiseD(p * DET2F + vec2(-7.9, 2.2));
-  return vec3(lo.x + d1.x * DET1A + d2.x * DET2A, lo.yz + d1.yz * (DET1A * DET1F) + d2.yz * (DET2A * DET2F));
+  return vec3(lo.x + d2.x * DET2A, lo.yz + d2.yz * (DET2A * DET2F));
 }
 `;
 
 // ------------------------------------------------------------------ light, sky, air, output
-const LIGHT = /* glsl */`
+const LIGHT_SRC = /* glsl */`
 float shadowMarch(vec3 p, vec3 L, float k) {
   float res = 1.0;
   float t = SH_START;
@@ -238,58 +305,79 @@ float starField(vec3 rd) {
   return b * (1.0 - smoothstep(0.0, STAR_SIZE, length(fp))) * smoothstep(0.02, 0.2, rd.y) * 2.5;
 }
 
-float relAz(vec3 rd) {
+// Where a view direction meets the haboob's front line: vec4(distance, s along the front, Y up the
+// wall, cover). cover is 0 off the wall's ends, thinning over STORM.farFade at the far end.
+vec4 wallHit(vec3 rd) {
   vec2 hd = normalize(rd.xz + vec2(1e-6, 0.0));
-  return atan(dot(hd, uWallRight), dot(hd, uWallFwd));
+  float den = dot(hd, uWallN);
+  float d = uWallGeo.x / max(den, 1e-4);
+  float s = dot(hd, uWallT) * d;
+  float Y = rd.y / max(length(rd.xz), 1e-3) * d;
+  float cover = step(1e-4, den) * smoothstep(uWallGeo.y, uWallGeo.y + FARFADE, s) * clamp((uWallGeo.w - s) / 300.0 + 0.5, 0.0, 1.0);
+  return vec4(d, s, Y, cover);
 }
 
-// billows: smooth domes on domes, 0..1 (lit as a bumpy surface facing the viewer)
-// each octave is rotated (and scaled) against the last so the value-noise lattice never lines up
-float billow(vec2 w) {
-  vec2 w2 = vec2(w.x * 1.7 - w.y * 1.2, w.x * 1.2 + w.y * 1.7) + vec2(5.2, 1.3);
-  vec2 w3 = vec2(w2.x * 1.7 - w2.y * 1.2, w2.x * 1.2 + w2.y * 1.7) + vec2(1.7, 8.9);
-  return (vnoise(w) * 0.55 + vnoise(w2) * 0.3 + vnoise(w3) * 0.15) * 0.5 + 0.5;
+// One octave of domes in cell units: each cell holds a hemisphere of radius 0.75..1.0 at a
+// jittered centre; a smooth maximum joins them, so neighbouring lobes meet in a narrow crease.
+// Returns vec3(height 0..1, d/dp.x, d/dp.y).
+vec3 domes(vec2 p) {
+  vec2 ip = floor(p);
+  float best = 0.0;
+  vec2 g = vec2(0.0);
+DOME_CELLS
+  return vec3(best, g);
 }
 
-vec3 wallLit(vec3 rd, vec3 L, vec3 C, vec3 N, vec2 tng, vec2 hd, float vert, float occ, float rimBand) {
-  vec3 Lw = normalize(vec3(dot(L.xz, tng), max(L.y, 0.0) + 0.45, -dot(L.xz, hd)));
-  float face = clamp(dot(N, Lw) * 0.6 + 0.4, 0.0, 1.0);
-  float behind = max(dot(L.xz, hd), 0.0);
-  float rim = rimBand * behind * pow(max(dot(rd, L), 0.0), 6.0) * 2.2;
-  return C * (face * vert * vert * occ + rim);
+// cauliflower billows: octaves of domes, each rotated against the last. Returns vec3(B normalised
+// to about 0..1, then the weighted dome slopes along s and Y: each dome's own slope, so a small
+// lobe is as round as a big one and only its weight makes it shallower; w: the two largest octaves
+// alone, which shape the top edge, so fine lobes never float off it as specks).
+vec4 billows(float S, float Y) {
+  vec4 acc = vec4(0.0);
+BILLOW_OCTAVES
+  return acc;
 }
 
-// The haboob: a sheet of dust at distance D, in metres on the sheet (X along, Y up).
+// The haboob: a wall standing on its front line, in metres on the wall. Returns colour and cover.
+vec3 wallLit(vec3 rd, vec3 L, vec3 C, vec3 N, float occ, float dens, float rimBand) {
+  vec3 Lw = vec3(dot(L.xz, uWallT), L.y, -dot(L.xz, uWallN));
+  float diff = max((dot(N, Lw) + WRAPW) / (1.0 + WRAPW), 0.0);
+  float rim = rimBand * max(-Lw.z, 0.0) * pow(max(dot(rd, L), 0.0), 4.0) * 3.0;
+  return C * (diff * occ * (dens * 0.5 + 0.5) + rim);
+}
+
 vec4 haboob(vec3 rd) {
-  vec2 hd = normalize(rd.xz + vec2(1e-6, 0.0));
-  float phi = atan(dot(hd, uWallRight), dot(hd, uWallFwd));
-  float q = rd.y / max(length(rd.xz), 1e-3);
-  float D = uWallGeo.z, H0 = uWallGeo.w;
-  float X = phi * D, Y = q * D;
-  float along = clamp((phi - uWallGeo.x) / uWallGeo.y, 0.0, 1.0);
-  float taper = pow(along, 1.4);
-  float top = H0 * taper * (1.0
-    + vnoise(vec2(X * TOPF0, 3.1)) * TOPA0
-    + (abs(vnoise(vec2(X * TOPF1, 7.3))) * 2.0 - 1.0) * TOPA1
-    + (abs(vnoise(vec2(X * TOPF2, 1.9))) * 2.0 - 1.0) * TOPA2);
-  float wisp = vnoise(vec2(X, Y) / 38.0 + vec2(2.0, 6.0)) * (EDGESOFT * 1.6);
-  float edge = top - Y + wisp;
-  // the far (left) end is thin: the front recedes into haze there
-  float a = smoothstep(-EDGESOFT, EDGESOFT, edge) * smoothstep(0.0, ENDSOFT, along);
-  // lobes, lit from the side each sun is on and from above; creases between lobes stay dark
-  vec2 w = vec2(X, Y - X * 0.1) * LOBEF;
-  float B = billow(w);
-  float Bx = billow(w + vec2(0.12, 0.0));
-  float By = billow(w + vec2(0.0, 0.12));
-  vec3 N = normalize(vec3((B - Bx) * BUMP, (B - By) * BUMP, 1.0));
-  vec2 tng = vec2(-hd.y, hd.x);
-  float yn = clamp(Y / max(top, 1.0), -1.0, 1.2);
-  float vert = smoothstep(-0.2, 1.0, yn);
-  float occ = mix(0.45, 1.0, B);
-  float rimBand = exp(-max(edge, 0.0) / (EDGESOFT * 2.2));
-  vec3 col = uWallBase * mix(0.6, 1.6, vert) * (B * 0.6 + 0.7)
-    + wallLit(rd, uSun1Dir, uWallSun1, N, tng, hd, vert, occ, rimBand)
-    + wallLit(rd, uSun2Dir, uWallSun2, N, tng, hd, vert, occ, rimBand);
+  vec4 w = wallHit(rd);
+  float d = w.x, S = w.y, Y = w.z;
+  float H = (vnoise(vec2(S * TOPF0, 3.1)) * TOPA0 + vnoise(vec2(S * TOPF1, 7.3)) * TOPA1 + 1.0) * uWallGeo.z
+    * (smoothstep(uWallGeo.y, uWallGeo.y + FARFADE, S) * 0.45 + 0.55);   // lower toward the far end
+  // one pixel in metres on the wall, taken before any branch (derivatives need uniform control flow)
+  float px = length(fwidth(rd)) * d / max(length(rd.xz), 1e-3);
+  // billows only where the wall can show; below its foot the skirt covers everything
+  vec4 B = vec4(0.5, 0.0, 0.0, 0.4);
+  if (Y > -SKIRTH * 0.5 && w.w > 0.0) B = billows(S, Y * BFLAT);
+  B.z *= BFLAT;
+  // signed metres inside the wall's top edge; the billows push the edge in and out at every scale
+  float e = H - Y + (B.w - 0.4) * BULGE;
+  // crisp: the edge is antialiased over one pixel, whatever the distance
+  float a = clamp(e / max(px, 1e-3) + 0.5, 0.0, 1.0) * w.w;
+  // the rolling nose: a roll of billows along the base, lit on top, with a dark crease above it
+  float Yr = (vnoise(vec2(S / 170.0, 5.5)) * 0.3 + 1.0) * SHELFY;
+  float below = step(Y, Yr);
+  float shelfTilt = below * exp(-max(Yr - Y, 0.0) / 30.0) * 1.3;
+  float crease = 1.0 - (1.0 - below) * exp(-max(Y - Yr, 0.0) / 28.0) * 0.25;
+  // normal in the wall's frame (x along the front toward its near end, y up, z toward the camera);
+  // the top rounds over toward the sky so the upper lobes catch light
+  float tilt = exp(-max(e, 0.0) / TILTR) * TILT + shelfTilt;
+  vec3 N = normalize(vec3(B.y * -DEPTH, B.z * -DEPTH + tilt, 1.0));
+  float occ = (smoothstep(0.12, 0.72, B.x) * (1.0 - OCCLO) + OCCLO) * crease;
+  float dens = smoothstep(0.0, H * 0.7, Y) * 0.65 + 0.35;   // darker, denser low
+  float rimBand = exp(-max(e, 0.0) / RIMW);
+  vec3 col = uWallBase * dens * (B.x * 0.5 + 0.75) * crease
+    + wallLit(rd, uSun1Dir, uWallSun1, N, occ, dens, rimBand) + wallLit(rd, uSun2Dir, uWallSun2, N, occ, dens, rimBand);
+  // haze between camera and wall, and the skirt: the base dissolves into the dust over the ground
+  col = mix(col, uHorizon, 1.0 - exp(-d * AERIAL));
+  col = mix(col, uHorizon * 0.85, 1.0 - smoothstep(-10.0, SKIRTH, Y));
   return vec4(col, a);
 }
 
@@ -310,13 +398,15 @@ vec3 skyColor(vec3 rd, float withDisc) {
 // distance + height fog; in the storm the distance part thickens toward the wall and the ground
 // beyond the wall's foot is inside it
 float fogAmount(vec3 ro, vec3 rd, float dist) {
-  float wallSide = smoothstep(uWallGeo.x, uWallGeo.x + uWallGeo.y * 0.8, relAz(rd)) * uStorm;
+  vec4 w = wallHit(rd);
+  float wallSide = w.w * uStorm;
   float dens = mix(uFog.x, uStormFog.y, wallSide) * dist;
   float k = uFog.z;
   float ry = max(rd.y * k * dist, -20.0);
   float fr = abs(ry) < 1e-4 ? 1.0 - ry * 0.5 : (1.0 - exp(-ry)) / ry;
   dens += uFog.y * exp(-(ro.y - uFog.w) * k) * dist * fr;
-  return max(1.0 - exp(-dens), wallSide * smoothstep(uStormFog.z, uStormFog.w, dist));
+  // ground toward the wall's foot disappears into its skirt; beyond the foot it is inside the wall
+  return max(1.0 - exp(-dens), wallSide * smoothstep(w.x * 0.25, w.x * 0.97, dist));
 }
 
 // blowing sand: densest in the lowest half metre, following the ground; downwind of a crest the
@@ -333,39 +423,54 @@ float softFromHorizon(float H, vec3 L, float k) {
   float r = clamp((L.y - H) * k, 0.0, 1.0);
   return r * r * (3.0 - r * 2.0);
 }
-// With the shadow map on, the ground height and the spill height come from its B and A channels
-// (baked once with the shadows); otherwise from the formula, two evaluations per sample.
-float sandDensity(vec3 q) {
-  vec2 sw = uStormWind;
-  float a = dot(q.xz, sw), c = dot(q.xz, vec2(-sw.y, sw.x));
-#ifdef SHADOWS_MAP
-  vec4 m = textureLod(uShMap, shadowUV(q.xz), 0.0);
-  float hg = m.z, href = m.w;
-#else
-  float hg = height(q.xz);
-  float href = max(hg, height(q.xz - sw * SPILL) - SPILL * SPILLDROP);
-#endif
-  float above = q.y - href;
-  float cs = c + vnoise(vec2(a * SNAKEF, c * 0.02 + 4.0)) * SNAKEA;
-  float streak = smoothstep(0.2, 0.65, vnoise(vec2(a * ALONGF, cs * ACROSSF)));
-  // broad sheets come and go but never vanish, so there is always some sand moving
-  float sheet = smoothstep(-0.8, 0.5, vnoise(vec2(a, c) * SHEETF + vec2(2.0, 9.0))) * 0.7 + 0.3;
-  float hs = (sheet * 0.8 + 0.6) * SAND_H;
-  return step(-0.05, q.y - hg) * exp(-max(above, 0.0) / hs) * sheet * (streak * 0.94 + 0.06);
+// the low haze of blowing sand: an exponential layer above a base height, integrated in closed
+// form along the last len metres of the ray (looking down, the layer is densest at the far end)
+float sandHaze(vec3 rd, float len, float aboveBase) {
+  float ky = max(-rd.y, 1e-3) / HAZE_H;
+  float L = min(len, HAZE_MAX);
+  return 1.0 - exp(-HAZE_RHO * exp(-aboveBase / HAZE_H) * (1.0 - exp(-ky * L)) / ky);
 }
 
-float blowingSand(vec3 ro, vec3 rd, float tEnd) {
-  float tau = 0.0;
-  float t1 = clamp(tEnd, SAND_NEAR * 1.01, SAND_FAR);
-  float lr = log(t1 / SAND_NEAR);
-  float j = hash2(PIX.x + 7, PIX.y + 3);
-  for (int i = 0; i < SAND_STEPS; i++) {
-    float f = (float(i) + j) / SAND_STEPSF;
-    float t = exp(lr * f) * SAND_NEAR;
-    float dt = t * lr / SAND_STEPSF;
-    tau += sandDensity(ro + rd * t) * SAND_TAU * dt * step(t, t1);
-  }
-  return 1.0 - exp(-tau);
+// streamers on the ground: iso-lines of a meandering noise stretched along the storm wind.
+// One family: the distance to a level line is measured in metres (|n - level| / |grad n|), so a
+// strand keeps its width where the noise flattens out; it fades to its mean once a pixel is wider.
+float ribLine(float n, float gm, float px, float w, float lvl) {
+  float dm = abs(n - lvl) / gm;
+  float core = 1.0 - smoothstep(w - px * 0.5, w + px * 0.5, dm);
+  float halo = (1.0 - smoothstep(0.0, px + w * RIB_HALO, dm)) * 0.3;
+  return max(core, halo);
+}
+float ribFine(float ra, float cm, float px) {
+  vec3 nd = vnoiseD(vec2(ra / RF_ALONG, cm / RF_ACROSS));
+  float gm = max(length(vec2(nd.y / RF_ALONG, nd.z / RF_ACROSS)), 1e-3);
+  float lines = max(max(ribLine(nd.x, gm, px, RF_W, RF_L0), ribLine(nd.x, gm, px, RF_W, RF_L1)), ribLine(nd.x, gm, px, RF_W, RF_L2));
+  // only where a line runs along the wind: where a level line turns back it would draw a hook
+  float align = smoothstep(0.86, 0.97, abs(nd.z / RF_ACROSS) / gm);
+  // strands break up along their length
+  float brk = smoothstep(-0.45, 0.35, vnoise(vec2(ra / RF_BRK, cm / RF_ACROSS * 0.9) + vec2(3.0, 1.0)));
+  return mix(lines * brk * align, RIB_MEAN, smoothstep(RF_W * 0.8, RF_W * 3.0, px)) * RF_A;
+}
+float ribBroad(float ra, float cm, float px) {
+  vec3 nd = vnoiseD(vec2(ra / RB_ALONG, cm / RB_ACROSS) + vec2(13.0, 13.0 * 1.7));
+  float gm = max(length(vec2(nd.y / RB_ALONG, nd.z / RB_ACROSS)), 1e-3);
+  float lines = max(ribLine(nd.x, gm, px, RB_W, RB_L0), ribLine(nd.x, gm, px, RB_W, RB_L1));
+  float align = smoothstep(0.86, 0.97, abs(nd.z / RB_ACROSS) / gm);
+  float brk = smoothstep(-0.45, 0.35, vnoise(vec2(ra / RB_BRK, cm / RB_ACROSS * 0.9) + vec2(3.0 + 13.0, 1.0)));
+  return mix(lines * brk * align, RIB_MEAN, smoothstep(RB_W * 0.8, RB_W * 3.0, px)) * RB_A;
+}
+float ribbons(vec2 xz, vec2 grad, float dist, float fw) {
+  vec2 sw = uStormWind;
+  float ra = dot(xz, sw), rc = dot(xz, vec2(-sw.y, sw.x));
+  float cm = rc + vnoise(vec2(ra * RIB_MF, rc * 0.05 + 4.0)) * RIB_MA
+    + vnoise(vec2(ra * (RIB_MF * 3.7), rc * 0.21 + 9.0)) * (RIB_MA * 0.3);
+  float px = fw * 0.7;
+  // the broad sheets give way to the fine strands near the feet, where they would read as stripes
+  float r = max(ribFine(ra, cm, px), ribBroad(ra, cm + rc * 0.15, px) * smoothstep(3.0, 12.0, dist));
+  float gust = smoothstep(-0.5, 0.45, vnoise(vec2(ra, rc) * RIB_GF + vec2(7.0, 3.0))) * 0.65 + 0.35;
+  // the wind keeps sand moving over gentle ground either way; only a steep lee (a slip face turned
+  // away from the wind) is sheltered
+  float expo = 1.0 - smoothstep(0.25, 0.5, -dot(grad, sw)) * 0.85;
+  return r * gust * expo * (1.0 - smoothstep(RIB_FAR * 0.45, RIB_FAR, dist)) * RIB_GAIN;
 }
 
 // the colour of the sand in the air: each sun that reaches the ground, scattered forward
@@ -406,6 +511,8 @@ vec3 finish(vec3 col) {
 
 `;
 
+const LIGHT = LIGHT_SRC.replace('BILLOW_OCTAVES', billowOctaves()).replace('DOME_CELLS', domeCells());
+
 const GROUND_VERT = /* glsl */`
 out vec3 vWorld;
 void main() {
@@ -437,11 +544,10 @@ void main() {
 #else
   // analytic gradient; the 11 m undulation's slope fades once a pixel spans metres (it would alias)
   vec3 lo = heightLowD(xz);
-  vec3 d1 = vnoiseD(xz * DET1F + vec2(1.3, -4.1));
   vec3 d2 = vnoiseD(xz * DET2F + vec2(-7.9, 2.2));
-  float h0 = lo.x + d1.x * DET1A + d2.x * DET2A;
+  float h0 = lo.x + d2.x * DET2A;
   float fade2 = 1.0 - smoothstep(1.5, 5.0, fw);
-  vec2 grad = lo.yz + d1.yz * (DET1A * DET1F) + d2.yz * (fade2 * (DET2A * DET2F));
+  vec2 grad = lo.yz + d2.yz * (fade2 * (DET2A * DET2F));
 #endif
   vec3 sp = vec3(xz.x, h0, xz.y);
 
@@ -496,7 +602,10 @@ void main() {
   fog = max(fog, edge);
   vec3 fogCol = mix(skyColor(rd, 0.0), uFogCol, uFogColMix * 0.6);
   col = mix(col, fogCol, fog);
-  if (uStorm > 0.5) col = mix(col, sandColor(rd), blowingSand(ro, rd, dist));
+  if (uStorm > 0.5) {
+    col = mix(col, mix(sandColor(rd), vec3(dot(sandColor(rd), vec3(0.3333))), 0.25) * 1.1, clamp(ribbons(xz, grad, dist, fw), 0.0, 1.0));
+    col = mix(col, sandColor(rd), sandHaze(rd, dist, 0.0));
+  }
 
   fragColor = vec4(finish(col), 1.0);
 }
@@ -518,7 +627,9 @@ void main() {
   vec3 ro = cameraPosition;
   vec3 rd = normalize(vWorld - ro);
   vec3 col = skyColor(rd, 1.0);
-  if (uStorm > 0.5) col = mix(col, sandColor(rd), blowingSand(ro, rd, 1e5));
+  // seen from the eye the layer is 1.7 m down; at the horizon the sky meets far ground seen through
+  // the bottom of the layer, so the base eases to 0 there and the two join without a line
+  if (uStorm > 0.5) col = mix(col, sandColor(rd), sandHaze(-rd, 1e5, smoothstep(0.0, 0.04, rd.y) * CAM_EYE));
   fragColor = vec4(finish(col), 1.0);
 }
 `;
@@ -541,13 +652,9 @@ void main() {
   vec3 n = normalize(vec3(-hd.y, 1.0, -hd.z));
   vec3 p = vec3(xz.x, hd.x, xz.y) + n * SH_LIFT;
   float s1 = -8.0, s2 = -8.0;
-  // B: the ground height; A: the height blowing sand rides at (a crest's height carried a few
-  // metres downwind of it). Only the storm uses them, and only a storm target has B and A.
-  float href = hd.x;
-  if (uStorm > 0.5) href = max(hd.x, height(xz - uStormWind * SPILL) - SPILL * SPILLDROP);
   if (uSun1Col.x + uSun1Col.y + uSun1Col.z > 0.0) s1 = horizonMarch(p, uSun1Dir, 1.0 / tan(max(uSun1Sky.w * SH_PENUMBRA, 0.002)));
   if (uSun2Col.x + uSun2Col.y + uSun2Col.z > 0.0) s2 = horizonMarch(p, uSun2Dir, 1.0 / tan(max(uSun2Sky.w * SH_PENUMBRA, 0.002)));
-  fragColor = vec4(s1, s2, hd.x, href);
+  fragColor = vec4(s1, s2, 0.0, 1.0);
 }
 `;
 
