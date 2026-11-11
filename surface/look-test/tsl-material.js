@@ -567,6 +567,9 @@ export function createTslMaterials(values, opts, shadowTex) {
     // walk slice: the trace map (prints, slide troughs). It returns a slope to add to the ground's,
     // how disturbed the sand is (ripples are trodden out), and a self-shadow toward a light.
     const tr = WK && WK.trace ? WK.trace({ xz, fw, dist, U }) : null;
+    // walk slice, figure look test (surface/walk/figure.js, ?figure= only): a figure's cast shadow
+    // per sun, contact darkening at its feet and hem, and its lantern's pool of light
+    const fg = WK && WK.figure ? WK.figure({ xz, sp, U }) : null;
     if (opts.ripples) {
       const lee = dot(grad, W).negate();
       let ripOnE = float(1.0).sub(smoothstep(G.ripLeeLo, G.ripLeeHi, lee)).mul(float(1.0).sub(smoothstep(G.ripL * 0.15, G.ripL * 0.5, fw)));
@@ -619,11 +622,13 @@ export function createTslMaterials(values, opts, shadowTex) {
 
     const col = vec3(0.0).toVar();
     if (tr) { sh1.mulAssign(tr.shade(U.uSun1Dir)); sh2.mulAssign(tr.shade(U.uSun2Dir)); }
+    if (fg) { sh1.mulAssign(fg.shadow(U.uSun1Dir)); sh2.mulAssign(fg.shadow(U.uSun2Dir)); }
     col.addAssign(sunOnSand(n, V, alb, U.uSun1Dir, U.uSun1Col, sh1, nm, gAmt, U.uWrap));
     col.addAssign(sunOnSand(n, V, alb, U.uSun2Dir, U.uSun2Col, sh2, nm, gAmt, U.uWrap));
     if (WK) {
       If(U.uFade.greaterThan(0.0), () => {
         if (tr) { sh3.mulAssign(tr.shade(U.uSun3Dir)); sh4.mulAssign(tr.shade(U.uSun4Dir)); }
+        if (fg) { sh3.mulAssign(fg.shadow(U.uSun3Dir)); sh4.mulAssign(fg.shadow(U.uSun4Dir)); }
         col.addAssign(sunOnSand(n, V, alb, U.uSun3Dir, U.uSun3Col, sh3, nm, gAmt, U.uWrap));
         col.addAssign(sunOnSand(n, V, alb, U.uSun4Dir, U.uSun4Col, sh4, nm, gAmt, U.uWrap));
       });
@@ -638,6 +643,7 @@ export function createTslMaterials(values, opts, shadowTex) {
       const inShade = float(1.0).sub(sh1.mul(smoothstep(-0.2, 0.15, dot(n, U.uSun1Dir))));
       col.addAssign(alb.mul(U.uHorizon).mul(lf.mul(lf)).mul(inShade).mul(U.uFill));
     }
+    if (fg) { col.mulAssign(fg.ao); col.addAssign(fg.light(alb, n)); }
     // walk slice: the air low over the ground (drifting sand), drawn on the lit ground before haze
     if (WK && WK.air) col.assign(WK.air({ col, xz, dist, rd, grad, n, alb, U, vnoise, sh: [sh1, sh2, sh3, sh4] }));
 

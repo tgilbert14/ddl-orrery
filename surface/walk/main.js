@@ -8,9 +8,12 @@
 // URL switches: time=day|dusk|ember, r=webgpu|webgl2, fps=1 (readout), reduced=1 (as if the system
 // asked for reduced motion), mute=1, dpr=N (fix the pixel ratio; the governor is off),
 // grid=N (clipmap cells a side), slices=N (shadow bake spread), test=1 (no loop until a script asks).
+// Figure look test (opt-in): figure=a|b|c places a static figure at the end of a 20 m trail and
+// switches to a third-person camera, shot=behind|wide|side (see figure.js). Without figure= nothing
+// below changes.
 
 import { CAM, GRID, DEG } from '../look-test/params.js';
-import { findCrest, WIND } from '../look-test/height.js';
+import { findCrest, WIND, height } from '../look-test/height.js';
 import { createWalker, raycastGround } from './walker.js';
 import { createInput } from './input.js';
 import { timeValues, applyBlend, TIME_NAMES, SUN_OVERRIDE } from './times.js';
@@ -25,6 +28,8 @@ const fixedDpr = /^\d(\.\d+)?$/.test(q.get('dpr') || '') ? Math.min(2, +q.get('d
 // sun=time,bearing,elev (tuning only): move a time's pale sun
 { const m = /^(day|dusk|ember),(-?[\d.]+),(-?[\d.]+)$/.exec(q.get('sun') || ''); if (m) SUN_OVERRIDE[m[1]] = [+m[2], +m[3]]; }
 const startName = TIME_NAMES.includes(q.get('time')) ? q.get('time') : 'dusk';
+const FIGURE = /^[abc]$/.test(q.get('figure') || '') ? q.get('figure') : null;
+let shotName = ['behind', 'wide', 'side'].includes(q.get('shot')) ? q.get('shot') : 'behind';
 const TIME_FADE = 3.0;
 
 const $ = (id) => document.getElementById(id);
@@ -97,6 +102,8 @@ async function buildGraphics() {
   const shMod = await import('./shadows.js');
   const air = await import('./air.js');
   const { SHMAP } = await import('../look-test/params.js');
+  const figMod = FIGURE ? await import('./figure.js') : null;
+  const figShade = figMod ? figMod.createFigureShading() : null;
 
   if (/^\d{3}$/.test(q.get('grid') || '')) clip.CLIP.n = Math.max(64, Math.round(+q.get('grid') / 8) * 8);
   if (/^\d{1,3}$/.test(q.get('slices') || '')) shMod.SHADOW.slices = Math.max(1, +q.get('slices'));
@@ -128,6 +135,7 @@ async function buildGraphics() {
       shadowTexB: rtB.texture,
       trace: trace.hook,
       air: q.get('air') === '0' ? null : air.airHook,
+      ...(figShade ? { figure: figShade.groundHook } : {}),
     },
   }, rtA.texture);
 
@@ -152,6 +160,11 @@ async function buildGraphics() {
   };
   const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
+  if (figMod) {
+    g.fig = figMod.createFigure({ kind: FIGURE, U: mats.uniforms, shade: figShade, scene });
+    g.persp = camera;
+    g.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  }
   if (!forceWebGL && !isGPU) g.backend += ' - fell back: WebGPU did not start';
 
   renderer.onDeviceLost = (info) => { onDeviceLost(info); };
@@ -162,6 +175,7 @@ function setAllTime(groundY) { applyBlend(G.mats.set, timeNow, null, 0, groundY)
 
 let lookOv = null;   // a script may look elsewhere for a frame without turning the walker
 function placeCamera() {
+  if (G.fig) { G.fig.setTime(timeNow.name); if (G.fig.state.placed) { placeShot(); return; } }
   const e = walker.eye();
   const cam = G.camera;
   cam.position.set(e[0], e[1], e[2]);
@@ -173,6 +187,64 @@ function placeCamera() {
   if (polar) { G.ground.position.set(mx, 0, mz); G.mats.set('uGridOrigin', [mx, mz]); }
 }
 let meshOff = [0, 0];   // evidence only: move the ground mesh without moving the view
+
+// ---------------------------------------------------------------- figure look test (figure= only)
+// The spot: the dusk look's crest (findCrest), the figure 2.6 m short of the brink, having walked
+// 20 m up the windward face at the dusk heading (48: the pale sun ahead-left, the wind from behind
+// right). Shots are placed relative to the figure: bearing from the figure to the camera (relative
+// to its heading), distance, height above the camera's own ground; then either a heading and pitch
+// (behind: look past the figure) or aimed at the figure plus offsets.
+const FIG_HEADING = 48;
+const FIG_END = { x: top.x - Math.cos(FIG_HEADING * DEG) * 2.6, z: top.z - Math.sin(FIG_HEADING * DEG) * 2.6 };
+const FIG_TRAIL = 20.5;
+const SHOTS = {
+  behind: { bearing: 188, dist: 8, up: 2.6, yaw: -9, pitch: 2.5, fov: 44 },
+  wide: { bearing: 245, dist: 28, up: 0.8, aim: 1.0, yaw: 12, pitch: -1, fov: 40 },
+  side: { bearing: -105, dist: 6, up: 1.3, aim: 0.95, yaw: 15, pitch: -5, fov: 46 },
+};
+let shotOv = {};
+let outline = null;   // 'back' | 'side': the figure alone on grey, orthographic, at a fixed scale
+function placeShot() {
+  const F = G.fig.state, cam = G.camera, h = F.headingDeg * DEG;
+  if (outline) {
+    const b = h + (outline === 'back' ? Math.PI : Math.PI / 2), H = 3.4, a = window.innerWidth / Math.max(1, window.innerHeight);
+    const cx = F.x + Math.cos(b) * 20, cz = F.z + Math.sin(b) * 20, cy = F.y + 1.25;
+    Object.assign(cam, { left: -H * a / 2, right: H * a / 2, top: H / 2, bottom: -H / 2 });
+    cam.updateProjectionMatrix();
+    cam.position.set(cx, cy, cz); cam.lookAt(F.x, cy, F.z);
+    G.uCam.value.set(cx, cz);
+    return;
+  }
+  const s = { ...SHOTS[shotName], ...shotOv }, b = h + s.bearing * DEG;
+  const cx = F.x + Math.cos(b) * s.dist, cz = F.z + Math.sin(b) * s.dist, cy = height(cx, cz) + s.up;
+  let yaw = h + s.yaw * DEG, p = s.pitch * DEG;
+  if (s.aim !== undefined) {
+    const dx = F.x - cx, dz = F.z - cz;
+    yaw = Math.atan2(dz, dx) + s.yaw * DEG;
+    p = Math.atan2(F.y + s.aim - cy, Math.hypot(dx, dz)) + s.pitch * DEG;
+  }
+  cam.position.set(cx, cy, cz);
+  cam.lookAt(cx + Math.cos(yaw) * Math.cos(p), cy + Math.sin(p), cz + Math.sin(yaw) * Math.cos(p));
+  if (cam.fov !== s.fov) { cam.fov = s.fov; cam.updateProjectionMatrix(); }
+  G.sky.position.set(cx, cy, cz);
+  G.uCam.value.set(cx, cz);
+}
+// drive the walker 20 m to the spot with the script handle, then stand the figure where it stopped
+async function figureWalk() {
+  const h = FIG_HEADING * DEG, f = [Math.cos(h), Math.sin(h)];
+  G.fig.resetTrail();
+  outline = null;
+  API.setPose({ x: FIG_END.x - f[0] * FIG_TRAIL, z: FIG_END.z - f[1] * FIG_TRAIL, headingDeg: FIG_HEADING, pitchDeg: -4 });
+  const d0 = ws.distance;
+  API.hold({ fwd: 1 });
+  for (let n = 0; n < 3000 && ws.distance - d0 < FIG_TRAIL - 0.3; n++) await API.step(1, { drain: n % 30 === 29 });
+  API.release();
+  await API.step(45, { drain: false });
+  await G.drain();
+  G.fig.place(ws.x, height(ws.x, ws.z) - 0.02, ws.z, ((ws.yaw / DEG) % 360 + 360) % 360);
+  placeCamera();
+  return { x: ws.x, z: ws.z, headingDeg: G.fig.state.headingDeg, walked: +(ws.distance - d0).toFixed(2), steps: API.events.foot, triangles: G.fig.triangles };
+}
 
 // the look test's polar grid (mesh=polar)
 function buildPolar(THREE, GR) {
@@ -197,6 +269,7 @@ function buildPolar(THREE, GR) {
 
 function resize() {
   if (!G) return;
+  if (G.fig && outline) { placeShot(); }
   const w = window.innerWidth, h = window.innerHeight;
   // A window with no size (a tab opened in the background, a collapsed pane) has no canvas to draw to:
   // WebGPU rejects a 0x0 swap chain on every frame. Stop the loop until there is a size again.
@@ -252,7 +325,7 @@ function pick(ndcX, ndcY) {
 let lastTap = null;
 function tick(dt) {
   const t0 = performance.now();
-  const intent = input.read();
+  const intent = G.fig && G.fig.state.placed ? {} : input.read();
   if (intent.tap) {
     const hit = pick(intent.tap.ndcX, intent.tap.ndcY);
     if (hit) { intent.target = { x: hit.x, z: hit.z }; lastTap = { x: hit.x, z: hit.z }; }
@@ -264,6 +337,7 @@ function tick(dt) {
     if (e.type === 'foot') { API.events.foot++; if (!(e.slide > 0.5)) { try { sound?.step(e.strength); } catch { /* no sound */ } } }
     else API.events.slide++;
   }
+  if (G.fig) G.fig.trail(events, ws, G.trace);
   if (!reduced) simTime += dt;
   placeCamera();
   updateTime(dt);
@@ -271,7 +345,8 @@ function tick(dt) {
   const f = timeFade && timeFade.phase === 'fading' ? null : timeNow;
   if (f) { G.mats.set('uFog', [f.uFog[0], f.uFog[1], f.uFog[2], fogBase]); G.mats.set('uGroundY', fogBase); }
   const bakeDid = G.shadows.update(dt, [ws.x, ws.z], [ws.vx + ws.sx, ws.vz + ws.sz], timeNow.shadow, reduced);
-  const traceDid = G.trace.update(dt, ws.x, ws.z);
+  // figure look test: the prints do not heal, so the 20 m approach reads as if just walked
+  const traceDid = G.trace.update(dt, ws.x, ws.z, !G.fig);
   G.mats.set('uTime', simTime);
   G.renderer.render(G.scene, G.camera);
   try {
@@ -370,6 +445,7 @@ async function startGraphics() {
   G.shadows.warm();                              // compiles the sliced bake
   G.renderer.render(G.scene, G.camera);
   await G.drain();
+  if (G.fig && !testMode) { hintEl.hidden = true; await figureWalk(); }
   posterEl.hidden = true;
   stage.hidden = false;
   API.ready = true;
@@ -392,6 +468,18 @@ API.state = () => ({
   canvas: G ? [G.renderer.domElement.width, G.renderer.domElement.height] : null, hintGone, sound: sound ? (muted ? 'muted' : 'on') : (soundMod === false ? 'unavailable' : 'not started'),
 });
 API.hold = (intent) => input.hold(intent);
+if (FIGURE) {
+  API.figure = {
+    walk: () => figureWalk(),
+    shot: (name, ov = {}) => { if (SHOTS[name]) shotName = name; shotOv = ov; outline = null; G.camera = G.persp; G.ground.visible = G.sky.visible = true; G.scene.background = null; resize(); placeCamera(); },
+    outline: (view) => {
+      outline = view; G.camera = G.ortho; G.ground.visible = G.sky.visible = false;
+      G.scene.background = new G.THREE.Color().setRGB(0.5, 0.5, 0.5);
+      placeCamera();
+    },
+    info: () => ({ kind: FIGURE, shot: shotName, ...G.fig.state, triangles: G.fig.triangles, lamp: G.fig.lamp }),
+  };
+}
 API.lookOverride = (v) => { lookOv = v; };
 API.meshOffset = (v) => { meshOff = v || [0, 0]; };
 API.release = () => input.release();
