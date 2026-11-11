@@ -597,6 +597,7 @@ export function createTslMaterials(values, opts, shadowTex) {
 
     const alb = U.uSand.mul(vnoise(xz.mul(0.021).add(vec2(3.0, 3.0))).mul(0.08).add(0.92)).toVar();
     if (tr) alb.mulAssign(float(1.0).sub(tr.disturb.mul(0.08)));
+    if (tr && tr.tone) alb.mulAssign(tr.tone);   // walk, third person: a trail that reads from afar
 
     // cast shadows: the baked map (default), the per-pixel march (reference), or none
     const sh1 = float(1.0).toVar(), sh2 = float(1.0).toVar();

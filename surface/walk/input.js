@@ -5,6 +5,7 @@
 // on the view captures the mouse to look (Esc releases); while captured, a click walks you to the
 // point under the centre dot. If the browser refuses the capture, dragging looks and a click walks
 // to the clicked point.
+// V switches between the third-person follow camera and the first-person view (main.js).
 // Touch: the left half is a thumb stick that appears where the thumb lands (push and hold twice
 // quickly to run), the right half looks, and a quick tap anywhere walks you to that point.
 // Any other movement input stops a walk-to.
@@ -15,7 +16,7 @@ const LOOK_TOUCH = 0.0052;
 const STICK_R = 56;          // CSS px for a full push
 const TAP_MS = 280, TAP_PX = 9, DOUBLE_MS = 300;
 
-export function createInput(el, { onTime, onGesture, onFirstMove } = {}) {
+export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {}) {
   const keys = new Set();
   let lookX = 0, lookY = 0, turnHeld = 0;
   let tap = null, cancel = false;
@@ -37,6 +38,7 @@ export function createInput(el, { onTime, onGesture, onFirstMove } = {}) {
     if (e.code === 'Digit1' || e.code === 'Numpad1') { onTime?.('day'); return; }
     if (e.code === 'Digit2' || e.code === 'Numpad2') { onTime?.('dusk'); return; }
     if (e.code === 'Digit3' || e.code === 'Numpad3') { onTime?.('ember'); return; }
+    if (e.code === 'KeyV' && !e.repeat) { onView?.(); return; }
     const isMove = e.code in MOVE;
     if (isMove || e.code === 'KeyQ' || e.code === 'KeyE' || e.code.startsWith('Shift')) {
       if (isMove && !e.repeat && lastRelease.code === e.code && performance.now() - lastRelease.t < DOUBLE_MS) runLatch = true;

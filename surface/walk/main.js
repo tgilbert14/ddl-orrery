@@ -8,6 +8,9 @@
 // URL switches: time=day|dusk|ember, r=webgpu|webgl2, fps=1 (readout), reduced=1 (as if the system
 // asked for reduced motion), mute=1, dpr=N (fix the pixel ratio; the governor is off),
 // grid=N (clipmap cells a side), slices=N (shadow bake spread), test=1 (no loop until a script asks).
+// view=first: the first-person walk as it was before the Pilgrim (the default is third person: the
+// Pilgrim, pilgrim.js, followed by a spring camera, follow.js, with sand puffs, puffs.js). V switches
+// between the two at runtime.
 // Figure look test (opt-in): figure=a|b|c places a static figure at the end of a 20 m trail and
 // switches to a third-person camera, shot=behind|wide|side (see figure.js). Without figure= nothing
 // below changes.
@@ -31,6 +34,8 @@ const startName = TIME_NAMES.includes(q.get('time')) ? q.get('time') : 'dusk';
 const FIGURE = /^[abc]$/.test(q.get('figure') || '') ? q.get('figure') : null;
 let shotName = ['behind', 'wide', 'side'].includes(q.get('shot')) ? q.get('shot') : 'behind';
 const TIME_FADE = 3.0;
+const START_VIEW = FIGURE ? 'first' : q.get('view') === 'first' ? 'first' : 'third';
+let viewMode = START_VIEW;
 
 const $ = (id) => document.getElementById(id);
 const stage = $('stage'), readoutEl = $('readout'), hintEl = $('hint'), posterEl = $('poster');
@@ -52,6 +57,9 @@ let timeFade = null;                  // { to, phase: 'baking' | 'fading', t, ma
 let pendingTime = null;
 
 const API = (window.__walk = { ready: false, backend: null, error: null, reduced, events: { foot: 0, slide: 0 }, losses: 0 });
+// third person: the figure's heading (turned toward where it wants to go at a limited rate)
+let figYaw = ws.yaw, figAngVel = 0, animTime = 0;
+let traceC = null, travelDir = [Math.cos(ws.yaw), Math.sin(ws.yaw)];
 
 // ---------------------------------------------------------------- sound (another module; optional)
 let soundMod = null, sound = null, muted = q.get('mute') === '1';
@@ -71,7 +79,10 @@ const input = createInput(stage, {
   onTime: (n) => setTime(n),
   onGesture,
   onFirstMove: () => { if (!hintGone) { hintGone = true; hintEl.classList.add('gone'); } },
+  onView: () => setView(viewMode === 'third' ? 'first' : 'third'),
 });
+if (START_VIEW === 'first' && !FIGURE) hintEl.querySelector('.desk-only').textContent = 'Click to look around. W A S D to walk, Shift to run. Click the sand to walk there.';
+if (START_VIEW === 'first' && !FIGURE) hintEl.querySelector('.touch-only').textContent = 'Left thumb walks, right thumb looks. Tap the sand to walk there.';
 for (const b of document.querySelectorAll('[data-time]')) b.addEventListener('click', () => { onGesture(); setTime(b.dataset.time); });
 function markTimeButtons(name) { for (const b of document.querySelectorAll('[data-time]')) b.setAttribute('aria-pressed', String(b.dataset.time === name)); }
 markTimeButtons(startName);
@@ -103,7 +114,15 @@ async function buildGraphics() {
   const air = await import('./air.js');
   const { SHMAP } = await import('../look-test/params.js');
   const figMod = FIGURE ? await import('./figure.js') : null;
-  const figShade = figMod ? figMod.createFigureShading() : null;
+  const pilMod = FIGURE ? null : await import('./pilgrim.js');
+  const figShade = figMod ? figMod.createFigureShading() : pilMod ? (await import('./figure.js')).createFigureShading() : null;
+  // view=first keeps the ground's shader as it was: the figure's shadow, contact and lantern pool
+  // are only compiled into the ground when the walk starts in third person (V later shows the
+  // Pilgrim without them)
+  const groundFig = figShade && (figMod || START_VIEW === 'third') ? figShade : null;
+  // third person: the trail must read about 40 m back, so the trace window is larger (same texel)
+  // and heals more slowly; the first-person view keeps its own numbers
+  if (START_VIEW === 'third' && !FIGURE) Object.assign(traceMod.TRACE, { N: 1536, size: 72, tau: 50, rateCrest: 0.9, blur: 0.12, farTone: 0.22 });
 
   if (/^\d{3}$/.test(q.get('grid') || '')) clip.CLIP.n = Math.max(64, Math.round(+q.get('grid') / 8) * 8);
   if (/^\d{1,3}$/.test(q.get('slices') || '')) shMod.SHADOW.slices = Math.max(1, +q.get('slices'));
@@ -135,7 +154,7 @@ async function buildGraphics() {
       shadowTexB: rtB.texture,
       trace: trace.hook,
       air: q.get('air') === '0' ? null : air.airHook,
-      ...(figShade ? { figure: figShade.groundHook } : {}),
+      ...(groundFig ? { figure: groundFig.groundHook } : {}),
     },
   }, rtA.texture);
 
@@ -160,6 +179,13 @@ async function buildGraphics() {
   };
   const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
+  if (pilMod) {
+    g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced });
+    g.puffs = (await import('./puffs.js')).createPuffs({ U: mats.uniforms, shade: figShade, scene });
+    g.follow = (await import('./follow.js')).createFollow({ reduced });
+    g.follow.setYaw(figYaw);
+    g.pil.setVisible(viewMode === 'third');
+  }
   if (figMod) {
     g.fig = figMod.createFigure({ kind: FIGURE, U: mats.uniforms, shade: figShade, scene });
     g.persp = camera;
@@ -175,6 +201,16 @@ function setAllTime(groundY) { applyBlend(G.mats.set, timeNow, null, 0, groundY)
 
 let lookOv = null;   // a script may look elsewhere for a frame without turning the walker
 function placeCamera() {
+  if (G.pil) G.pil.setTime(timeNow.name);
+  if (G.pil && viewMode === 'third') {
+    const F = G.follow.state, c = F.cam, cam = G.camera;
+    cam.position.set(c[0], c[1], c[2]);
+    const h = lookOv ? lookOv.headingDeg * DEG : F.viewYaw, p = lookOv ? lookOv.pitchDeg * DEG : F.viewPitch;
+    cam.lookAt(c[0] + Math.cos(h) * Math.cos(p), c[1] + Math.sin(p), c[2] + Math.sin(h) * Math.cos(p));
+    G.sky.position.set(c[0], c[1], c[2]);
+    G.uCam.value.set(c[0] + meshOff[0], c[2] + meshOff[1]);
+    return;
+  }
   if (G.fig) { G.fig.setTime(timeNow.name); if (G.fig.state.placed) { placeShot(); return; } }
   const e = walker.eye();
   const cam = G.camera;
@@ -323,6 +359,66 @@ function pick(ndcX, ndcY) {
 }
 
 let lastTap = null;
+// the trace window: centred on the walker in first person; in third person 10 m behind along the
+// direction of travel (so the trail reads ~40 m back), moved only when that point is 1.5 m away
+function traceCentre() {
+  if (viewMode !== 'third' || START_VIEW !== 'third') { traceC = null; return [ws.x, ws.z]; }
+  const sp = Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz);
+  if (sp > 0.3) { travelDir = [(ws.vx + ws.sx) / sp, (ws.vz + ws.sz) / sp]; }
+  const want = [ws.x - travelDir[0] * 10, ws.z - travelDir[1] * 10];
+  if (!traceC || Math.hypot(want[0] - traceC[0], want[1] - traceC[1]) > 1.5) traceC = want;
+  return traceC;
+}
+function windNow() {
+  const w = walker.wind(animTime);
+  const gust = Math.max(0, Math.min(1, 0.5 + 0.35 * Math.sin(animTime * 0.37) * Math.sin(animTime * 0.13 + 1.7) + 0.3 * Math.sin(animTime * 1.1 + Math.sin(animTime * 0.29) * 2)));
+  return { dir: WIND, strength: Math.min(1.1, 0.25 + w.windSpeed / 8), gust, sound: w };
+}
+// place the figure and the camera without advancing time (start, a new pose, a view switch)
+function primeThird() {
+  if (!G || !G.pil || viewMode !== 'third') return;
+  G.pil.update(0, ws, { heading: figYaw, angVel: 0, wind: windNow(), t: animTime, wish: null });
+  G.follow.update(0, { x: ws.x, z: ws.z, ground: ws.ground, speed: 0, sliding: 0, running: 0, travelYaw: null }, {});
+}
+function setView(mode) {
+  if (!G || !G.pil || mode === viewMode) return;
+  viewMode = mode;
+  if (mode === 'first') { ws.yaw = figYaw; ws.pitch = -4 * DEG; G.pil.setVisible(false); G.puffs.clear(); G.puffs.sprite.visible = false; }
+  else { figYaw = ws.yaw; figAngVel = 0; G.follow.setYaw(ws.yaw); G.follow.state.init = false; G.pil.reset(); G.pil.setVisible(true); primeThird(); }
+  if (G.camera.fov !== (window.innerWidth / Math.max(1, window.innerHeight) < 1 ? CAM.vfovPortrait : CAM.vfov)) resize();
+  placeCamera();
+}
+function tickThird(dt, intent) {
+  const F = G.follow;
+  const look = { dx: (intent.lookX || 0) + (intent.turn || 0) * 1.7 * dt, dy: intent.lookY || 0 };
+  const [cfx, cfz] = F.forward, crx = -cfz, crz = cfx;
+  const wish = [cfx * (intent.fwd || 0) + crx * (intent.strafe || 0), cfz * (intent.fwd || 0) + crz * (intent.strafe || 0)];
+  // the figure turns toward where it wants to go: limited rate, eased in and out (no snapping)
+  let want = null;
+  if (Math.hypot(wish[0], wish[1]) > 0.05) want = Math.atan2(wish[1], wish[0]);
+  else if (ws.target && Math.hypot(ws.target.x - ws.x, ws.target.z - ws.z) > 0.35) want = Math.atan2(ws.target.z - ws.z, ws.target.x - ws.x);
+  else if (intent.target) want = Math.atan2(intent.target.z - ws.z, intent.target.x - ws.x);
+  const spd = Math.hypot(ws.vx, ws.vz);
+  const maxRate = spd < 0.5 ? 4.2 : 3.0 + 1.2 * ws.running;
+  const targetVel = want === null ? 0 : Math.max(-maxRate, Math.min(maxRate, Math.atan2(Math.sin(want - figYaw), Math.cos(want - figYaw)) * 5));
+  figAngVel += (targetVel - figAngVel) * (1 - Math.exp(-dt / 0.12));
+  figYaw = Math.atan2(Math.sin(figYaw + figAngVel * dt), Math.cos(figYaw + figAngVel * dt));
+  ws.yaw = figYaw;
+  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced });
+  ws.yaw = figYaw;
+  const wind = windNow();
+  const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ] });
+  for (const st of stamps) G.trace.stamp(st);
+  for (const e of events) {
+    if (e.type !== 'foot') continue;
+    const sm = G.pil.foot(e, ws);
+    if (sm) G.trace.stamp(sm);
+    if (!reduced && !(e.slide > 0.5)) G.puffs.foot(e, wind, [e.dirX, e.dirZ]);
+  }
+  const tv = Math.hypot(ws.vx, ws.vz) > 0.3 ? Math.atan2(ws.vz, ws.vx) : null;
+  F.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz), sliding: ws.sliding, running: ws.running, travelYaw: tv }, look);
+  return events;
+}
 function tick(dt) {
   const t0 = performance.now();
   const intent = G.fig && G.fig.state.placed ? {} : input.read();
@@ -330,7 +426,9 @@ function tick(dt) {
     const hit = pick(intent.tap.ndcX, intent.tap.ndcY);
     if (hit) { intent.target = { x: hit.x, z: hit.z }; lastTap = { x: hit.x, z: hit.z }; }
   }
-  const events = walker.update(dt, { ...intent, reducedMotion: reduced });
+  animTime += dt;
+  const third = G.pil && viewMode === 'third';
+  const events = third ? tickThird(dt, intent) : walker.update(dt, { ...intent, reducedMotion: reduced });
   for (const e of events) {
     G.trace.stamp(e);
     // No step sound while sliding: the slide voice carries it, and the sound module's levels assume the two do not overlap.
@@ -340,13 +438,15 @@ function tick(dt) {
   if (G.fig) G.fig.trail(events, ws, G.trace);
   if (!reduced) simTime += dt;
   placeCamera();
+  if (third) G.puffs.update(dt, ws, windNow(), G.camera, reduced);
   updateTime(dt);
   const fogBase = ws.ground;
   const f = timeFade && timeFade.phase === 'fading' ? null : timeNow;
   if (f) { G.mats.set('uFog', [f.uFog[0], f.uFog[1], f.uFog[2], fogBase]); G.mats.set('uGroundY', fogBase); }
   const bakeDid = G.shadows.update(dt, [ws.x, ws.z], [ws.vx + ws.sx, ws.vz + ws.sz], timeNow.shadow, reduced);
   // figure look test: the prints do not heal, so the 20 m approach reads as if just walked
-  const traceDid = G.trace.update(dt, ws.x, ws.z, !G.fig);
+  const tc = traceCentre();
+  const traceDid = G.trace.update(dt, tc[0], tc[1], !G.fig);
   G.mats.set('uTime', simTime);
   G.renderer.render(G.scene, G.camera);
   try {
@@ -400,6 +500,7 @@ function readout() {
     `pixel ratio ${dpr}${fixedDpr ? ' (fixed)' : ` (cap ${dprCap})`}, canvas ${c.width} x ${c.height}`,
     `frame ${st.medianMs} ms median, ${st.worstMs} ms worst (last second, ${st.frames} frames); work ${st.workMedianMs} ms`,
     `shadows: ${bakeLabel()}`,
+    G.pil ? `view: ${viewMode}${viewMode === 'third' ? `, boom ${G.follow.state.L.toFixed(1)} m (to ${G.follow.state.Lt.toFixed(1)}), raised ${G.follow.state.raised.toFixed(2)} m, puffs ${G.puffs.live}, staff ${G.pil.state.mode}` : ''}` : 'view: figure look test',
     `prints: ${API.events.foot} steps, trace passes ${G.trace.passes}`,
     `at ${ws.x.toFixed(1)}, ${ws.z.toFixed(1)}  heading ${(((ws.yaw / DEG) % 360) + 360) % 360 | 0}  ${ws.speed.toFixed(1)} m/s  slope ${ws.slopeDeg.toFixed(0)}  slide ${ws.sliding.toFixed(2)}`,
     timeFade ? `time: ${timeNow.name} -> ${timeFade.to.name} (${timeFade.phase})` : `time: ${timeNow.name}`,
@@ -438,6 +539,7 @@ async function startGraphics() {
   API.backend = G.backend;
   timeFade = null;
   setAllTime(ws.ground);
+  primeThird();
   placeCamera();
   resize();
   G.shadows.reset([ws.x, ws.z], timeNow.shadow);
@@ -464,6 +566,12 @@ API.state = () => ({
   time: timeNow.name, timeFade: timeFade ? { to: timeFade.to.name, phase: timeFade.phase, t: r3(timeFade.t) } : null,
   bake: G ? { state: G.shadows.stats.state, job: G.shadows.job, current: G.shadows.current, mix: r3(G.shadows.mix), bakes: G.shadows.stats.bakes, slicesRun: G.shadows.stats.slicesRun, centres: G.shadows.centres } : null,
   trace: G ? { passes: G.trace.passes, queued: G.trace.queued, centre: G.trace.centre } : null,
+  view: G && G.pil ? viewMode : FIGURE ? 'figure-test' : viewMode,
+  cam: G ? { x: r3(G.camera.position.x), y: r3(G.camera.position.y), z: r3(G.camera.position.z), aboveGround: r3(G.camera.position.y - height(G.camera.position.x, G.camera.position.z)),
+    boom: G.follow ? r3(G.follow.state.L) : null, boomTarget: G.follow ? r3(G.follow.state.Lt) : null, yawDeg: G.follow ? r3(G.follow.state.yaw / DEG) : null, elevDeg: G.follow ? r3(G.follow.state.elev / DEG) : null,
+    raised: G.follow ? r3(G.follow.state.raised) : null, shortened: G.follow ? G.follow.state.shortened : null } : null,
+  figure: G && G.pil ? { headingDeg: r3(((figYaw / DEG) % 360 + 360) % 360), ...G.pil.state } : null,
+  puffs: G && G.puffs ? G.puffs.live : null,
   frame: frameStats(), dpr, backend: API.backend, running, locked: input.locked, lockRefused: input.lockRefused,
   canvas: G ? [G.renderer.domElement.width, G.renderer.domElement.height] : null, hintGone, sound: sound ? (muted ? 'muted' : 'on') : (soundMod === false ? 'unavailable' : 'not started'),
 });
@@ -481,13 +589,18 @@ if (FIGURE) {
   };
 }
 API.lookOverride = (v) => { lookOv = v; };
+API.setView = (m) => setView(m);
+// orbit the camera as a script; holdS keeps it from swinging back behind the walker for that long
+API.orbit = (yawDeg, elevDeg, holdS = 0) => { if (!G || !G.follow) return; const F = G.follow.state; if (yawDeg !== undefined && yawDeg !== null) F.yaw = yawDeg * DEG; if (elevDeg !== undefined && elevDeg !== null) F.elev = elevDeg * DEG; F.sinceLook = -holdS; };
 API.meshOffset = (v) => { meshOff = v || [0, 0]; };
 API.release = () => input.release();
 API.pause = () => { paused = true; syncLoop(); };
 API.resume = () => { paused = false; syncLoop(); };
 API.setPose = (p) => {
   walker.setPose(p);
-  if (G) { placeCamera(); G.shadows.cancelJobs(); G.shadows.reset([ws.x, ws.z], timeNow.shadow); if (p.clearTrace !== false) G.trace.clear(); G.trace.update(0, ws.x, ws.z, false); }
+  figYaw = ws.yaw; figAngVel = 0; traceC = null;
+  if (G && G.pil) { G.pil.reset(); G.puffs.clear(); G.follow.setYaw(p.camYawDeg !== undefined ? p.camYawDeg * DEG : ws.yaw); G.follow.state.init = false; G.follow.state.still = 0; primeThird(); }
+  if (G) { placeCamera(); G.shadows.cancelJobs(); G.shadows.reset([ws.x, ws.z], timeNow.shadow); if (p.clearTrace !== false) G.trace.clear(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); }
 };
 API.setTime = (name, instant = true) => setTime(name, instant);
 // step n frames at a fixed dt with the loop paused; each frame is timed from its start until the
@@ -506,7 +619,7 @@ API.step = async (n = 1, { dt = 1 / 60, drain = true, every = 0 } = {}) => {
   return out;
 };
 // render the current state again (after a pose or a time change) and wait for the GPU
-API.render = async () => { placeCamera(); G.trace.update(0, ws.x, ws.z, false); G.renderer.render(G.scene, G.camera); await G.drain(); };
+API.render = async () => { placeCamera(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); G.renderer.render(G.scene, G.camera); await G.drain(); };
 API.loseDevice = () => {
   if (!G) return false;
   if (G.isGPU) { const d = G.renderer.backend.device; onDeviceLost({ api: 'WebGPU', reason: 'test' }); try { d.destroy(); } catch { /* gone */ } }

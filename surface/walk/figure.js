@@ -29,15 +29,15 @@ export const NCAP = 10;
 export const FIGURES = { a: 'the Pilgrim', b: 'the Cartographer', c: 'the Kite' };
 
 // the lantern, per time of day: pool (ground light, linear, before exposure), body and glow (display)
-const LAMP = {
+export const LAMP = {
   day: { pool: 1.6, body: 0.75, glow: 0.18 },
   dusk: { pool: 1.6, body: 1.0, glow: 0.55 },
   ember: { pool: 1.9, body: 1.0, glow: 0.85 },
 };
-const LAMP_COL = [1.0, 0.52, 0.2];
+export const LAMP_COL = [1.0, 0.52, 0.2];
 
 // linear albedos: dark, matte, slightly warm
-const C = {
+export const C = {
   cloth: [0.048, 0.035, 0.026], cloth2: [0.040, 0.030, 0.023], hollow: [0.003, 0.0025, 0.002],
   wood: [0.05, 0.034, 0.022], metal: [0.028, 0.026, 0.024], light: [0.36, 0.31, 0.24], dark: [0.022, 0.017, 0.013],
   wrap: [0.085, 0.065, 0.046], strap: [0.03, 0.023, 0.017], boot: [0.026, 0.02, 0.015], pack: [0.062, 0.047, 0.033],
@@ -60,7 +60,7 @@ function piece(pos, col, idx) {
   return g;
 }
 // a closed surface around an axis: f(theta, v) -> [x, y, z], v from 0 (bottom) to 1 (top)
-function lathe(nu, nv, f, colF) {
+export function lathe(nu, nv, f, colF) {
   const pos = [], col = [], idx = [];
   for (let j = 0; j <= nv; j++) for (let i = 0; i < nu; i++) {
     const th = (i / nu) * Math.PI * 2, v = j / nv, p = f(th, v);
@@ -73,7 +73,7 @@ function lathe(nu, nv, f, colF) {
   return piece(pos, col, idx);
 }
 // a swept tube with a varying radius along a curve; r(t), colour colF(t, theta)
-function tube(points, r, colF, { nu = 12, nv = 24, capEnd = false } = {}) {
+export function tube(points, r, colF, { nu = 12, nv = 24, capEnd = false } = {}) {
   const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
   const fr = curve.computeFrenetFrames(nv, false);
   const pos = [], col = [], idx = [];
@@ -97,7 +97,7 @@ function tube(points, r, colF, { nu = 12, nv = 24, capEnd = false } = {}) {
   return piece(pos, col, idx);
 }
 // an ellipsoid (centre, radii), optionally squashed by a function of the unit direction
-function blob(c, r, colF, { nu = 20, nv = 14, warp = null } = {}) {
+export function blob(c, r, colF, { nu = 20, nv = 14, warp = null } = {}) {
   return lathe(nu, nv, (th, v) => {
     const ring = Math.sin(Math.PI * v), d = [Math.cos(th) * ring, -Math.cos(Math.PI * v), Math.sin(th) * ring];
     const p = [c[0] + d[0] * r[0], c[1] + d[1] * r[1], c[2] + d[2] * r[2]];
@@ -147,7 +147,7 @@ function merge(geos) {
 // ---------------------------------------------------------------- cloth
 // keys: [y, front radius, back radius, side radius, centre x] ascending in y. wind is the local wind
 // (unit, x forward, z right). bulges: [theta, y, height scale, amount] (knees and heels in the cloth).
-function cloak({ keys, wind, windAmt, folds = 0.05, bulges = [], hemWave = 0.025, lift = 0.05, nu = 96, nv = 56, colF, yShoulder }) {
+export function cloak({ keys, wind, windAmt, folds = 0.05, bulges = [], hemWave = 0.025, lift = 0.05, nu = 96, nv = 56, colF, yShoulder }) {
   const y0 = keys[0][0], y1 = keys[keys.length - 1][0];
   const at = (y) => {
     let k = 0; while (k < keys.length - 2 && keys[k + 1][0] < y) k++;
@@ -183,7 +183,7 @@ function cloak({ keys, wind, windAmt, folds = 0.05, bulges = [], hemWave = 0.025
 }
 
 // a hood: an ellipsoid around the head with a cowl opening (pushed in, black) and an optional point
-function hood({ c, r, tip = null, wind, cowl = 0.1, brim = 0.03, nu = 56, nv = 36 }) {
+export function hood({ c, r, tip = null, wind, cowl = 0.1, brim = 0.03, nu = 56, nv = 36 }) {
   const v0 = 0.16;
   const fwdOpen = (d) => sstep(0.42, 0.85, d[0]) * (1 - sstep(0.3, 0.7, Math.abs(d[1] + 0.05)));
   return lathe(nu, nv, (th, vRaw) => {
@@ -213,7 +213,7 @@ function hood({ c, r, tip = null, wind, cowl = 0.1, brim = 0.03, nu = 56, nv = 3
 }
 
 // the lantern: a dark frame (into the figure) and a glass body (its own emissive mesh)
-function lantern(c, parts, glass, { h = 0.13, r = 0.055 } = {}) {
+export function lantern(c, parts, glass, { h = 0.13, r = 0.055 } = {}) {
   const [x, y, z] = c;
   const top = y + h / 2, bot = y - h / 2;
   parts.push(lathe(14, 4, (th, v) => { const rr = lerp(r * 1.25, 0.012, v); return [x + Math.cos(th) * rr, top + v * 0.06, z + Math.sin(th) * rr]; }, () => C.metal));
@@ -376,6 +376,9 @@ export function createFigureShading() {
   const uFig = uniform(new THREE.Vector4(0, 0, 0, 0));    // world centre x, y, z; 1 when placed
   const uLamp = uniform(new THREE.Vector4(0, 0, 0, 0));   // lantern x, y, z; pool intensity
   const uLampCol = uniform(new THREE.Vector3(...LAMP_COL));
+  // one capsule round the whole figure (axis bottom xyz + radius, top xyz): a ground point whose ray
+  // toward a sun misses it skips the per-capsule loop (most of the screen)
+  const uBoundA = uniform(new THREE.Vector4(0, -1000, 0, 0)), uBoundB = uniform(new THREE.Vector4(0, -1000, 0, 0));
 
   // the ground hook (tsl-material.js opts.walk.figure)
   function groundHook({ xz, sp }) {
@@ -383,7 +386,14 @@ export function createFigureShading() {
     const placed = uFig.w.greaterThan(0.5);
     const shadow = (L) => {
       const o = float(1.0).toVar();
-      If(placed.and(dh.lessThan(110.0)).and(L.y.greaterThan(0.0)), () => {
+      // closest approach of the ray from sp toward L and the bounding capsule's axis
+      const bw0 = uBoundA.xyz.sub(sp).toVar(), bu = uBoundB.xyz.sub(uBoundA.xyz).toVar();
+      const buL = dot(bu, L).toVar(), bdL = dot(bw0, L).toVar();
+      const bs = clamp(bdL.mul(buL).sub(dot(bw0, bu)).div(max(dot(bu, bu).sub(buL.mul(buL)), 1e-6)), 0.0, 1.0).toVar();
+      const bt = max(bdL.add(bs.mul(buL)), 0.0);
+      const bd = length(bw0.add(bu.mul(bs)).sub(L.mul(bt)));
+      const near = bd.lessThan(uBoundA.w.add(bt.mul(0.011)).add(0.05));
+      If(placed.and(dh.lessThan(110.0)).and(L.y.greaterThan(0.0)).and(near), () => {
         for (let i = 0; i < NCAP; i++) {
           const A = capA[i], B = capB[i];
           const w0 = A.xyz.sub(sp).toVar(), u = B.xyz.sub(A.xyz).toVar();
@@ -424,7 +434,7 @@ export function createFigureShading() {
     };
     return { shadow, ao, light };
   }
-  return { groundHook, capA, capB, uFig, uLamp, uLampCol };
+  return { groundHook, capA, capB, uFig, uLamp, uLampCol, uBoundA, uBoundB };
 }
 
 // ---------------------------------------------------------------- the figure in the scene
@@ -508,6 +518,7 @@ export function createFigure({ kind, U, shade, scene }) {
       a.set(c[0], c[1], c[2]).applyMatrix4(m); b.set(c[4], c[5], c[6]).applyMatrix4(m);
       shade.capA[i].value.set(a.x, a.y, a.z, c[3]); shade.capB[i].value.set(b.x, b.y, b.z, c[7]);
     }
+    shade.uBoundA.value.set(x, y - 0.1, z, 3.0); shade.uBoundB.value.set(x, y + 2.7, z, 3.0);   // wide: the Kite's scarf
     const lp = new THREE.Vector3(...built.lamp).applyMatrix4(m);
     shade.uLamp.value.set(lp.x, lp.y, lp.z, shade.uLamp.value.w);
     shade.uFig.value.set(x, y, z, 1);

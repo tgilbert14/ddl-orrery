@@ -27,6 +27,8 @@ export const TRACE = {
   rateCrest: 1.4,     // heal rate = 1 + rateCrest * exposure (a crest heals 2.4x faster)
   edge: 0.08,         // the window fades out over this fraction of its width at each side
   slots: 4,           // stamps per pass
+  farTone: 0,         // third person: where the relief no longer reads (a pixel wider than ~2 texels),
+                      // trodden sand is darkened by up to this much, so a trail still reads 40 m off
 };
 
 export function createTrace(renderer) {
@@ -207,7 +209,10 @@ export function createTrace(renderer) {
       });
       return o;
     };
-    return { grad: res.xy, disturb: res.z, shade };
+    const out = { grad: res.xy, disturb: res.z, shade };
+    // relief fades with distance; the disturbed tone takes over (dents darker than the rim)
+    if (TRACE.farTone > 0) out.tone = float(1.0).sub(res.z.mul(float(1.0).sub(near.div(max(inWin, 1e-3)))).mul(TRACE.farTone).mul(smoothstep(0.0, -0.012, res.w).mul(0.6).add(0.4)));
+    return out;
   }
 
   return {

@@ -3,7 +3,10 @@
 //
 // One update per frame: update(dt, intent) where intent is
 //   { fwd -1..1, strafe -1..1, run bool, turn -1..1 (keyboard Q/E), lookX, lookY (radians this frame),
-//     target {x, z} | null (walk there on your own), cancelTarget bool }
+//     target {x, z} | null (walk there on your own), cancelTarget bool,
+//     third person only: wish [x, z] (a world direction, length 0..1, replaces fwd/strafe) and
+//     face bool (walk only where you face: the wish is projected onto the heading, and the caller
+//     turns the heading toward s.wishX, s.wishZ at a limited rate) }
 // and the walker reports footfalls (for prints and sound) and slide marks (for the trough) as events.
 //
 // Units: metres, seconds, radians. Heading is the look test's convention: x toward z, forward is
@@ -82,7 +85,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     ground: footHeight(x, z), groundPoint: height(x, z),
     sink: WALK.sinkBase, bob: 0, swayX: 0, eyeY: 0,
     phase: 0, side: 1, steps: 0, distance: 0, slideDist: 0,
-    target: null, targetStall: 0, targetBest: Infinity,
+    target: null, targetStall: 0, targetBest: Infinity, wishX: 0, wishZ: 0,
     exposure: exposureAt(x, z), exposureT: 0,
   };
   s.eyeY = s.ground + WALK.eye - s.sink;
@@ -98,6 +101,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     const fx = Math.cos(s.yaw), fz = Math.sin(s.yaw), rx = -fz, rz = fx;
     let mx = (intent.fwd || 0) * fx + (intent.strafe || 0) * rx;
     let mz = (intent.fwd || 0) * fz + (intent.strafe || 0) * rz;
+    if (intent.wish) { mx = intent.wish[0]; mz = intent.wish[1]; }
     let m = Math.hypot(mx, mz);
     let run = !!intent.run;
     if (m > 0.05 || intent.cancelTarget) s.target = null;
@@ -112,7 +116,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
         else {
           mx = dx / d; mz = dz / d; m = Math.min(1, d / 1.2 + 0.25);
           run = d > WALK.autoRunDist;
-          if (!intent.reducedMotion && !reducedMotion) {
+          if (!intent.face && !intent.reducedMotion && !reducedMotion) {
             const want = Math.atan2(dz, dx), dy = wrapPi(want - s.yaw);
             s.yaw = wrapPi(s.yaw + clamp(dy, -WALK.autoTurn * dt, WALK.autoTurn * dt));
           }
@@ -120,6 +124,12 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
       }
     }
     if (m > 1) { mx /= m; mz /= m; m = 1; }
+    s.wishX = mx; s.wishZ = mz;
+    if (intent.face && m > 0.01) {
+      // a figure walks where it faces: turning round, it slows and turns before it walks off
+      const c = (mx * fx + mz * fz) / m, k = smooth(-0.1, 0.92, c);
+      mx = fx * m * k; mz = fz * m * k; m *= k;
+    }
 
     // ---- the slope under the feet
     const [, gx, gz] = heightD(s.x, s.z);
