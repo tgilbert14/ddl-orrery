@@ -4,9 +4,17 @@
 //   r=webgl2  WebGPURenderer with forceWebGL (the same TSL material, compiled to GLSL)
 //   r=classic WebGLRenderer from three.module.js (hand-written GLSL ShaderMaterial)
 // time=day|dusk|ember, weather=calm|storm, bench=1 to time throughput. No loop runs otherwise.
+// Debug switches (round two), compiled into the shaders:
+//   shadows=map (default: one baked log-polar shadow texture) | march (round one's per-pixel
+//           reference) | off
+//   normal=analytic (default) | fd (round one: three full height evaluations per pixel)
+//   ripples=1 (default) | 0
+//   bake=once (default; a still bakes once) | every (bench only: re-bake before every frame)
+//        | sliceN (bench only: bake one Nth of the map's rows before every frame, the cost of a
+//          re-bake spread over N frames)
 
-import { CAM, GRID, SKY, TIMES, WEATHERS, DEG, lookUniforms } from './params.js';
-import { height, heightLow, findCrest, WIND } from './height.js';
+import { CAM, GRID, SKY, SHMAP, TIMES, WEATHERS, DEG, lookUniforms } from './params.js';
+import { height, heightLow, heightD, findCrest, WIND } from './height.js';
 import { createGlslMaterials } from './glsl-material.js';
 
 const RENDERERS = ['webgpu', 'webgl2', 'classic'];
@@ -45,6 +53,17 @@ function showIndex() {
       list.append(li);
     }
   }
+  // the debug switches, on dusk calm (see the header of this file)
+  const li = document.createElement('li');
+  li.append('dusk / calm, cost switches (webgpu bench): ');
+  for (const [label, extra] of [['shadow march (reference)', '&shadows=march'], ['shadows off', '&shadows=off'],
+    ['finite-difference normal', '&normal=fd'], ['ripples off', '&ripples=0'], ['re-bake every frame', '&bake=every'], ['re-bake 1/8 per frame', '&bake=slice8']]) {
+    const a = document.createElement('a');
+    a.href = `?r=webgpu&time=dusk&weather=calm&bench=1${extra}`;
+    a.textContent = label;
+    li.append(a, ' ');
+  }
+  list.append(li);
   state.ready = true;
 }
 
@@ -89,11 +108,22 @@ async function run() {
   const time = q.get('time') || 'dusk';
   const weather = q.get('weather') || 'calm';
   const bench = q.get('bench') === '1';
-  if (!RENDERERS.includes(rName) || !TIMES[time] || !WEATHERS[weather]) {
-    poster(`unknown look: r=${rName} time=${time} weather=${weather}`);
+  const opts = {
+    shadows: q.get('shadows') || 'map',
+    normal: q.get('normal') || 'analytic',
+    ripples: q.get('ripples') !== '0',
+    bakeEvery: q.get('bake') === 'every',
+    bakeSlices: /^slice(\d+)$/.test(q.get('bake') || '') ? +q.get('bake').slice(5) : 0,
+  };
+  // shmap=WxH overrides the shadow-map size (for measuring the bake cost against edge quality)
+  const shm = /^(\d{3,4})x(\d{3,4})$/.exec(q.get('shmap') || '');
+  if (shm) { SHMAP.w = +shm[1]; SHMAP.h = +shm[2]; }
+  if (!RENDERERS.includes(rName) || !TIMES[time] || !WEATHERS[weather]
+    || !['map', 'march', 'off'].includes(opts.shadows) || !['analytic', 'fd'].includes(opts.normal)) {
+    poster(`unknown look: r=${rName} time=${time} weather=${weather} shadows=${opts.shadows} normal=${opts.normal}`);
     return;
   }
-  Object.assign(state, { requested: rName, look: `${time}/${weather}`, bench: bench ? 'pending' : 'off' });
+  Object.assign(state, { requested: rName, look: `${time}/${weather}`, bench: bench ? 'pending' : 'off', opts });
 
   // ---- where to stand: the JS height formula picks a crest and puts the eye 1.7 m above it
   // Stand CAM.back metres upwind of the crest top, on the windward slope: from the brink itself
@@ -102,25 +132,42 @@ async function run() {
   const sx = top.x - WIND[0] * CAM.back, sz = top.z - WIND[1] * CAM.back;
   const crest = { x: sx, z: sz, h: height(sx, sz) };
   const eye = [crest.x, crest.h + CAM.eye, crest.z];
+  // sun1=relAz,elev / sun2=relAz,elev: tuning overrides (degrees, relative to the view heading)
+  for (const k of ['sun1', 'sun2']) {
+    const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(q.get(k) || '');
+    if (m) Object.assign(TIMES[time][k], { relAz: +m[1], elev: +m[2] });
+  }
   const values = lookUniforms(time, weather, CAM.headingDeg);
   values.uGroundY = crest.h;
   values.uFog = [values.uFog[0], values.uFog[1], values.uFog[2], crest.h];
 
   // ---- renderer: load only the build this path needs
-  let THREE, renderer, mats, backend;
+  let THREE, renderer, mats, backend, shadowRT = null;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // the shadow map: half floats, one horizon value per sun (RG); a storm adds the ground and spill
+  // heights the blowing sand reads (RGBA). Bearing wraps around, distance clamps.
+  const makeShadowRT = (RT) => {
+    const format = weather === 'storm' ? THREE.RGBAFormat : THREE.RGFormat;
+    const rt = new RT(SHMAP.w, SHMAP.h, { depthBuffer: false, generateMipmaps: false, type: THREE.HalfFloatType, format });
+    rt.texture.type = THREE.HalfFloatType; rt.texture.format = format;
+    rt.texture.minFilter = THREE.LinearFilter; rt.texture.magFilter = THREE.LinearFilter;
+    rt.texture.wrapS = THREE.RepeatWrapping; rt.texture.wrapT = THREE.ClampToEdgeWrapping;
+    return rt;
+  };
   try {
     if (rName === 'classic') {
       THREE = await import('three');
       renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-      mats = createGlslMaterials(THREE, values);
+      if (opts.shadows === 'map') shadowRT = makeShadowRT(THREE.WebGLRenderTarget);
+      mats = createGlslMaterials(THREE, values, opts, shadowRT?.texture ?? null);
       backend = 'WebGL2 (classic WebGLRenderer, GLSL)';
     } else {
       THREE = await import('three/webgpu');
       const { createTslMaterials } = await import('./tsl-material.js');
       renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: rName === 'webgl2', powerPreference: 'high-performance' });
       await renderer.init();
-      mats = createTslMaterials(values);
+      if (opts.shadows === 'map') shadowRT = makeShadowRT(THREE.RenderTarget);
+      mats = createTslMaterials(values, opts, shadowRT?.texture ?? null);
       const isGPU = renderer.backend.isWebGPUBackend === true;
       backend = isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)';
       if (rName === 'webgpu' && !isGPU) { backend += ' - FELL BACK: WebGPU did not start'; state.fellBack = true; }
@@ -136,6 +183,7 @@ async function run() {
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.setPixelRatio(dpr);
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (rName === 'classic') mats.set('uViewH', renderer.domElement.height);
   document.getElementById('stage').append(renderer.domElement);
 
   // ---- scene: a sky sphere drawn first, then the ground grid
@@ -166,7 +214,41 @@ async function run() {
     else gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // blocks until the GPU is done
   };
 
+  // ---- shadow-map bake: one full-screen pass into the log-polar target, centred on the camera.
+  // A still bakes once. A walking camera would call maybeBake() each frame: it re-bakes only when
+  // a sun has moved or the camera is more than SHMAP.rebakeDist from the last bake centre.
+  const bakeScene = new THREE.Scene();
+  const bakeQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mats.bake);
+  bakeQuad.frustumCulled = false;
+  bakeScene.add(bakeQuad);
+  const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const bakeState = { centre: null, sun: null, count: 0 };
+  const bake = (cx, cz) => {
+    mats.set('uShC', [cx, cz]);
+    renderer.setRenderTarget(shadowRT); renderer.render(bakeScene, quadCam); renderer.setRenderTarget(null);
+    bakeState.centre = [cx, cz]; bakeState.sun = [...values.uSun1Dir, ...values.uSun2Dir].join(); bakeState.count++;
+  };
+  // one band of rows (a scissor over the full-target quad), so a re-bake can be spread over frames
+  const bakeSlice = (i, n) => {
+    const y0 = Math.floor((i * SHMAP.h) / n), y1 = Math.floor(((i + 1) * SHMAP.h) / n);
+    // classic WebGLRenderer reads the target's scissorTest; WebGPURenderer uses the target's scissor
+    // rectangle only while the renderer's own scissor test is on
+    shadowRT.scissor.set(0, y0, SHMAP.w, y1 - y0); shadowRT.scissorTest = true;
+    if (rName !== 'classic') renderer.setScissorTest(true);
+    renderer.setRenderTarget(shadowRT); renderer.render(bakeScene, quadCam); renderer.setRenderTarget(null);
+    shadowRT.scissorTest = false;
+    if (rName !== 'classic') renderer.setScissorTest(false);
+  };
+  const maybeBake = (cx, cz) => {
+    if (!shadowRT) return false;
+    const sunKey = [...values.uSun1Dir, ...values.uSun2Dir].join();
+    if (bakeState.centre && bakeState.sun === sunKey && Math.hypot(cx - bakeState.centre[0], cz - bakeState.centre[1]) < SHMAP.rebakeDist) return false;
+    bake(cx, cz);
+    return true;
+  };
+
   // ---- first frame (time to first frame includes shader compile)
+  maybeBake(eye[0], eye[2]);
   renderer.render(scene, camera);
   await gpuFinish();
   state.firstFrameMs = Math.round(performance.now());
@@ -189,17 +271,39 @@ async function run() {
   // ---- bench: uncapped throughput, only when asked for
   if (bench) {
     const N = 200, WARM = 30, RUNS = 3;
-    for (let i = 0; i < WARM; i++) { aim(CAM.headingDeg + i * 0.01); renderer.render(scene, camera); }
+    const frame = (i) => {
+      if (opts.bakeEvery && shadowRT) bake(eye[0], eye[2]);
+      if (opts.bakeSlices && shadowRT) bakeSlice(i % opts.bakeSlices, opts.bakeSlices);
+      aim(CAM.headingDeg + (i % 40) * 0.01); renderer.render(scene, camera);
+    };
+    for (let i = 0; i < WARM; i++) frame(i);
     await gpuFinish();
     const runs = [];
     for (let r = 0; r < RUNS; r++) {
       await nextFrame();
       const t0 = performance.now();
-      for (let i = 0; i < N; i++) { aim(CAM.headingDeg + (i % 40) * 0.01); renderer.render(scene, camera); }
+      for (let i = 0; i < N; i++) frame(i);
       await gpuFinish();
       runs.push((performance.now() - t0) / N);
     }
-    state.bench = { frames: N, runs: runs.map((x) => +x.toFixed(2)), msPerFrameMedian: +median(runs).toFixed(2) };
+    state.bench = { frames: N, runs: runs.map((x) => +x.toFixed(2)), msPerFrameMedian: +median(runs).toFixed(2), bakeEvery: opts.bakeEvery, bakeSlices: opts.bakeSlices };
+    if (shadowRT) {
+      // the bake alone, 20 back to back
+      const bruns = [];
+      for (let r = 0; r < RUNS; r++) {
+        await nextFrame();
+        const t0 = performance.now();
+        for (let i = 0; i < 20; i++) bake(eye[0], eye[2]);
+        // one canvas frame that samples the map, so the drain below waits for the bakes on WebGL
+        // too (a 1x1 readPixels of the canvas alone does not) and reads a canvas-format buffer;
+        // it adds about 1/20 of a frame to each bake figure
+        renderer.render(scene, camera);
+        await gpuFinish();
+        bruns.push((performance.now() - t0) / 20);
+      }
+      state.bench.bakeMs = +median(bruns).toFixed(2);
+      state.bench.bakeRuns = bruns.map((x) => +x.toFixed(2));
+    }
   }
 
   aim(CAM.headingDeg);
@@ -214,10 +318,11 @@ async function run() {
     `running on: ${backend}`,
     `canvas: ${state.canvas[0]} x ${state.canvas[1]} px (CSS ${state.css[0]} x ${state.css[1]}, DPR ${dpr})`,
     `grid: ${grid.vertices.toLocaleString()} vertices, ${grid.triangles.toLocaleString()} triangles`,
+    `shadows: ${opts.shadows}${shadowRT ? ` (log-polar ${SHMAP.w} x ${SHMAP.h}, baked ${bakeState.count}x)` : ''}; normal: ${opts.normal}; ripples: ${opts.ripples ? 'on' : 'off'}`,
     `first frame: ${state.firstFrameMs} ms after navigation start (includes shader compile)`,
     state.probe?.error ? `height check: failed to run (${state.probe.error})`
-      : `height check: GPU vs height.js at ${state.probe.points} points, max |dh| ${state.probe.maxDiff.toExponential(2)} m; eye ${state.probe.eyeAboveGround.toFixed(3)} m above GPU ground`,
-    typeof b === 'object' ? `bench: ${b.msPerFrameMedian} ms/frame median of ${b.runs.join(', ')} (${b.frames} frames each)` : 'bench: off (add bench=1)',
+      : `height check: GPU vs height.js at ${state.probe.points} points, max |dh| ${state.probe.maxDiff.toExponential(2)} m, max |grad error| ${state.probe.maxGradDiff.toExponential(2)}; eye ${state.probe.eyeAboveGround.toFixed(3)} m above GPU ground`,
+    typeof b === 'object' ? `bench: ${b.msPerFrameMedian} ms/frame median of ${b.runs.join(', ')} (${b.frames} frames each${b.bakeEvery ? ', shadow map re-baked every frame' : ''}${b.bakeSlices ? `, 1/${b.bakeSlices} of the map re-baked every frame` : ''})${b.bakeMs ? `; bake alone ${b.bakeMs} ms` : ''}` : 'bench: off (add bench=1)',
     typeof b === 'object' ? 'throughput figure, GPU drained after N back-to-back frames; not a vsync-limited frame rate' : '',
   ]);
   state.ready = true;
@@ -230,20 +335,26 @@ async function runProbe(THREE, renderer, mats, eye, rName) {
   quad.frustumCulled = false;
   scene.add(quad);
   const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  let data;
-  if (rName === 'classic') {
-    const rt = new THREE.WebGLRenderTarget(8, 8, { type: THREE.FloatType, depthBuffer: false });
-    renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
-    data = new Float32Array(8 * 8 * 4);
-    renderer.readRenderTargetPixels(rt, 0, 0, 8, 8, data);
-    rt.dispose();
-  } else {
-    const rt = new THREE.RenderTarget(8, 8, { type: THREE.FloatType, depthBuffer: false });
-    renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
-    data = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 8, 8);
-    rt.dispose();
-  }
-  let maxDiff = 0, maxDiffLow = 0, points = 0, eyeGround = null;
+  const read = async () => {
+    let data;
+    if (rName === 'classic') {
+      const rt = new THREE.WebGLRenderTarget(8, 8, { type: THREE.FloatType, depthBuffer: false });
+      renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
+      data = new Float32Array(8 * 8 * 4);
+      renderer.readRenderTargetPixels(rt, 0, 0, 8, 8, data);
+      rt.dispose();
+    } else {
+      const rt = new THREE.RenderTarget(8, 8, { type: THREE.FloatType, depthBuffer: false });
+      renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
+      data = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 8, 8);
+      rt.dispose();
+    }
+    return data;
+  };
+  const data = await read();
+  quad.material = mats.probeD;
+  const dataD = await read();
+  let maxDiff = 0, maxDiffLow = 0, maxGradDiff = 0, maxDiffD = 0, points = 0, eyeGround = null;
   const samples = [];
   // WebGPU readback pads each row to 256 bytes (64 floats); WebGL rows are tight (32 floats).
   const stride = data.length > 256 ? (data.length - 32) / 7 : 32;
@@ -254,11 +365,16 @@ async function runProbe(THREE, renderer, mats, eye, rName) {
     const jh = height(x, z), jhl = heightLow(x, z);
     maxDiff = Math.max(maxDiff, Math.abs(gh - jh));
     maxDiffLow = Math.max(maxDiffLow, Math.abs(ghl - jhl));
+    // the analytic gradient (probeD writes heightD at the same texel; the layout is the same)
+    const jd = heightD(x, z);
+    maxDiffD = Math.max(maxDiffD, Math.abs(dataD[o] - jd[0]), Math.abs(dataD[o + 3] - jhl));
+    maxGradDiff = Math.max(maxGradDiff, Math.hypot(dataD[o + 1] - jd[1], dataD[o + 2] - jd[2]));
     points++;
     if (ix === 0 && iy === 0) eyeGround = gh;
     if (samples.length < 4 && (ix + iy) % 3 === 0) samples.push({ x: +x.toFixed(1), z: +z.toFixed(1), gpu: +gh.toFixed(4), js: +jh.toFixed(4) });
   }
-  return { points, maxDiff, maxDiffLow, eyeAboveGround: eye[1] - eyeGround, pass: maxDiff < 0.01 && Math.abs(eye[1] - eyeGround - CAM.eye) < 0.01, samples };
+  return { points, maxDiff, maxDiffLow, maxDiffD, maxGradDiff, eyeAboveGround: eye[1] - eyeGround,
+    pass: maxDiff < 0.01 && maxDiffD < 0.01 && maxGradDiff < 1e-3 && Math.abs(eye[1] - eyeGround - CAM.eye) < 0.01, samples };
 }
 
 if ([...q.keys()].length === 0) showIndex();
