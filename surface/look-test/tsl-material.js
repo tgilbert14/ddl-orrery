@@ -36,6 +36,17 @@ export function createTslMaterials(values, opts, shadowTex) {
   const uGridOrigin = uniform(new THREE.Vector2());
   const uProbeO = uniform(new THREE.Vector2());
   const uShC = uniform(new THREE.Vector2());
+  // ---- walk slice (surface/walk/): optional, additive. Without opts.walk nothing below changes the
+  // look test's graph. With it: a second shadow map and a cross-fade between the two, two more suns
+  // (the next time of day, faded in while the current two fade out), a bake that reads its own sun
+  // uniforms and centre, and hooks for the ground's position (the clipmap), the trace map and the air.
+  const WK = opts.walk || null;
+  if (WK) {
+    for (const k of ['uSun3Dir', 'uSun4Dir', 'uSun3Col', 'uSun4Col', 'uSun3Disc', 'uSun4Disc', 'uSun3Tint', 'uSun4Tint', 'uBakeSun1', 'uBakeSun2']) U[k] = uniform(new THREE.Vector3());
+    for (const k of ['uSun3Sky', 'uSun4Sky', 'uSun3Glow', 'uSun4Glow', 'uShPA', 'uShPB', 'uBakeK']) U[k] = uniform(new THREE.Vector4());
+    for (const k of ['uShCB', 'uBakeC']) U[k] = uniform(new THREE.Vector2());
+    for (const k of ['uFade', 'uShMix', 'uTime', 'uFill']) U[k] = uniform(0);
+  }
 
   // ---------------------------------------------------------------- ground formula
   const hash2 = Fn(([ix, iy]) => {
@@ -373,6 +384,12 @@ export function createTslMaterials(values, opts, shadowTex) {
     col.addAssign(sunSky(rd, U.uSun1Dir, U.uSun1Tint, U.uSun1Disc, U.uSun1Sky, U.uSun1Glow, withDisc, gy));
     col.addAssign(sunSky(rd, U.uSun2Dir, U.uSun2Tint, U.uSun2Disc, U.uSun2Sky, U.uSun2Glow, withDisc, gy));
     col.addAssign(vec3(starField(rd).mul(U.uStars).mul(withDisc)));
+    if (WK) {
+      If(U.uFade.greaterThan(0.0), () => {
+        col.addAssign(sunSky(rd, U.uSun3Dir, U.uSun3Tint, U.uSun3Disc, U.uSun3Sky, U.uSun3Glow, withDisc, gy));
+        col.addAssign(sunSky(rd, U.uSun4Dir, U.uSun4Tint, U.uSun4Disc, U.uSun4Sky, U.uSun4Glow, withDisc, gy));
+      });
+    }
     If(U.uStorm.greaterThan(0.5), () => {
       const wall = haboob(rd).toVar();
       col.assign(mix(col, wall.xyz, wall.w));
@@ -408,6 +425,16 @@ export function createTslMaterials(values, opts, shadowTex) {
   // the march's soft shadow from a horizon value: res = k * (L.y - Hmax), then the same smoothstep
   const softFromHorizon = (H, L, k) => {
     const r = clamp(L.y.sub(H).mul(k), 0.0, 1.0).toVar();
+    return r.mul(r).mul(float(3.0).sub(r.mul(2.0)));
+  };
+  // walk slice: the same two, for a map with its own centre and its own suns (Ly and k per sun)
+  const shadowUVAt = (xz, centre) => {
+    const d = xz.sub(centre).toVar();
+    const r = max(length(d), SHMAP.r0);
+    return vec2(atan(d.y, d.x).div(TAU), float(1.0).sub(log(r.div(SHMAP.r0)).div(LNR)));
+  };
+  const softFromHorizonY = (H, Ly, k) => {
+    const r = clamp(Ly.sub(H).mul(k), 0.0, 1.0).toVar();
     return r.mul(r).mul(float(3.0).sub(r.mul(2.0)));
   };
 
@@ -495,10 +522,19 @@ export function createTslMaterials(values, opts, shadowTex) {
 
   // ---------------------------------------------------------------- ground material
   const ground = new THREE.MeshBasicNodeMaterial();
-  const gxz = positionLocal.xz.add(uGridOrigin);
-  const gy = height(gxz);
-  ground.positionNode = vec3(positionLocal.x, gy, positionLocal.z);
-  const vWorld = varying(vec3(gxz.x, gy, gxz.y), 'vWorld');
+  let vWorld;
+  if (WK && WK.groundPosition) {
+    // walk slice: the caller's mesh (a clipmap) places its own vertices; it returns the vertex
+    // position and the world point the fragment shader shades
+    const gp = WK.groundPosition({ height });
+    ground.positionNode = gp.position;
+    vWorld = varying(gp.world, 'vWorld');
+  } else {
+    const gxz = positionLocal.xz.add(uGridOrigin);
+    const gy = height(gxz);
+    ground.positionNode = vec3(positionLocal.x, gy, positionLocal.z);
+    vWorld = varying(vec3(gxz.x, gy, gxz.y), 'vWorld');
+  }
 
   ground.fragmentNode = Fn(() => {
     const ro = cameraPosition;
@@ -528,9 +564,14 @@ export function createTslMaterials(values, opts, shadowTex) {
     const sp = vec3(xz.x, h0, xz.y).toVar();
 
     const W = vec2(WX, WZ);
+    // walk slice: the trace map (prints, slide troughs). It returns a slope to add to the ground's,
+    // how disturbed the sand is (ripples are trodden out), and a self-shadow toward a light.
+    const tr = WK && WK.trace ? WK.trace({ xz, fw, dist, U }) : null;
     if (opts.ripples) {
       const lee = dot(grad, W).negate();
-      const ripOn = float(1.0).sub(smoothstep(G.ripLeeLo, G.ripLeeHi, lee)).mul(float(1.0).sub(smoothstep(G.ripL * 0.15, G.ripL * 0.5, fw))).toVar();
+      let ripOnE = float(1.0).sub(smoothstep(G.ripLeeLo, G.ripLeeHi, lee)).mul(float(1.0).sub(smoothstep(G.ripL * 0.15, G.ripL * 0.5, fw)));
+      if (tr) ripOnE = ripOnE.mul(float(1.0).sub(tr.disturb.mul(0.9)));
+      const ripOn = ripOnE.toVar();
       If(ripOn.greaterThan(0.0), () => {
         const ra = dot(xz, W).add(vnoise(xz.mul(G.ripWarpF)).mul(G.ripWarpA)).add(vnoise(xz.mul(G.ripWarpF * 3.1).add(vec2(4.0, 4.0))).mul(G.ripWarpA * 0.4));
         const ph = ra.mul(TAU / G.ripL).toVar();
@@ -539,6 +580,7 @@ export function createTslMaterials(values, opts, shadowTex) {
         grad.addAssign(W.mul(dr.mul(G.ripSlope).mul(ripOn).mul(ripAmp)));
       });
     }
+    if (tr) grad.addAssign(tr.grad);
     const n = normalize(vec3(grad.x.negate(), 1.0, grad.y.negate())).toVar();
     const V = rd.negate().toVar();
 
@@ -551,10 +593,21 @@ export function createTslMaterials(values, opts, shadowTex) {
     const gAmt = step(1.0 - G.glintDensity, gh).mul(grain).mul(float(1.0).sub(smoothstep(G.glintCell * 0.3, G.glintCell * 1.0, fw))).mul(float(1.0).sub(ndv)).mul(float(1.0).sub(ndv)).toVar();
 
     const alb = U.uSand.mul(vnoise(xz.mul(0.021).add(vec2(3.0, 3.0))).mul(0.08).add(0.92)).toVar();
+    if (tr) alb.mulAssign(float(1.0).sub(tr.disturb.mul(0.08)));
 
     // cast shadows: the baked map (default), the per-pixel march (reference), or none
     const sh1 = float(1.0).toVar(), sh2 = float(1.0).toVar();
-    if (opts.shadows === 'map') {
+    const sh3 = float(1.0).toVar(), sh4 = float(1.0).toVar();
+    if (WK && opts.shadows === 'map') {
+      // walk slice: two maps, each with its own centre and its own suns, cross-faded by uShMix
+      // (A at 0, B at 1). Suns 3 and 4 (a time-of-day fade) read the map the current suns do not.
+      const hA = textureLevel(shadowTex, shadowUVAt(xz, uShC), float(0.0)).toVar();
+      const hB = textureLevel(WK.shadowTexB, shadowUVAt(xz, U.uShCB), float(0.0)).toVar();
+      const a1 = softFromHorizonY(hA.x, U.uShPA.x, U.uShPA.z).toVar(), a2 = softFromHorizonY(hA.y, U.uShPA.y, U.uShPA.w).toVar();
+      const b1 = softFromHorizonY(hB.x, U.uShPB.x, U.uShPB.z).toVar(), b2 = softFromHorizonY(hB.y, U.uShPB.y, U.uShPB.w).toVar();
+      sh1.assign(mix(a1, b1, U.uShMix)); sh2.assign(mix(a2, b2, U.uShMix));
+      sh3.assign(mix(b1, a1, U.uShMix)); sh4.assign(mix(b2, a2, U.uShMix));
+    } else if (opts.shadows === 'map') {
       const hz = textureLevel(shadowTex, shadowUV(xz), float(0.0)).toVar();
       sh1.assign(softFromHorizon(hz.x, U.uSun1Dir, float(1.0).div(tan(max(U.uSun1Sky.w.mul(SH.penumbra), 0.002)))));
       sh2.assign(softFromHorizon(hz.y, U.uSun2Dir, float(1.0).div(tan(max(U.uSun2Sky.w.mul(SH.penumbra), 0.002)))));
@@ -565,9 +618,28 @@ export function createTslMaterials(values, opts, shadowTex) {
     }
 
     const col = vec3(0.0).toVar();
+    if (tr) { sh1.mulAssign(tr.shade(U.uSun1Dir)); sh2.mulAssign(tr.shade(U.uSun2Dir)); }
     col.addAssign(sunOnSand(n, V, alb, U.uSun1Dir, U.uSun1Col, sh1, nm, gAmt, U.uWrap));
     col.addAssign(sunOnSand(n, V, alb, U.uSun2Dir, U.uSun2Col, sh2, nm, gAmt, U.uWrap));
+    if (WK) {
+      If(U.uFade.greaterThan(0.0), () => {
+        if (tr) { sh3.mulAssign(tr.shade(U.uSun3Dir)); sh4.mulAssign(tr.shade(U.uSun4Dir)); }
+        col.addAssign(sunOnSand(n, V, alb, U.uSun3Dir, U.uSun3Col, sh3, nm, gAmt, U.uWrap));
+        col.addAssign(sunOnSand(n, V, alb, U.uSun4Dir, U.uSun4Col, sh4, nm, gAmt, U.uWrap));
+      });
+    }
     col.addAssign(alb.mul(mix(U.uAmbGround, U.uAmbSky, n.y.mul(0.5).add(0.5))).mul(mix(SAND.aoLo, 1.0, smoothstep(0.6, 1.0, n.y))));
+    if (WK) {
+      // walk slice: a fill from the bright horizon under the pale sun, only where that sun does not
+      // reach (cast or self shadow). A shaded windward face at dusk is otherwise lit by a flat
+      // ambient alone and its ripples and prints vanish; this gives shade a direction.
+      const Lf = normalize(vec3(U.uSun1Dir.x, 0.0, U.uSun1Dir.z).add(vec3(0.0, 0.45, 0.0)));
+      const lf = max(dot(n, Lf).add(0.35).div(1.35), 0.0);
+      const inShade = float(1.0).sub(sh1.mul(smoothstep(-0.2, 0.15, dot(n, U.uSun1Dir))));
+      col.addAssign(alb.mul(U.uHorizon).mul(lf.mul(lf)).mul(inShade).mul(U.uFill));
+    }
+    // walk slice: the air low over the ground (drifting sand), drawn on the lit ground before haze
+    if (WK && WK.air) col.assign(WK.air({ col, xz, dist, rd, grad, n, alb, U, vnoise, sh: [sh1, sh2, sh3, sh4] }));
 
     const fog = fogAmount(ro, rd, dist).toVar();
     const edge = smoothstep(GRID.rMax * 0.72, GRID.rMax * 0.97, length(xz.sub(ro.xz)));
@@ -601,7 +673,23 @@ export function createTslMaterials(values, opts, shadowTex) {
   // values Hmax from the same march as the reference path (see horizonMarch).
   const bake = new THREE.MeshBasicNodeMaterial({ depthWrite: false, depthTest: false });
   bake.vertexNode = vec4(positionLocal.xy, 0.0, 1.0);
-  bake.fragmentNode = Fn(() => {
+  if (WK) {
+    // walk slice: the bake reads its own centre and suns, so the next map (or the next time of
+    // day's map) can be baked while the ground still draws with the current one
+    bake.fragmentNode = Fn(() => {
+      const st = uv().toVar();
+      const ang = st.x.mul(TAU).toVar();
+      const r = exp(st.y.mul(LNR)).mul(SHMAP.r0);
+      const xz = U.uBakeC.add(vec2(cos(ang), sin(ang)).mul(r)).toVar();
+      const hd = heightD(xz).toVar();
+      const n = normalize(vec3(hd.y.negate(), 1.0, hd.z.negate()));
+      const p = vec3(xz.x, hd.x, xz.y).add(n.mul(SH.lift)).toVar();
+      const s1 = float(-8.0).toVar(), s2 = float(-8.0).toVar();
+      If(U.uBakeK.z.greaterThan(0.5), () => { s1.assign(horizonMarch(p, U.uBakeSun1, U.uBakeK.x)); });
+      If(U.uBakeK.w.greaterThan(0.5), () => { s2.assign(horizonMarch(p, U.uBakeSun2, U.uBakeK.y)); });
+      return vec4(s1, s2, 0.0, 1.0);
+    })();
+  } else bake.fragmentNode = Fn(() => {
     const st = uv().toVar();
     const ang = st.x.mul(TAU).toVar();
     const r = exp(st.y.mul(LNR)).mul(SHMAP.r0);
@@ -634,6 +722,8 @@ export function createTslMaterials(values, opts, shadowTex) {
 
   return {
     ground, sky, bake, probe, probeD,
+    // walk slice: the shared formula and the uniforms, for the walk's own passes
+    fns: { hash2, vnoise, vnoiseD, height, heightD }, uniforms: U,
     set(name, v) {
       const u = name === 'uGridOrigin' ? uGridOrigin : name === 'uProbeO' ? uProbeO : name === 'uShC' ? uShC : U[name];
       if (typeof u.value === 'number') u.value = v; else u.value.fromArray(v);

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dust Sea - walk</title>
+<link rel="icon" href="data:,">
+<script type="importmap">
+{ "imports": {
+  "three/webgpu": "../vendor/three-r186/three.webgpu.js",
+  "three/tsl": "../vendor/three-r186/three.tsl.js"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #1a120c; color: #efe2cf; overflow: hidden;
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+  #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  body.locked #stage { cursor: none; }
+  #poster { position: fixed; inset: 0; z-index: 1; background: #2a1a12 url(poster.jpg) center / cover no-repeat; }
+  #poster p { position: absolute; left: 16px; right: 16px; bottom: 16px; margin: 0; padding: 10px 12px; max-width: 34em;
+    background: rgba(18, 12, 8, 0.72); border-radius: 6px; }
+  #poster[hidden] { display: none; }
+  .ui { position: fixed; z-index: 3; display: flex; gap: 6px; }
+  #times { right: 12px; bottom: 12px; }
+  #soundbox { right: 12px; top: 12px; }
+  .ui button { font: inherit; font-size: 13px; color: #f4e8d6; background: rgba(20, 13, 9, 0.55); border: 1px solid rgba(244, 232, 214, 0.35);
+    border-radius: 999px; padding: 6px 12px; min-height: 34px; cursor: pointer; }
+  .ui button[aria-pressed="true"] { background: rgba(244, 232, 214, 0.86); color: #24170f; }
+  .ui button:focus-visible { outline: 2px solid #ffd9a0; outline-offset: 2px; }
+  .ui button:disabled { opacity: 0.5; cursor: default; }
+  #hint { position: fixed; z-index: 2; left: 50%; bottom: 60px; transform: translateX(-50%); margin: 0; padding: 7px 14px; max-width: calc(100% - 40px);
+    text-align: center; background: rgba(20, 13, 9, 0.5); border-radius: 999px; pointer-events: none; transition: opacity 1.6s ease 1.2s; }
+  #hint.gone { opacity: 0; }
+  #hint .touch-only { display: none; }
+  body.touch #hint .touch-only { display: inline; }
+  body.touch #hint .desk-only { display: none; }
+  #dot { position: fixed; z-index: 2; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
+    background: rgba(255, 244, 228, 0.8); box-shadow: 0 0 0 1px rgba(20, 13, 9, 0.5); display: none; pointer-events: none; }
+  body.locked #dot { display: block; }
+  #readout { position: fixed; z-index: 3; left: 10px; top: 10px; margin: 0; padding: 7px 9px; max-width: calc(100% - 40px); white-space: pre-wrap;
+    background: rgba(12, 9, 7, 0.72); border-radius: 4px; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #readout[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { #hint { transition: none; } }
+</style>
+</head>
+<body>
+<div id="poster">
+  <p><span class="why"></span> The Dust Sea at dusk: two suns low over ridge after ridge of sand.</p>
+</div>
+<div id="stage" aria-label="The Dust Sea, a sand planet at dusk. Walk with W A S D or the arrow keys, or click the sand to walk there."></div>
+<p id="hint"><span class="desk-only">Click to look around. W A S D to walk, Shift to run. Click the sand to walk there.</span><span class="touch-only">Left thumb walks, right thumb looks. Tap the sand to walk there.</span></p>
+<div id="dot"></div>
+<div class="ui" id="times" role="group" aria-label="Time of day">
+  <button type="button" data-time="day" aria-pressed="false">Day</button>
+  <button type="button" data-time="dusk" aria-pressed="true">Dusk</button>
+  <button type="button" data-time="ember" aria-pressed="false">Ember</button>
+</div>
+<div class="ui" id="soundbox"><button type="button" id="mute" aria-pressed="false">Sound on</button></div>
+<pre id="readout" hidden aria-live="off"></pre>
+<noscript><p style="position:fixed;left:16px;top:16px;z-index:5;margin:0;padding:10px 12px;background:rgba(18,12,8,.8);color:#efe2cf;border-radius:6px">The Dust Sea walk draws with WebGPU or WebGL and needs JavaScript. This is a still of the dune sea at dusk.</p></noscript>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
