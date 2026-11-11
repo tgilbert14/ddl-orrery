@@ -6,6 +6,8 @@
 //   R  the ground's displacement in metres (a print's dent is negative, its rim positive)
 //   G  how disturbed the sand is, 0..1 (ripples are trodden out; it heals with the dent)
 //   B  how fast this texel heals (1 in a trough, up to ~2.4 on an exposed crest; set by the stamp)
+//   A  third person: a slide scar's avalanched sand (0..1; it heals with the dent), darkened at any
+//      distance so the scar reads where its low relief does not
 // One pass per frame at most, and only when something changed: it copies the old window into the
 // new one (integer texel shift), heals it (4 times a second: the dent fills, and a 4-neighbour blur
 // softens its walls; a half float cannot hold a per-frame decay of 1/1500, a quarter-second step it
@@ -29,6 +31,7 @@ export const TRACE = {
   slots: 4,           // stamps per pass
   farTone: 0,         // third person: where the relief no longer reads (a pixel wider than ~2 texels),
                       // trodden sand is darkened by up to this much, so a trail still reads 40 m off
+  scarTone: 0.2,      // third person: a slide scar's avalanched sand is this much darker, at any distance
 };
 
 export function createTrace(renderer) {
@@ -54,7 +57,7 @@ export function createTrace(renderer) {
   for (let i = 0; i < TRACE.slots; i++) {
     slotA.push(uniform(new THREE.Vector4()));  // x, z (metres from the new centre), dir x, dir z
     slotB.push(uniform(new THREE.Vector4()));  // kind (0 none, 1 foot, 2 slide), depth, run | width, heal rate
-    slotC.push(uniform(new THREE.Vector4()));  // slide: end x, z; foot: side
+    slotC.push(uniform(new THREE.Vector4()));  // slide: end x, z, berm height (0: the default 0.35 of the depth); foot: side
   }
   const rd = (l) => src.sample(vec2(l.x, float(1.0).sub(l.y))).level(0);
 
@@ -84,7 +87,8 @@ export function createTrace(renderer) {
     const dd = length(p.sub(a.add(ab.mul(t))));
     const W = Bv.z;
     const dent = Bv.y.mul(float(1.0).sub(smoothstep(W.mul(0.35), W, dd))).negate();
-    const berm = Bv.y.mul(0.35).mul(exp(dd.sub(W.mul(1.12)).div(W.mul(0.22)).mul(dd.sub(W.mul(1.12)).div(W.mul(0.22))).negate()));
+    const bk = mix(float(0.35), C.z, step(1e-4, C.z));
+    const berm = Bv.y.mul(bk).mul(exp(dd.sub(W.mul(1.12)).div(W.mul(0.22)).mul(dd.sub(W.mul(1.12)).div(W.mul(0.22))).negate()));
     const cover = float(1.0).sub(smoothstep(W.mul(1.35), W.mul(1.6), dd));
     return vec2(dent.add(berm), cover);
   };
@@ -103,7 +107,7 @@ export function createTrace(renderer) {
       const T = uHeal.x.mul(rate);
       const r = mix(c.x, avg.x, min(T.mul(TRACE.blur), 0.5)).mul(exp(T.div(-TRACE.tau)));
       const g = c.y.mul(exp(T.div(-TRACE.tau * 1.3)));
-      c.assign(vec4(r, g, c.z, 1.0));
+      c.assign(vec4(r, g, c.z, c.w.mul(exp(T.div(-TRACE.tau * 1.3)))));
     });
     // stamps, in metres from the new centre
     const p = L.sub(0.5).mul(size).toVar();
@@ -113,7 +117,7 @@ export function createTrace(renderer) {
         const sh = vec2(0.0).toVar();
         If(Bv.x.lessThan(1.5), () => { sh.assign(footShape(p, A, Bv)); }).Else(() => { sh.assign(slideShape(p, A, Bv, C)); });
         If(sh.y.greaterThan(0.0), () => {
-          c.assign(vec4(mix(c.x, sh.x, sh.y), max(c.y, sh.y), mix(c.z, Bv.w, sh.y), 1.0));
+          c.assign(vec4(mix(c.x, sh.x, sh.y), max(c.y, sh.y), mix(c.z, Bv.w, sh.y), max(c.w, sh.y.mul(C.w))));
         });
       });
     }
@@ -159,7 +163,7 @@ export function createTrace(renderer) {
       } else {
         slotA[i].value.set(e.x0 - nx, e.z0 - nz, 0, 0);
         slotB[i].value.set(2, e.depth, e.width, rate);
-        slotC[i].value.set(e.x1 - nx, e.z1 - nz, 0, 0);
+        slotC[i].value.set(e.x1 - nx, e.z1 - nz, e.berm ?? 0, e.scar ?? 0);
       }
     }
     src.value = rts[cur].texture;
@@ -183,9 +187,11 @@ export function createTrace(renderer) {
     // relief reads while a pixel is smaller than about two texels; beyond, only the disturbed tone
     const near = float(1.0).sub(smoothstep(texel * 1.0, texel * 3.0, fw)).mul(inWin).toVar();
     const res = vec4(0.0).toVar();   // slope x, slope z, disturbed, displacement
+    const scar = float(0.0).toVar();
     If(inWin.greaterThan(0.0), () => {
       const c = S(L).toVar();
       res.assign(vec4(0.0, 0.0, c.y.mul(inWin), c.x));
+      if (TRACE.farTone > 0) scar.assign(c.w.mul(inWin));
       If(near.greaterThan(0.0), () => {
         const e = max(1 / N, fw.div(size)).toVar();
         const gx = S(L.add(vec2(e, 0.0))).x.sub(S(L.sub(vec2(e, 0.0))).x);
@@ -211,7 +217,8 @@ export function createTrace(renderer) {
     };
     const out = { grad: res.xy, disturb: res.z, shade };
     // relief fades with distance; the disturbed tone takes over (dents darker than the rim)
-    if (TRACE.farTone > 0) out.tone = float(1.0).sub(res.z.mul(float(1.0).sub(near.div(max(inWin, 1e-3)))).mul(TRACE.farTone).mul(smoothstep(0.0, -0.012, res.w).mul(0.6).add(0.4)));
+    if (TRACE.farTone > 0) out.tone = float(1.0).sub(res.z.mul(float(1.0).sub(near.div(max(inWin, 1e-3)))).mul(TRACE.farTone).mul(smoothstep(0.0, -0.012, res.w).mul(0.6).add(0.4)))
+      .mul(float(1.0).sub(scar.mul(TRACE.scarTone)));
     return out;
   }
 

@@ -48,7 +48,13 @@ GRID.rMax = 6000;
 // ---------------------------------------------------------------- the walker
 // the dusk look's standing point and heading: findCrest() near the origin, 4 m upwind of the top
 const top = findCrest();
-const start = { x: top.x - WIND[0] * CAM.back, z: top.z - WIND[1] * CAM.back, headingDeg: CAM.headingDeg, pitchDeg: CAM.pitchDeg };
+// First person (and the figure look test) keep it. Third person starts 40 m further back down the
+// windward face, heading 40 (the pale sun 21 degrees left of ahead): a 37 m climb to the same crest
+// with the sun and the slip faces beyond in view, then a broad crest top; the face drops away at
+// about 41 m, so the first slide is the player's choice to keep walking over the brink.
+const THIRD_START = { x: top.x - Math.cos(40 * DEG) * 40, z: top.z - Math.sin(40 * DEG) * 40, headingDeg: 40, pitchDeg: CAM.pitchDeg };
+const start = START_VIEW === 'third' ? THIRD_START
+  : { x: top.x - WIND[0] * CAM.back, z: top.z - WIND[1] * CAM.back, headingDeg: CAM.headingDeg, pitchDeg: CAM.pitchDeg };
 const walker = createWalker({ ...start, reducedMotion: reduced });
 const ws = walker.state;
 
@@ -404,7 +410,8 @@ function tickThird(dt, intent) {
   figAngVel += (targetVel - figAngVel) * (1 - Math.exp(-dt / 0.12));
   figYaw = Math.atan2(Math.sin(figYaw + figAngVel * dt), Math.cos(figYaw + figAngVel * dt));
   ws.yaw = figYaw;
-  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced });
+  // climbing, the steps are shorter (third person only: the walker's default stride is unchanged)
+  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2 });
   ws.yaw = figYaw;
   const wind = windNow();
   const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ] });
@@ -416,8 +423,18 @@ function tickThird(dt, intent) {
     if (!reduced && !(e.slide > 0.5)) G.puffs.foot(e, wind, [e.dirX, e.dirZ]);
   }
   const tv = Math.hypot(ws.vx, ws.vz) > 0.3 ? Math.atan2(ws.vz, ws.vx) : null;
-  F.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz), sliding: ws.sliding, running: ws.running, travelYaw: tv }, look);
-  return events;
+  const sd = timeNow.uSun1Dir, sh = Math.hypot(sd[0], sd[2]) || 1;
+  F.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz), sliding: ws.sliding, running: ws.running, travelYaw: tv,
+    slide: [ws.sx, ws.sz], sun: [sd[0] / sh, sd[2] / sh], wind: WIND }, look);
+  // the slide scar: no prints while sliding, a broad shallow groove with raised edges instead,
+  // scaled with the slide speed (first person keeps the walker's own trough)
+  const out = [];
+  for (const e of events) {
+    if (e.type === 'foot' && e.slide > 0.5) { e.noPrint = true; out.push(e); continue; }
+    if (e.type === 'slide') { const k = ws.sliding; out.push({ ...e, depth: 0.04 + 0.05 * k, width: 0.32 + 0.3 * k, berm: 0.85, scar: Math.min(1, 0.3 + k) }); continue; }
+    out.push(e);
+  }
+  return out;
 }
 function tick(dt) {
   const t0 = performance.now();
@@ -430,7 +447,7 @@ function tick(dt) {
   const third = G.pil && viewMode === 'third';
   const events = third ? tickThird(dt, intent) : walker.update(dt, { ...intent, reducedMotion: reduced });
   for (const e of events) {
-    G.trace.stamp(e);
+    if (!e.noPrint) G.trace.stamp(e);
     // No step sound while sliding: the slide voice carries it, and the sound module's levels assume the two do not overlap.
     if (e.type === 'foot') { API.events.foot++; if (!(e.slide > 0.5)) { try { sound?.step(e.strength); } catch { /* no sound */ } } }
     else API.events.slide++;
@@ -569,7 +586,8 @@ API.state = () => ({
   view: G && G.pil ? viewMode : FIGURE ? 'figure-test' : viewMode,
   cam: G ? { x: r3(G.camera.position.x), y: r3(G.camera.position.y), z: r3(G.camera.position.z), aboveGround: r3(G.camera.position.y - height(G.camera.position.x, G.camera.position.z)),
     boom: G.follow ? r3(G.follow.state.L) : null, boomTarget: G.follow ? r3(G.follow.state.Lt) : null, yawDeg: G.follow ? r3(G.follow.state.yaw / DEG) : null, elevDeg: G.follow ? r3(G.follow.state.elev / DEG) : null,
-    raised: G.follow ? r3(G.follow.state.raised) : null, shortened: G.follow ? G.follow.state.shortened : null } : null,
+    raised: G.follow ? r3(G.follow.state.raised) : null, shortened: G.follow ? G.follow.state.shortened : null,
+    slideView: G.follow ? r3(G.follow.state.sm) : null, pitchDeg: G.follow ? r3(G.follow.state.viewPitch / DEG) : null } : null,
   figure: G && G.pil ? { headingDeg: r3(((figYaw / DEG) % 360 + 360) % 360), ...G.pil.state } : null,
   puffs: G && G.puffs ? G.puffs.live : null,
   frame: frameStats(), dpr, backend: API.backend, running, locked: input.locked, lockRefused: input.lockRefused,
@@ -599,7 +617,7 @@ API.resume = () => { paused = false; syncLoop(); };
 API.setPose = (p) => {
   walker.setPose(p);
   figYaw = ws.yaw; figAngVel = 0; traceC = null;
-  if (G && G.pil) { G.pil.reset(); G.puffs.clear(); G.follow.setYaw(p.camYawDeg !== undefined ? p.camYawDeg * DEG : ws.yaw); G.follow.state.init = false; G.follow.state.still = 0; primeThird(); }
+  if (G && G.pil) { G.pil.reset(); G.puffs.clear(); G.follow.setYaw(p.camYawDeg !== undefined ? p.camYawDeg * DEG : ws.yaw); G.follow.state.init = false; G.follow.state.still = 0; G.follow.resetSlide(); primeThird(); }
   if (G) { placeCamera(); G.shadows.cancelJobs(); G.shadows.reset([ws.x, ws.z], timeNow.shadow); if (p.clearTrace !== false) G.trace.clear(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); }
 };
 API.setTime = (name, instant = true) => setTime(name, instant);

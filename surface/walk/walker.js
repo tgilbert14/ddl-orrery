@@ -6,7 +6,8 @@
 //     target {x, z} | null (walk there on your own), cancelTarget bool,
 //     third person only: wish [x, z] (a world direction, length 0..1, replaces fwd/strafe) and
 //     face bool (walk only where you face: the wish is projected onto the heading, and the caller
-//     turns the heading toward s.wishX, s.wishZ at a limited rate) }
+//     turns the heading toward s.wishX, s.wishZ at a limited rate), climbStride k (third person:
+//     the stride is divided by 1 + k * rise per metre while walking uphill) }
 // and the walker reports footfalls (for prints and sound) and slide marks (for the trough) as events.
 //
 // Units: metres, seconds, radians. Heading is the look test's convention: x toward z, forward is
@@ -175,7 +176,9 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     s.distance += moved;
 
     // ---- feet: stride phase, footfalls, the slide trough
-    const stride = WALK.strideWalk + (WALK.strideRun - WALK.strideWalk) * s.running;
+    let stride = WALK.strideWalk + (WALK.strideRun - WALK.strideWalk) * s.running;
+    // third person only (intent.climbStride): shorter steps up a slope
+    if (intent.climbStride) stride /= 1 + intent.climbStride * clamp(rise, 0, 0.35) * (1 - s.running);
     const prevPhase = s.phase;
     s.phase += (walkSpeed * dt) / stride;
     s.sink = WALK.sinkBase + WALK.sinkSlip * smooth(WALK.slideLoDeg * DEG, 31 * DEG, theta) + WALK.sinkRun * s.running;

@@ -8,6 +8,10 @@ deep hood, a 2.2 m crook staff with a lantern hanging above head height) walks t
 spring camera follows about 8 m behind. `?view=first` gives the first-person walk exactly as it was,
 and V switches between the two while you play.
 
+Third person starts 40 m down the windward face of the dusk crest, heading 40: a 37 m climb with the
+low sun ahead-left and the slip faces beyond coming into view, a broad crest top, and then the brink
+at about 41 m. Walking on over it is the first slide. First person starts where it always did.
+
 ## Open it
 
 Serve the repo root with any static server and open `/surface/walk/`, for example
@@ -35,11 +39,21 @@ Third person (the default):
 | Sound | the Sound button (sound starts on your first click, tap or key) | the same |
 
 The camera trails on a spring and settles. It pulls out to about 12 m after three seconds standing
-still and while sliding, and comes in a little while running. It never goes under the sand: it is
-raised (and if need be the boom is shortened) so that its lines to the Pilgrim's middle and to its
-feet clear the dunes, and it is always held 0.35 m above the sand under it. Moving without turning
-the camera for 1.6 s, it swings slowly round behind the walk. With reduced motion it is a plain
-follow: no pull, no swing.
+still, and comes in a little while running. It never goes under the sand: it is raised (and if need
+be the boom is shortened, rather than climbing above 41 degrees) so that its lines to the Pilgrim's
+middle and to its feet clear the dunes, and it is always held 0.35 m above the sand under it. The
+tilt you can give it is limited (-5 to 29 degrees) and the view's pitch is held between -36 and 20
+degrees, so it never ends up looking straight down. Moving without turning the camera for 1.6 s, it
+swings slowly round behind the walk.
+
+Sliding, the camera eases over 0.8 s to a low three-quarter side view: 6.2 m off the figure across
+the fall line, a little uphill of square, its eye about level with the figure's shoulders, looking
+across and a little down the face so the horizon and the dune's foot are in frame. The side is
+picked once as the slide starts (sunward, then downwind, then the side the camera is already on)
+and held. Its lag is fed forward, so the figure stays framed at full slide speed. Orbiting during a
+slide turns it as an offset. When the slide ends it eases back over 1.2 s from where it is (it does
+not swing round), and the swing behind the walk takes over. With reduced motion it is a plain
+follow: no pull, no swing, no slide view (the pitch limits still apply).
 
 First person (`?view=first`, or V): W A S D move along your view, the mouse or right thumb looks, Q
 and E turn, everything else as above.
@@ -72,6 +86,8 @@ A hint line fades out after your first movement.
   up to 6.5 cm on a slip face), plus a head bob of up to 1.8 cm walking and 3 cm running. Walk
   1.6 m/s, run 4.5 m/s, slower uphill, a little faster downhill. Above 28 degrees you cannot walk
   uphill; between 22 and 30 degrees you start to slide (up to 2.6 m/s), capped at 5.6 m/s overall.
+  Third person passes `climbStride`, which shortens the steps walking uphill (0.72 m on the flat,
+  about 0.52 m up an 11 degree windward face); first person is unchanged.
 - `clipmap.js`: the ground mesh. Nested square grids, each snapped to its own lattice, with a morph
   band at each level's edge. Vertices stay fixed on the dunes as you walk, so nothing crawls.
 - `shadows.js`: two baked shadow maps. The next one is baked ahead of you, 1/64 of it per frame,
@@ -81,25 +97,41 @@ A hint line fades out after your first movement.
   72 m at the same 4.7 cm texel (1536 texels), centred 10 m behind you along your walk and moved
   only when that point is 1.5 m away, healing half as fast (an e-folding time of 50 s in a trough,
   26 s on an exposed crest), so the trail reads about 40 m back on a crest and longer in a trough.
+  Third person, a slide leaves no prints: it leaves a scar, a broad shallow groove (0.3 to 0.6 m
+  wide, 4 to 9 cm deep, both with the slide's speed) with raised edges, and its avalanched sand is
+  kept in the map's fourth channel and darkened 20% at any distance, so the scar reads from the
+  foot of the face, where its low relief alone does not.
 - `pilgrim.js`: the Pilgrim in motion, all procedural, no skeleton. One body mesh whose positionNode
-  bobs, shifts and leans the upper body on the walker's gait phase, pushes the cloak with the stride
-  (the leading shin forward under the front, the trailing one back, later the lower the cloth),
-  pulls it downwind in the figure's own frame (harder on exposed crests, with gusts), streams it
-  uphill and lifts it while sliding, drags it with acceleration and lays the hem on the local slope,
-  a little sunk (more on slip faces). The hem, cuffs and edges are ragged (a wave and alpha-tested
-  notches); the cloth has a noise weave in tone and sheen and a dustier lower third. The hood turns
-  ahead into a turn and, standing, looks about. The staff is planted every second step, the body
-  walks past it, it lifts and swings; it is carried running, dragged uphill as a brake sliding, and
-  stands upright beside the figure when still; the right sleeve follows the hand. The lantern is a
-  damped pendulum under the crook, driven by the staff and the wind, and its pool on the sand
-  follows it and flickers slightly. The capsule shadow and contact darkening (figure.js's ground
-  hook) follow the pose every frame. It also stamps the staff marks, the hem's drag line and the
-  staff's drag line while sliding into the trace map.
+  moves each rest point with the gait, the wind, the slide and the slope. The walk reads from behind
+  without legs: a 3.4 cm bob (lowest at each footfall, with a small extra dip and a forward pitch as
+  the foot lands), the weight carried over the planted foot (a 4 cm shift and a roll of the shoulders
+  and hood), the swinging leg kicking the hem out on its own side (outward, forward and up), the
+  leg's push travelling up the cloak from the hem, the back of the cloak swinging like a bell behind
+  the sway and the skirt twisting a little with the hips. Running is bigger and faster, pitched
+  forward, the cloak trailing and its hem lifted. Climbing, the steps are shorter, the body is
+  pitched into the slope and the staff is planted further ahead with the hand higher, pulling. The
+  gait stays under reduced motion (the camera does not follow it). The normal is recomputed from
+  the displaced surface (two more displaced points a little way around and up the rest surface, a
+  finite difference in the vertex stage), so the moving folds catch the low sun. The hem, cuffs and
+  edges are ragged (a wave and alpha-tested notches); the cloth has a noise weave in tone and sheen
+  and a dustier lower third. The hood turns ahead into a turn and, standing, looks about. The staff
+  is planted 0.8 m ahead every second step and the hand stays forward, so it leans back as it is
+  planted, the body walks past it until it leans forward, and it lifts and swings ahead; it is
+  carried running, dragged uphill as a brake sliding, and stands upright beside the figure when
+  still; the right sleeve follows the hand. The lantern is a damped pendulum under the crook, driven
+  by the staff and the wind, kicked a little at each step, and jolted hard by the sand while
+  sliding; its pool on the sand follows it and flickers slightly. Sliding, the figure sits back into
+  the face and crouches, and the cloak lifts, streams uphill and flaps. The capsule shadow and
+  contact darkening (figure.js's ground hook) follow the pose every frame. It also stamps the staff
+  marks, the hem's drag line and the staff's drag line while sliding into the trace map.
 - `follow.js`: the third-person camera.
 - `puffs.js`: sand thrown up: a low puff at each walking footfall drifting downwind, bigger kicks
-  running, and while sliding a sheet of darker streaks pouring down the face ahead of and beside the
-  figure (each one kept on the sand) and a low dust trail. A fixed pool of 192 sprites in one draw,
-  simulated on the CPU. None with reduced motion.
+  running, and while sliding a wide, dense sheet of dark streaks pouring down the face ahead of and
+  beside the hem (each one kept on the sand), a bow-wave lip thrown up at the feet, small avalanching
+  tongues set off beside and behind that run down the face past the figure, and a low dust trail
+  hanging behind, all scaled with the slide's speed. A fixed pool of 384 sprites in one draw,
+  simulated on the CPU (about 250 live at full slide). With reduced motion the slide's sand stays
+  (it is the interaction); the footfall puffs and kicks do not.
 - `air.js`: a faint veil of drifting sand along the wind, in the ground shader.
 - `times.js`: one sun placement per time of day, fixed in the world.
 - `input.js`: keys, mouse, touch, tap-to-walk, V.
@@ -160,6 +192,24 @@ figures above.
 Third person costs about 1 ms a frame at this size: the figure's capsule shadow in the ground
 shader (behind a one-capsule early-out; without it the cost was 1.6 ms), the larger trace window,
 the figure and the sand sprites. The console was empty on every run. A phone is still unmeasured.
+
+### The slide and the gait, 11 Nov 2026
+
+The same 600 m route from the old start (heading 48), 1440x900 CSS at DPR 2, each frame timed until
+the GPU finished, with a re-run of HEAD 402cd4c in the same session. After a slide the camera keeps
+its side bearing, so "W away from the camera" walks a slightly different line from there (15,120
+frames against 16,080); it still crosses three crests and slides three faces.
+
+| Run | All frames, median / p99 / worst | Plain frames, walk / run (median / worst) |
+|---|---|---|
+| HEAD 402cd4c, third person, WebGPU | 5.2 / 8.1 / 10.7 ms | 5.0 / 8.6, 5.7 / 8.4 ms |
+| this change, third person, WebGPU | 5.4 / 7.6 / 9.3 ms | 5.3 / 9.0, 5.3 / 7.1 ms |
+| this change, third person, WebGL2 | 5.1 / 7.5 / 9.0 ms | 5.0 / 7.8, 5.1 / 7.2 ms |
+
+About 0.2 to 0.3 ms a frame more than HEAD: the normal's two extra displaced points in the vertex
+stage and the larger sprite pool (384, about 250 live at full slide). `view=first` and the
+`figure=a&shot=behind` still were byte-identical to HEAD 402cd4c. The console was empty on WebGPU,
+WebGL2, reduced motion and first person.
 
 ## Not built yet
 

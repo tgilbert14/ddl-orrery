@@ -19,8 +19,8 @@
 // Local frame as in figure.js: x forward, y up, z right; y = 0 is the sand under the centre.
 
 import * as THREE from 'three/webgpu';
-import { Fn, uniform, attribute, vec3, vec4, float, normalize, dot, max, min, mix, clamp, smoothstep, length, pow, exp, step, sqrt, sin, cos,
-  normalWorld, positionWorld, positionGeometry, cameraPosition, Discard, If, mx_noise_float, uv } from 'three/tsl';
+import { Fn, uniform, attribute, vec3, vec4, float, normalize, dot, max, min, mix, clamp, smoothstep, length, pow, exp, step, sqrt, sin, cos, cross, sign,
+  normalWorld, normalGeometry, positionWorld, positionGeometry, cameraPosition, modelWorldMatrix, negateOnBackSide, varying, Discard, If, mx_noise_float, uv } from 'three/tsl';
 import { lathe, tube, blob, cloak, hood, lantern, C, LAMP, NCAP } from './figure.js';
 import { height, heightD } from '../look-test/height.js';
 
@@ -35,7 +35,7 @@ export const PILGRIM = {
   staffLen: 2.2,
   hang: [0.21, 2.25, 0],       // the crook's end, in the staff's frame (y along the shaft)
   cord: 0.2,                   // hang point to the lantern's centre (m)
-  plantAhead: 0.62, plantSide: 0.335, liftBehind: -0.3,
+  plantAhead: 0.8, plantSide: 0.335, liftBehind: -0.42,
   restHand: [0.35, 1.17, 0.315],
   shoulderR: [0.05, 1.37, 0.17],
   hemBack: 0.36, hemWidth: 0.05,
@@ -131,12 +131,13 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
   const uHandL = uniform(new THREE.Vector3());
   const uBody = uniform(1.0), uGlow = uniform(0.5);
 
-  // ---- the body's vertex motion
-  const bodyPos = Fn(() => {
-    const p0 = positionGeometry;
-    const cd = attribute('cdat', 'vec4');
-    const part = cd.x, low = cd.y, th = cd.z, w = cd.w;
-    const isCloth = float(1.0).sub(step(1.5, part)).toVar();
+  // ---- the body's vertex motion: disp() moves one rest point (p0 with its cdat tags); the normal is
+  // taken from two more displaced points a little way along the rest surface (finite differences),
+  // so moving folds shade
+  const uRun = uniform(0.0);
+  const disp = (p0, low, th, w, part) => {
+    const isCloth = float(1.0).sub(step(1.5, part));
+    const isCloak = step(part, 0.5);
     const isHood = step(1.5, part).mul(float(1.0).sub(step(2.5, part)));
     const isR = step(2.5, part).mul(float(1.0).sub(step(3.5, part)));
     const isL = step(3.5, part).mul(float(1.0).sub(step(4.5, part)));
@@ -144,36 +145,56 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     // the mantle is short and stiff: a third of the cloak's give
     const k = pow(low, 1.4).mul(isCloth).mul(mix(1.0, 0.35, step(0.5, part))).toVar();
     const c = cos(th).toVar(), s = sin(th).toVar();
-    // the stride under the cloth: the leading shin pushes the front out, the trailing one the back;
-    // the lower the cloth, the later it follows
-    const ga = uGait.x.sub(low.mul(0.9)).sub(0.35);
-    const legR = cos(ga).mul(uGait.y);
+    const t = uGait.w, ga0 = uGait.x, stride = uGait.y;
+    // the stride under the cloth: the leading shin pushes the front out, the trailing one the back.
+    // It starts at the hem and travels up the cloak (the higher, the later)
+    const ga = ga0.sub(w.mul(1.6)).sub(0.25).toVar();
+    const legR = cos(ga).mul(stride);
     const legF = mix(legR.negate(), legR, smoothstep(-0.7, 0.7, s)).toVar();
-    const hp = float(1.0).sub(smoothstep(0.3, 1.0, p0.y)).mul(isCloth).mul(step(part, 0.5));
-    const push = legF.mul(0.035).add(max(legF, 0.0).mul(max(c, 0.0)).mul(0.09)).add(min(legF, 0.0).mul(max(c.negate(), 0.0)).mul(0.1));
+    const hp = float(1.0).sub(smoothstep(0.3, 1.05, p0.y)).mul(isCloth).mul(isCloak).toVar();
+    const push = legF.mul(0.05).add(max(legF, 0.0).mul(max(c, 0.0)).mul(0.13)).add(min(legF, 0.0).mul(max(c.negate(), 0.0)).mul(0.12));
     p.x.addAssign(push.mul(hp));
-    // the trailing heel lifts the back of the hem on its side as it pushes off; the hem swings
-    // across a little behind the weight shift
+    // the swinging leg kicks the hem out on its side: outward, forward and up, fading up the cloak
+    const swR = max(sin(ga).negate(), 0.0).mul(smoothstep(0.05, 0.85, s));
+    const swL = max(sin(ga), 0.0).mul(smoothstep(0.05, 0.85, s.negate()));
+    const kick = swR.add(swL).mul(stride).mul(exp(w.mul(-2.4))).mul(isCloth).mul(isCloak).toVar();
+    p.x.addAssign(c.mul(kick).mul(0.08).add(kick.mul(0.035)));
+    p.z.addAssign(s.mul(kick).mul(0.1));
+    p.y.addAssign(kick.mul(0.035));
+    // the trailing heel lifts the back of the hem on its side as it pushes off
     const heel = max(legF.negate(), 0.0).mul(max(c.negate(), 0.0)).mul(float(1.0).sub(smoothstep(0.0, 0.3, w)));
-    p.y.addAssign(heel.mul(0.05).mul(isCloth).mul(step(part, 0.5)));
-    p.z.addAssign(uPose.y.mul(-0.9).mul(k).mul(step(part, 0.5)));
+    p.y.addAssign(heel.mul(0.06).mul(isCloth).mul(isCloak));
+    // the hem stays as the body sways; the back of the cloak swings like a bell, behind the sway,
+    // and the skirt twists a little with the hips
+    p.z.addAssign(uPose.y.mul(-0.9).mul(k).mul(isCloak));
+    const bell = sin(ga0.sub(1.5).sub(w.mul(0.8))).mul(stride).mul(k).mul(isCloak).mul(max(c.negate(), 0.0).mul(0.6).add(0.4));
+    p.z.addAssign(bell.mul(0.06));
+    const tw = sin(ga0.sub(0.9)).mul(stride).mul(k).mul(isCloak).mul(0.07);
+    const tx0 = p.x.sub(0.03), tz0 = p.z;
+    p.x.assign(tx0.mul(cos(tw)).sub(tz0.mul(sin(tw))).add(0.03));
+    p.z.assign(tx0.mul(sin(tw)).add(tz0.mul(cos(tw))));
+    // running: the cloak trails and its hem lifts off the sand
+    const run = uRun;
+    p.x.subAssign(run.mul(k).mul(0.15));
+    p.y.addAssign(run.mul(k).mul(k).mul(max(c.negate(), 0.0).mul(0.1).add(0.035)));
     // the wind, in the figure's frame
-    const wl = uWindL.xy, ws = uWindL.z.toVar();
+    const wl = uWindL.xy, ws = uWindL.z;
     const lee = c.mul(wl.x).add(s.mul(wl.y)).toVar();
     const press = float(1.0).sub(k.mul(max(lee.negate(), 0.0)).mul(ws).mul(0.24));
     p.x.assign(p.x.sub(0.03).mul(press).add(0.03)); p.z.mulAssign(press);
     const pushW = ws.mul(k).mul(lee.mul(0.5).add(0.5)).mul(0.3);
     p.x.addAssign(wl.x.mul(pushW)); p.z.addAssign(wl.y.mul(pushW));
-    const t = uGait.w;
     const fl = k.mul(k).mul(ws).mul(max(lee, 0.0).mul(0.05).add(0.012)).mul(sin(th.mul(9.0).add(t.mul(7.3)).add(p0.y.mul(6.0))))
       .mul(sin(t.mul(2.1).add(th.mul(2.0))).mul(0.35).add(uWindL.w.mul(0.6)).add(0.35));
     p.x.addAssign(c.mul(fl)); p.z.addAssign(s.mul(fl));
     p.y.addAssign(k.mul(k).mul(max(lee, 0.0)).mul(ws).mul(uWindL.w.mul(0.05).add(0.03)).mul(sin(t.mul(4.7).add(th.mul(3.0))).mul(0.4).add(0.6)));
-    // sliding: the cloth lifts and streams uphill
+    // sliding: the cloth lifts, streams uphill and flaps
     const sl = uSlide.z;
     const up = c.mul(uSlide.x).add(s.mul(uSlide.y)).negate();   // 1 on the uphill side
-    p.x.subAssign(uSlide.x.mul(sl).mul(k).mul(0.26)); p.z.subAssign(uSlide.y.mul(sl).mul(k).mul(0.26));
-    p.y.addAssign(sl.mul(k).mul(k).mul(up.mul(0.5).add(0.7)).mul(0.16));
+    p.x.subAssign(uSlide.x.mul(sl).mul(k).mul(0.42)); p.z.subAssign(uSlide.y.mul(sl).mul(k).mul(0.42));
+    p.y.addAssign(sl.mul(k).mul(k).mul(up.mul(0.5).add(0.7)).mul(0.26));
+    const flap = sl.mul(k).mul(k).mul(sin(th.mul(7.0).add(t.mul(17.0)).add(p0.y.mul(5.0))).mul(0.6).add(sin(th.mul(3.0).sub(t.mul(11.0))).mul(0.4))).mul(0.04);
+    p.x.addAssign(c.mul(flap)); p.z.addAssign(s.mul(flap)); p.y.addAssign(flap.mul(0.5));
     // acceleration drags the hem back
     p.x.subAssign(uGround.z.mul(k).mul(0.03)); p.z.subAssign(uGround.w.mul(k).mul(0.03));
     // a ragged hem
@@ -197,7 +218,29 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const kg = float(1.0).sub(smoothstep(0.0, 0.5, p0.y));
     p.y.addAssign(uGround.x.mul(p.x).add(uGround.y.mul(p.z)).sub(uSlide.w).mul(kg));
     return p;
-  })();
+  };
+  const tagOf = () => { const cd = attribute('cdat', 'vec4'); return { part: cd.x, low: cd.y, th: cd.z, w: cd.w }; };
+  const bodyPos = Fn(() => { const T = tagOf(); return disp(positionGeometry, T.low, T.th, T.w, T.part); })();
+  // the displaced surface's normal, in the body's local frame (a varying)
+  const bodyNrm = varying(Fn(() => {
+    const T = tagOf();
+    const isCloth = float(1.0).sub(step(1.5, T.part));
+    const p0 = positionGeometry, n0 = normalize(normalGeometry).toVar();
+    // two tangents of the rest surface: around (horizontal) and up it
+    const ta = normalize(cross(vec3(0.0, 1.0, 0.0), n0).add(vec3(0.0, 0.0, 1e-4))).toVar();
+    const tu = normalize(cross(n0, ta)).toVar();
+    const e = 0.02;
+    // what the tags do along each step: around the cloak th turns; up it low and w change
+    const r = max(length(p0.xz), 0.05);
+    const dth = float(e).div(r).mul(isCloth).mul(sign(dot(ta, vec3(sin(T.th).negate(), 0.0, cos(T.th)))));
+    const dy = tu.y.mul(e);
+    const span = mix(float(1.4), float(0.38), step(0.5, T.part));
+    const P = disp(p0, T.low, T.th, T.w, T.part);
+    const Pa = disp(p0.add(ta.mul(e)), T.low, T.th.add(dth), T.w, T.part);
+    const Pu = disp(p0.add(tu.mul(e)), clamp(T.low.sub(dy.div(span).mul(isCloth)), 0.0, 1.0), T.th, T.w.add(dy.mul(isCloth)), T.part);
+    const nn = cross(Pa.sub(P), Pu.sub(P)).toVar();
+    return normalize(nn.mul(sign(dot(nn, n0)).add(0.001)));
+  })());
 
   // ---- cloth shading: wrap diffuse from both suns, sky and sand bounce, the lantern, light through
   // the silhouette; a mottled weave in tone and sheen, dustier toward the hem; notched edges
@@ -216,7 +259,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const sl = step(2.5, part).mul(float(1.0).sub(step(4.5, part)));
     If(sl.greaterThan(0.5).and(w.greaterThan(0.93)).and(sin(th.mul(5.0)).greaterThan(0.6)), () => { Discard(); });
 
-    const n = normalize(normalWorld).toVar();
+    const n = negateOnBackSide(normalize(modelWorldMatrix.mul(vec4(bodyNrm, 0.0)).xyz)).toVar();
     const P = positionWorld.toVar();
     const V = normalize(cameraPosition.sub(P)).toVar();
     const ndv = max(dot(n, V), 0.0).toVar();
@@ -336,17 +379,26 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     st.slideSm += (ws.sliding - st.slideSm) * ease(dt || 1e-3, 0.2);
     st.still = moving > 0.05 ? 0 : st.still + dt;
 
-    // body: weight shift and bob on the gait, lean into the slope and acceleration, breathing when still
+    // body: a clear bob (lowest at each footfall), the weight carried over the planted foot (a shift
+    // and a roll of the shoulders and hood), a forward pitch as each foot lands; leaning into the
+    // slope and acceleration; breathing when still. The gait stays under reduced motion (it is not
+    // vestibular, and the camera does not follow it).
     const gaitA = Math.PI * ws.phase;
+    const run = ws.running, gm = moving * (1 - st.slideSm);
     const breathe = reduced ? 0 : (1 - moving);
-    const bobT = reduced ? 0 : (-Math.cos(2 * gaitA) * (0.016 + 0.014 * ws.running) * moving + 0.004 * Math.sin(t * 1.5) * breathe);
-    const swayT = reduced ? 0 : (0.034 * Math.sin(gaitA) * moving + 0.006 * Math.sin(t * 0.55) * breathe);
-    let leanFT = 0.03 * moving + 0.06 * ws.running + Math.max(-0.08, Math.min(0.14, 0.32 * sF * moving)) + 0.02 * st.accF;
-    let leanST = Math.max(-0.07, Math.min(0.07, 0.02 * angVel * walkSpeed)) + 0.01 * st.accR + (reduced ? 0 : 0.012 * Math.sin(gaitA - 0.3) * moving * (1 - ws.running));
-    leanFT -= 0.12 * st.slideSm * dF; leanST -= 0.12 * st.slideSm * dR;     // lean back up the face
+    const land = Math.pow(Math.max(0, Math.cos(2 * gaitA)), 3);   // 1 at each footfall
+    const climb = sstep(0.03, 0.2, sF) * gm * (1 - run);
+    const bobT = -Math.cos(2 * gaitA) * (0.034 + 0.03 * run - 0.01 * climb) * gm - 0.012 * land * gm + 0.004 * Math.sin(t * 1.5) * breathe
+      - 0.07 * st.slideSm;
+    const swayT = (0.042 - 0.012 * run) * Math.sin(gaitA) * gm + (reduced ? 0 : 0.006 * Math.sin(t * 0.55) * breathe);
+    let leanFT = 0.03 * moving + 0.11 * run + Math.max(-0.08, Math.min(0.2, 0.5 * sF * moving)) + 0.02 * st.accF + (0.035 + 0.03 * run) * land * gm;
+    let leanST = Math.max(-0.07, Math.min(0.07, 0.02 * angVel * walkSpeed)) + 0.01 * st.accR + 0.034 * Math.sin(gaitA - 0.25) * gm * (1 - 0.5 * run);
+    leanFT -= 0.24 * st.slideSm * dF; leanST -= 0.24 * st.slideSm * dR;     // sit back into the face
     leanFT += reduced ? 0 : 0.004 * Math.sin(t * 0.7) * breathe;
-    st.bob = bobT; st.sway += (swayT - st.sway) * ease(dt || 1e-3, 0.06);
-    st.leanF += (leanFT - st.leanF) * ease(dt || 1e-3, 0.3); st.leanS += (leanST - st.leanS) * ease(dt || 1e-3, 0.3);
+    st.bob = bobT; st.sway += (swayT - st.sway) * ease(dt || 1e-3, 0.05);
+    const kl = ease(dt || 1e-3, 0.12);
+    st.leanF += (leanFT - st.leanF) * kl; st.leanS += (leanST - st.leanS) * kl;
+    st.climb = climb;
     // the hood looks where it goes (a little ahead of the turn); idle, it looks about slowly
     let hoodT = 0;
     if (wish && Math.hypot(wish[0], wish[1]) > 0.05) hoodT = Math.max(-0.5, Math.min(0.5, wrapPi(Math.atan2(wish[1], wish[0]) - h) * 0.6));
@@ -357,7 +409,8 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const wF = wind.dir[0] * fx + wind.dir[1] * fz, wR = wind.dir[0] * rx + wind.dir[1] * rz;
     uWindL.value.set(wF, wR, wind.strength, reduced ? 0 : wind.gust);
     uPose.value.set(st.bob, st.sway, st.leanF, st.leanS);
-    uGait.value.set(gaitA, Math.min(1.35, walkSpeed / 1.6) * moving * (1 - 0.7 * st.slideSm), st.hood, reduced ? 0 : t);
+    uGait.value.set(gaitA, Math.min(1.5, walkSpeed / 1.6) * moving * (1 - 0.7 * st.slideSm), st.hood, reduced ? 0 : t);
+    uRun.value = ws.running * (1 - st.slideSm);
     uSlide.value.set(dF, dR, st.slideSm, slipBury + 0.01);
     uGround.value.set(sF, sR, st.accF, st.accR);
 
@@ -374,11 +427,11 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
       const tl = tipLocal();
       if (st.planted && (tl.x < PILGRIM.liftBehind || Math.abs(tl.z - 0.33) > 0.35 || st.tipMode !== 'walk')) { st.planted = false; st.swingFrom = st.tip.clone(); }
       if (!st.planted) {
-        const tgt = ahead(PILGRIM.plantAhead, PILGRIM.plantSide, tmp2);
+        const tgt = ahead(PILGRIM.plantAhead + 0.25 * (st.climb || 0), PILGRIM.plantSide, tmp2);
         const d0 = st.swingFrom ? Math.hypot(tgt.x - st.swingFrom.x, tgt.z - st.swingFrom.z) : 1;
         const d = Math.hypot(tgt.x - st.tip.x, tgt.z - st.tip.z);
         const prog = clamp01(1 - d / Math.max(d0, 0.05));
-        approach(tgt.x, height(st.tip.x, st.tip.z) + 0.13 * Math.sin(Math.PI * prog) + 0.01, tgt.z, 9);
+        approach(tgt.x, height(st.tip.x, st.tip.z) + 0.24 * Math.sin(Math.PI * prog) + 0.01, tgt.z, 10);
       }
     } else if (mode === 'carry') {
       st.planted = false;
@@ -409,13 +462,15 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
 
     // ---- the right hand rides the staff; the left swings with the gait
     const tl = tipLocal();
-    const hx = Math.max(-0.02, Math.min(0.5, 0.24 + 0.55 * (tl.x - 0.15))), hy = 1.12 + (mode === 'carry' ? -0.06 : 0) + 0.04 * Math.max(0, tl.x - 0.3);
+    // walking, the hand stays forward: the planted staff leans back, the body walks past it and it
+    // leans forward before it lifts; climbing, the hand is higher and pulls on it
+    const hx = Math.max(-0.05, Math.min(0.55, 0.3 + 0.38 * (tl.x - 0.15))), hy = 1.12 + (mode === 'carry' ? -0.06 : 0) + 0.06 * Math.max(0, tl.x - 0.3) + 0.1 * (st.climb || 0);
     const handW = toWorld(...bodyAt(hx, hy, 0.315), new THREE.Vector3());
     const dir = handW.clone().sub(st.tip).normalize();
     const R = PILGRIM.restHand;
     // sleeve offset, in the pre-motion local frame (the shader adds the body's motion on top)
     uHandR.value.set(hx - R[0], hy - R[1], 0);
-    const la = -Math.cos(gaitA) * 0.09 * Math.min(1, walkSpeed / 1.6) * moving * (1 - st.slideSm);
+    const la = -Math.cos(gaitA) * (0.11 + 0.08 * ws.running) * Math.min(1, walkSpeed / 1.6) * moving * (1 - st.slideSm);
     uHandL.value.set(la - 0.04 * ws.running, 0.03 * ws.running + 0.12 * st.slideSm, -0.05 * st.slideSm);
 
     // the staff's frame: y along the shaft, x toward the figure's forward
@@ -437,7 +492,9 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
         const v = st.lamp.clone().sub(st.lampPrev).divideScalar(h4);
         const rel = v.clone().sub(hv);
         const wf = reduced ? 0 : wind.strength * (0.4 + 0.6 * wind.gust);
-        const acc = new THREE.Vector3(wind.dir[0] * wf, -9.81, wind.dir[1] * wf).addScaledVector(rel, -4.5);
+        const acc = new THREE.Vector3(wind.dir[0] * wf, -9.81, wind.dir[1] * wf).addScaledVector(rel, -3.2);
+        // sliding: the sand jolts the staff and the lantern swings hard
+        if (st.slideSm > 0.05) { const jt = t * 9.0 + i * 0.3; acc.x += st.slideSm * 22 * (Math.sin(jt * 1.7) + 0.6 * Math.sin(jt * 3.1 + 1)) * rx; acc.z += st.slideSm * 22 * (Math.sin(jt * 1.7) + 0.6 * Math.sin(jt * 3.1 + 1)) * rz; acc.y += st.slideSm * 14 * Math.sin(jt * 2.3); }
         const next = st.lamp.clone().addScaledVector(v, h4).addScaledVector(acc, h4 * h4);
         const d = next.clone().sub(hp); d.multiplyScalar(Lc / Math.max(d.length(), 1e-4));
         st.lampPrev.copy(st.lamp); st.lamp.copy(hp).add(d);
@@ -494,6 +551,12 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
   // a footfall: the staff is planted on every other step while walking
   function foot(e, ws) {
     st.feet++;
+    // the lantern answers each step: a small kick across and down (more on a staff plant)
+    if (st.init && !(e.slide > 0.5)) {
+      const kk = (st.feet % 2 ? 0.5 : 0.9) * (1 + ws.running);
+      st.lampPrev.x -= -Math.sin(st.heading) * 0.012 * kk * (e.side || 1); st.lampPrev.z -= Math.cos(st.heading) * 0.012 * kk * (e.side || 1);
+      st.lampPrev.y += 0.008 * kk;
+    }
     if (st.tipMode !== 'walk' || st.feet % 2) return null;
     st.planted = true;
     st.tip.y = height(st.tip.x, st.tip.z) - 0.035;

@@ -1,9 +1,14 @@
 // Dust Sea walk: sand thrown up by the Pilgrim (third person). A fixed pool of sprites, one draw:
 //   puff   a small low puff at each walking footfall, drifting downwind
 //   kick   running: a bigger kick thrown back and up, then downwind
-//   sheet  sliding: thin streaks pouring down the face ahead of and beside the figure, hugging the
-//          sand (each one is re-seated on height.js every frame)
-//   trail  sliding: a low dust trail behind
+//   sheet  sliding: a wide sheet of thin streaks pouring down the face ahead of and beside the hem,
+//          hugging the sand (each one is re-seated on height.js every frame)
+//   lip    sliding: a bow wave at the feet, a low dark lip of sand pushed ahead of the hem
+//   tongue sliding: small avalanching tongues, long dark streaks set off beside and behind the
+//          figure that run down the face past it, faster than it
+//   trail  sliding: a low dust trail hanging behind
+// All of the slide's sand scales with the slide's speed. It stays under reduced motion (it is the
+// interaction); the footfall puffs and kicks do not.
 // Simulated on the CPU (at most POOL sprites), drawn as one instanced Sprite whose positionNode,
 // scaleNode and rotationNode read per-instance attributes. Each sprite is stretched along its
 // on-screen motion, its edge eroded by noise, faded toward its bottom (so where it meets the sand
@@ -15,7 +20,7 @@ import { Fn, uniform, vec2, vec3, vec4, float, max, mix, clamp, smoothstep, leng
   cameraPosition, instancedDynamicBufferAttribute, mx_noise_float } from 'three/tsl';
 import { height } from '../look-test/height.js';
 
-export const POOL = 192;
+export const POOL = 384;
 
 export function createPuffs({ U, shade, scene }) {
   const aces = (x) => clamp(x.mul(x.mul(2.51).add(0.03)).div(x.mul(x.mul(2.43).add(0.59)).add(0.14)), 0.0, 1.0);
@@ -68,7 +73,7 @@ export function createPuffs({ U, shade, scene }) {
   // the pool: x, y, z, vx, vy, vz, age, life, size, aspect, alpha, seed, kind, hug
   const ps = [];
   for (let i = 0; i < POOL; i++) ps.push({ on: false });
-  let next = 0, live = 0, sheetAcc = 0, trailAcc = 0;
+  let next = 0, live = 0, sheetAcc = 0, trailAcc = 0, lipAcc = 0, tongueAcc = 0;
   const rnd = (() => { let s = 1234567; return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); })();
   function spawn(o) {
     // take a dead one, else the oldest-by-slot
@@ -98,24 +103,46 @@ export function createPuffs({ U, shade, scene }) {
 
   // one frame: sliding emission, motion, and the upload. ws: the walker's state
   function update(dt, ws, wind, camera, reduced) {
-    if (!reduced && ws.sliding > 0.25 && dt > 0) {
+    if (ws.sliding > 0.2 && dt > 0) {
       const sv = Math.hypot(ws.sx, ws.sz) || 1;
       const dx = ws.sx / sv, dz = ws.sz / sv, rx = -dz, rz = dx;
-      sheetAcc += dt * 110 * ws.sliding;
+      const tv = Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz);   // the figure's whole speed
+      const k = Math.min(1.2, ws.sliding * (0.5 + 0.5 * tv / 4.4));
+      // the sheet: wide and dense, ahead of and beside the hem
+      sheetAcc += dt * 190 * k;
       while (sheetAcc >= 1) {
         sheetAcc -= 1;
-        const along = -0.2 + 1.6 * rnd(), side = (rnd() - 0.5) * (0.9 + along * 0.8);
+        const along = -0.35 + 2.2 * rnd(), side = (rnd() - 0.5) * (1.3 + along * 0.9);
         const x = ws.x + dx * along + rx * side, z = ws.z + dz * along + rz * side;
-        const sp = sv * (1.0 + 0.6 * rnd()) + 0.4;
-        spawn({ kind: 'sheet', hug: 0.03 + 0.05 * rnd(), x, y: height(x, z) + 0.05, z, vx: dx * sp, vy: 0, vz: dz * sp, life: 0.5 + 0.6 * rnd(), size: 0.3 + 0.2 * rnd(), aspect: 0.2, alpha: 0.8, grow: 1.3 });
+        const sp = tv * (0.85 + 0.5 * rnd()) + 0.3;
+        spawn({ kind: 'sheet', hug: 0.03 + 0.06 * rnd(), x, y: height(x, z) + 0.05, z, vx: dx * sp, vy: 0, vz: dz * sp, life: 0.5 + 0.7 * rnd(), size: 0.45 + 0.35 * rnd(), aspect: 0.3, alpha: 0.95, grow: 1.4 });
       }
-      trailAcc += dt * 10 * ws.sliding;
+      // the bow wave: just ahead of the feet, low, short-lived, thrown a little up and out
+      lipAcc += dt * 70 * k;
+      while (lipAcc >= 1) {
+        lipAcc -= 1;
+        const side = (rnd() - 0.5) * 0.75, out = Math.sign(side) * (0.4 + 0.6 * rnd());
+        const x = ws.x + dx * (0.32 + 0.1 * rnd()) + rx * side, z = ws.z + dz * (0.32 + 0.1 * rnd()) + rz * side;
+        const sp = tv * (1.05 + 0.2 * rnd());
+        spawn({ kind: 'lip', hug: 0, x, y: height(x, z) + 0.04, z, vx: dx * sp + rx * out, vy: 0.35 + 0.4 * rnd(), vz: dz * sp + rz * out, life: 0.3 + 0.22 * rnd(), size: 0.3 + 0.2 * rnd(), aspect: 0.45, alpha: 0.95, grow: 1.7 });
+      }
+      // avalanching tongues: set off beside and behind, they run down past the figure
+      tongueAcc += dt * 9 * k;
+      while (tongueAcc >= 1) {
+        tongueAcc -= 1;
+        const side = (rnd() < 0.5 ? -1 : 1) * (0.5 + 1.3 * rnd());
+        const x = ws.x - dx * (0.6 + 1.2 * rnd()) + rx * side, z = ws.z - dz * (0.6 + 1.2 * rnd()) + rz * side;
+        const sp = tv * (1.25 + 0.35 * rnd()) + 0.6;
+        spawn({ kind: 'tongue', hug: 0.03, x, y: height(x, z) + 0.03, z, vx: dx * sp, vy: 0, vz: dz * sp, life: 1.2 + 0.9 * rnd(), size: 0.8 + 0.5 * rnd(), aspect: 0.16, alpha: 1.0, grow: 1.25 });
+      }
+      // the dust trail: low, hanging behind, drifting downwind
+      trailAcc += dt * 16 * k;
       while (trailAcc >= 1) {
         trailAcc -= 1;
-        const x = ws.x - dx * 0.4 + rx * (rnd() - 0.5) * 0.6, z = ws.z - dz * 0.4 + rz * (rnd() - 0.5) * 0.6;
-        spawn({ kind: 'trail', hug: 0, x, y: height(x, z) + 0.12, z, vx: wind.dir[0] * wind.strength * 0.6 + dx * 0.3, vy: 0.1 + 0.1 * rnd(), vz: wind.dir[1] * wind.strength * 0.6 + dz * 0.3, life: 1.8 + 1.2 * rnd(), size: 0.6 + 0.4 * rnd(), aspect: 0.45, alpha: 0.22, grow: 2.4 });
+        const x = ws.x - dx * (0.3 + 0.5 * rnd()) + rx * (rnd() - 0.5) * 1.0, z = ws.z - dz * (0.3 + 0.5 * rnd()) + rz * (rnd() - 0.5) * 1.0;
+        spawn({ kind: 'trail', hug: 0, x, y: height(x, z) + 0.1 + 0.15 * rnd(), z, vx: wind.dir[0] * wind.strength * 0.6 + dx * 0.4, vy: 0.08 + 0.12 * rnd(), vz: wind.dir[1] * wind.strength * 0.6 + dz * 0.4, life: 2.4 + 1.6 * rnd(), size: 0.7 + 0.5 * rnd(), aspect: 0.5, alpha: 0.26 + 0.1 * k, grow: 2.8 });
       }
-    } else { sheetAcc = 0; trailAcc = 0; }
+    } else { sheetAcc = 0; trailAcc = 0; lipAcc = 0; tongueAcc = 0; }
 
     const pa = posA.array, da = datA.array, ra = rotA.array;
     const ce = camera.matrixWorldInverse.elements, pe = camera.projectionMatrix.elements;
@@ -133,12 +160,14 @@ export function createPuffs({ U, shade, scene }) {
       }
       if (!p.on) { da[i * 4 + 2] = 0; da[i * 4] = da[i * 4 + 1] = 0.0001; pa[i * 3 + 1] = -1e4; continue; }
       live++;
-      const drag = p.kind === 'kick' ? 2.2 : 1.4;
+      const ground = p.kind === 'sheet' || p.kind === 'tongue';   // sand running on the face, not blown
+      const drag = p.kind === 'kick' || p.kind === 'lip' ? 2.2 : ground ? 0 : 1.4;
       const wx = wind.dir[0] * wind.strength * 0.9, wz = wind.dir[1] * wind.strength * 0.9;
       p.vx += (wx - p.vx) * (1 - Math.exp(-dt * drag));
       p.vz += (wz - p.vz) * (1 - Math.exp(-dt * drag));
-      p.vy += (p.kind === 'kick' ? -2.2 : -0.15) * dt; p.vy *= Math.exp(-dt * 1.5);
+      p.vy += (p.kind === 'kick' || p.kind === 'lip' ? -3.0 : -0.15) * dt; p.vy *= Math.exp(-dt * 1.5);
       if (p.kind === 'sheet') { p.vx *= Math.exp(-dt * 0.4); p.vz *= Math.exp(-dt * 0.4); }
+      if (p.kind === 'tongue') { p.vx *= Math.exp(-dt * 0.25); p.vz *= Math.exp(-dt * 0.25); }
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       const g = height(p.x, p.z);
       if (p.hug) p.y = g + p.hug; else if (p.y < g + 0.05) { p.y = g + 0.05; p.vy = Math.abs(p.vy) * 0.2; }
@@ -153,7 +182,7 @@ export function createPuffs({ U, shade, scene }) {
       const stretch = 1 + Math.min(1.6, spd * 0.35);
       pa[i * 3] = p.x; pa[i * 3 + 1] = p.y + s * p.aspect * 0.3; pa[i * 3 + 2] = p.z;
       da[i * 4] = s * stretch; da[i * 4 + 1] = s * p.aspect; da[i * 4 + 2] = a; da[i * 4 + 3] = p.seed;
-      ra[i * 4] = rot; ra[i * 4 + 1] = f; ra[i * 4 + 2] = p.kind === 'sheet' ? 0.62 : 1.2;
+      ra[i * 4] = rot; ra[i * 4 + 1] = f; ra[i * 4 + 2] = p.kind === 'sheet' ? 0.36 : p.kind === 'tongue' ? 0.3 : p.kind === 'lip' ? 0.5 : 1.2;
     }
     posA.needsUpdate = datA.needsUpdate = rotA.needsUpdate = true;
     sprite.visible = live > 0;
