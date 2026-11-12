@@ -41,26 +41,44 @@ export const WALK = {
   pitchMin: -1.15, pitchMax: 0.9,
 };
 
-// The crest leap (third person only: intent.leap). Running over a brink, the figure is carried off
-// it: each frame, while running, the path it would fly from here is worked out (its horizontal
-// velocity, a vertical speed from the ground's slope under it plus a running stride's own lift,
-// under gravity); if within one running step that path clears the sand by more than `thresh`, it
-// takes off. In the air its horizontal velocity is kept (a little air control) and it falls from the
-// take-off speed; it lands when its feet reach the sand (the crossing is found within the frame, so
-// the landing point does not depend on the frame rate). Landing on a slip face starts the slide with
-// the speed it carried; on gentler sand it is a heavy step that loses speed.
+// The crest leap (third person only: intent.leap). Running over the brink of a slip face, the figure
+// is carried off it. The brink is found directly, along the way it is running: the lip is where the
+// slope along the run first falls past `lipDeg` (found within the frame, so the take-off point does
+// not depend on the frame rate); it counts as a brink only if the ground within `ahead` m past the
+// lip falls at `faceDeg` or more along the run and the slope turns by `breakDeg` or more from the
+// `behind` m before the lip to that face. Gentle rolling ground, ripples (shading only), climbs and
+// crests run along never pass. It springs off the lip with a stride's lift plus a spring scaled by
+// how sharply the slope turns there (`kinkLo`..`kinkHi`): a rounded brink gives a low, short bound, a
+// sharp one the full leap. Every leap must come down on the face (`landDeg`): if its flight would not,
+// the spring is raised toward full, and off a brink too round even for that it runs on over the
+// rounding and leaps from the first point whose flight does (see lipMaxDeg). In the air its horizontal velocity is kept (a little air control) and it
+// falls from the take-off speed; it lands when its feet reach the sand (the crossing is found within
+// the frame). Landing on a slip face starts the slide with the speed it carried; on gentler sand it
+// is a heavy step that loses speed.
 export const LEAP = {
   g: 7.0,          // m/s^2 in the air. Not 9.81: at true gravity no brink in this field throws a runner
                    // clear (the sharpest, the dusk crest's, turns from flat to 25 degrees over 1.2 m, a
                    // radius of about 3 m; v^2/R at 4.1 m/s is under g). 0.71 g: the cloak's drag, stylised
   push: 0.8,       // m/s: a running stride's own lift at full run (a runner's flight phase), added to the
-                   // ground's vertical speed under the moving figure
-  vyMax: 1.0,      // never an upward launch faster than this (m/s)
-  spring: 1.5,     // m/s: once a brink is found, the Pilgrim springs off the lip by this much more (the
-                   // lead's call: the passive path alone cleared the sand by only 0.2 m, a hop)
+                   // ground's vertical speed just behind the lip
+  vyMax: 1.0,      // never an upward launch from those two faster than this (m/s)
+  spring: 0.8,     // m/s: off a sharp brink the Pilgrim springs off the lip by this much more (the lead's
+                   // call: a passive flight cleared the sand by only 0.2 m, a hop; 0.8 off the lip keeps
+                   // the dusk brink's leap what 1.5 gave off the old take-off, 1.04 m clear for 1.18 s) ...
+  springMin: 0.3,  // ... and off the roundest brink that still counts, by this share of it
   minRun: 0.6,     // the share of running needed (about 3.3 m/s on the flat)
-  thresh: 0.15,    // take off when the flight path clears the sand by more than this within one step (m)
-  samples: 8,      // points along that path
+  lipDeg: 8,       // the lip: where the slope along the run first falls past this (deg) ...
+  lipMaxDeg: 16,   // ... off a brink so round that even the full spring from there would come down short
+                   // of the face, it runs on over the rounding, at most until the slope falls past this
+  faceDeg: 19,     // a brink: within `ahead` m past the lip the ground falls at least this steeply along
+                   // the run (deg) ...
+  breakDeg: 15,    // ... and the slope turns by at least this from the `behind` m before the lip (deg)
+  ahead: 5, behind: 3,
+  landDeg: 24,     // the flight must come down on sand at least this steep (deg; the slide starts from
+                   // slipDeg), else the spring grows toward full ...
+  landMinDeg: 15,  // ... and if even the full spring from lipMaxDeg lands on gentler sand than this, no leap
+  kinkLo: 8, kinkHi: 24, // the turn of the slope within 1.5 m either side of the lip (deg): the spring
+                   // grows from springMin to full between these
   airTau: 3.0,     // air control: the horizontal velocity follows the wish with this time constant (s)
   cool: 0.4,       // seconds after a landing before another take-off
   slipDeg: 22,     // landing on a face steeper than this starts the slide with the speed carried
@@ -71,6 +89,40 @@ export const LEAP = {
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const LIP_T = Math.tan(LEAP.lipDeg * DEG), LIP_MAX_T = Math.tan(LEAP.lipMaxDeg * DEG);
+
+// the ground's rise per metre along a unit direction
+function riseAlong(x, z, ex, ez) { const [, gx, gz] = heightD(x, z); return gx * ex + gz * ez; }
+
+// is the lip at (x, z), running along (ex, ez), the brink of a slip face? null if not, else the
+// spring's share k, the face's slope along the run and the turn (deg)
+function brinkAt(x, z, ex, ez) {
+  let face = Infinity, behind = -Infinity;
+  for (const d of [0.5, 1, 1.5, 2, 3, 4, 5]) face = Math.min(face, riseAlong(x + ex * d * LEAP.ahead / 5, z + ez * d * LEAP.ahead / 5, ex, ez));
+  for (const d of [0.25, 0.5, 0.75, 1]) behind = Math.max(behind, riseAlong(x - ex * d * LEAP.behind, z - ez * d * LEAP.behind, ex, ez));
+  const faceDeg = -Math.atan(face) / DEG, behindDeg = Math.atan(behind) / DEG;
+  if (faceDeg < LEAP.faceDeg || behindDeg + faceDeg < LEAP.breakDeg) return null;
+  const kinkDeg = (Math.atan(riseAlong(x - ex * 1.5, z - ez * 1.5, ex, ez)) - Math.atan(riseAlong(x + ex * 1.5, z + ez * 1.5, ex, ez))) / DEG;
+  const k = LEAP.springMin + (1 - LEAP.springMin) * smooth(LEAP.kinkLo, LEAP.kinkHi, kinkDeg);
+  return { k, faceDeg, kinkDeg };
+}
+
+// the flight from the lip (x, y0, z) at horizontal velocity (vx, vz) and upward speed vy0, the air
+// control left out: where and when it reaches the sand, how steep the sand is there (deg) and its
+// highest point above the sand under it
+function flightFrom(x, z, y0, vy0, vx, vz) {
+  const sep = (t) => y0 + vy0 * t - 0.5 * LEAP.g * t * t - height(x + vx * t, z + vz * t);
+  let a = 0, b = 0, clear = 0;
+  for (let t = 0.05; t <= LEAP.maxAir; t += 0.05) {
+    const e = sep(t);
+    if (e < 0) { b = t; break; }
+    a = t; clear = Math.max(clear, e);
+  }
+  if (b === 0) return { t: LEAP.maxAir, deg: 0, clear };
+  for (let i = 0; i < 6; i++) { const mid = (a + b) / 2; if (sep(mid) > 0) a = mid; else b = mid; }
+  const t = (a + b) / 2, [, gx, gz] = heightD(x + vx * t, z + vz * t);
+  return { t, deg: Math.atan(Math.hypot(gx, gz)) / DEG, clear };
+}
 
 // the mean ground under the footprint: the eye does not jitter on a brink's kink
 export function footHeight(x, z, r = WALK.footAvgR) {
@@ -121,6 +173,21 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     feetY: height(x, z), air: null,
   };
   s.eyeY = s.ground + WALK.eye - s.sink;
+  let lipPrev = null;   // the crest leap: the rise per metre along the run at the end of the last frame
+  let lipState = 0;     // ... 0 looking for a lip, 1 past the lip of a brink too round for the spring
+                        // there, 2 given up on this brink (both until the slope rises past lipDeg again)
+  let lipBrink = null;  // ... the brink whose lip was last crossed
+
+  // off the sand from launch L (which this frame's path has passed: the flight started that long ago)
+  function takeOff(L, k, fl, v, b, ex, ez, events) {
+    const vy0 = L.vyT + LEAP.spring * k, t0 = Math.hypot(s.x - L.x, s.z - L.z) / v;
+    const y = L.y0 + vy0 * t0 - 0.5 * LEAP.g * t0 * t0;
+    s.airborne = 1; s.air = { t: t0, y0: L.y0, vy0 }; s.airTime = t0; s.airVy = vy0 - LEAP.g * t0;
+    s.feetY = y; s.airHeight = Math.max(0, y - height(s.x, s.z)); s.airMax = s.airHeight;
+    lipState = 0;
+    events.push({ type: 'leap', x: L.x, z: L.z, vy: vy0, speed: v, clear: fl.clear, k,
+      lipDeg: -Math.atan(riseAlong(L.x, L.z, ex, ez)) / DEG, faceDeg: b.faceDeg, kinkDeg: b.kinkDeg });
+  }
 
   function update(dt, intent = {}) {
     const events = [];
@@ -128,6 +195,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     // the leap is third person only: called without it (first person, V mid-flight), the feet are put
     // back on the sand
     if (s.airborne && !intent.leap) { s.airborne = 0; s.air = null; s.airHeight = 0; s.airVy = 0; }
+    if (!intent.leap) { lipPrev = null; lipState = 0; }
     const air = s.airborne === 1;
     if (intent.leap) s.sinceLand += dt;
     // ---- look
@@ -260,23 +328,66 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     } else if (intent.leap) {
       s.feetY = height(s.x, s.z);
       const v = Math.hypot(tx, tz);
-      if (run && s.running > LEAP.minRun && s.sliding < 0.3 && s.sinceLand > LEAP.cool && v > 1) {
-        // the path it would fly from here: the ground's vertical speed under it plus a stride's lift
-        const [, gx2, gz2] = heightD(s.x, s.z);
-        const vyT = Math.min(LEAP.vyMax, gx2 * tx + gz2 * tz + LEAP.push * s.running);
-        const y0 = s.feetY, H = WALK.strideRun / v;
-        let best = -1;
-        for (let k = 1; k <= LEAP.samples; k++) {
-          const t = (H * k) / LEAP.samples;
-          best = Math.max(best, y0 + vyT * t - 0.5 * LEAP.g * t * t - height(s.x + tx * t, s.z + tz * t));
+      if (run && m > 0.5 && s.running > LEAP.minRun && s.sliding < 0.3 && s.sinceLand > LEAP.cool && v > 1) {
+        const ex = tx / v, ez = tz / v;
+        const aNow = riseAlong(s.x, s.z, ex, ez);
+        if (aNow > -LIP_T) lipState = 0;
+        // the launch from (x, z): a stride's lift plus the ground's vertical speed just behind it, then
+        // the spring (share k)
+        const launch = (x, z) => ({ x, z, y0: height(x, z), vyT: Math.min(LEAP.vyMax, riseAlong(x - ex * 0.75, z - ez * 0.75, ex, ez) * v + LEAP.push * s.running) });
+        const fly = (L, k) => flightFrom(L.x, L.z, L.y0, L.vyT + LEAP.spring * k, tx, tz);
+        // a point on this frame's path, f of the way from (ax, az) to where the figure is now
+        const on = (ax, az, f) => [ax + (s.x - ax) * f, az + (s.z - az) * f];
+        let seg = null;   // where on this frame's path a brink too round for the spring at its lip is looked at
+        if (lipState === 0 && lipPrev !== null && lipPrev > -LIP_T && aNow <= -LIP_T) {
+          // the lip was crossed during this frame: find it on the frame's path
+          let lo = 0, hi = 1;
+          for (let i = 0; i < 7; i++) { const f = (lo + hi) / 2; if (riseAlong(...on(px, pz, f), ex, ez) > -LIP_T) lo = f; else hi = f; }
+          const [lx, lz] = on(px, pz, (lo + hi) / 2);
+          const b = brinkAt(lx, lz, ex, ez);
+          if (b) {
+            lipBrink = b;
+            // it must come down on the face, steep enough to slide: a short bound off a rounded brink
+            // that would land on the rounding springs harder (the least spring that does, found by
+            // halving so that it varies smoothly), up to the full spring
+            const L = launch(lx, lz);
+            let k = b.k, fl = fly(L, k);
+            if (fl.deg < LEAP.landDeg) {
+              const full = fly(L, 1);
+              if (full.deg >= LEAP.landDeg) {
+                let lo2 = k, hi2 = 1; fl = full;
+                for (let i = 0; i < 6; i++) { const mid = (lo2 + hi2) / 2, fm = fly(L, mid); if (fm.deg >= LEAP.landDeg) { hi2 = mid; fl = fm; } else lo2 = mid; }
+                k = hi2;
+              }
+            }
+            if (fl.deg >= LEAP.landDeg) takeOff(L, k, fl, v, b, ex, ez, events);
+            else { lipState = 1; seg = [lx, lz]; }   // even the full spring comes down short: run on
+          }
+        } else if (lipState === 1) seg = [px, pz];
+        if (seg) {
+          // a brink too round for the spring at its lip: it runs on over the rounding and leaps, with the
+          // full spring, from the first point whose flight comes down on the face (found within the
+          // frame, so it does not depend on the frame rate); once the slope falls past lipMaxDeg it
+          // leaps from there if it would come down on sand of landMinDeg or more, else not at all
+          const fullAt = (f) => { const L = launch(...on(seg[0], seg[1], f)); return [L, fly(L, 1)]; };
+          const [Ln, fn] = fullAt(1);
+          if (fn.deg >= LEAP.landDeg) {
+            let lo = 0, hi = 1, best = [Ln, fn];
+            for (let i = 0; i < 6; i++) { const mid = (lo + hi) / 2, r = fullAt(mid); if (r[1].deg >= LEAP.landDeg) { hi = mid; best = r; } else lo = mid; }
+            takeOff(best[0], 1, best[1], v, lipBrink, ex, ez, events);
+          } else if (aNow <= -LIP_MAX_T) {
+            let lo = 0, hi = 1;
+            if (riseAlong(seg[0], seg[1], ex, ez) <= -LIP_MAX_T) hi = 0;
+            else for (let i = 0; i < 7; i++) { const f = (lo + hi) / 2; if (riseAlong(...on(seg[0], seg[1], f), ex, ez) > -LIP_MAX_T) lo = f; else hi = f; }
+            const [L, fl] = fullAt(hi);
+            if (fl.deg >= LEAP.landMinDeg) takeOff(L, 1, fl, v, lipBrink, ex, ez, events);
+            else lipState = 2;   // no leap off this brink
+          }
         }
-        if (best > LEAP.thresh) {
-          const vy0 = vyT + LEAP.spring;                 // the brink is found with the passive path; the leap itself springs off it
-          s.airborne = 1; s.air = { t: 0, y0, vy0 }; s.airTime = 0; s.airHeight = 0; s.airVy = vy0; s.airMax = 0;
-          events.push({ type: 'leap', x: s.x, z: s.z, vy: vy0, speed: v, clear: best });
-        }
-      }
+        lipPrev = s.airborne ? null : aNow;
+      } else { lipPrev = null; lipState = 0; }
     }
+    if (s.airborne) lipPrev = null;
     const flying = air || s.airborne === 1;
 
     // ---- feet: stride phase, footfalls, the slide trough (none in the air)
@@ -332,7 +443,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     if (p.headingDeg !== undefined) s.yaw = p.headingDeg * DEG;
     if (p.pitchDeg !== undefined) s.pitch = p.pitchDeg * DEG;
     s.vx = s.vz = s.sx = s.sz = 0; s.target = null;
-    s.airborne = 0; s.air = null; s.airHeight = 0; s.airVy = 0; s.sinceLand = 99;
+    s.airborne = 0; s.air = null; s.airHeight = 0; s.airVy = 0; s.sinceLand = 99; lipPrev = null; lipState = 0;
     s.ground = footHeight(s.x, s.z); s.groundPoint = height(s.x, s.z); s.feetY = s.groundPoint;
     s.exposure = exposureAt(s.x, s.z);
     s.eyeY = s.ground + WALK.eye - s.sink;
