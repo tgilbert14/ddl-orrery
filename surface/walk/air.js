@@ -7,9 +7,15 @@
 // face is still. Seen at a graze the layer is thicker, so it gathers toward the middle distance and
 // thins under your feet; far off it averages to an even faint veil (no aliasing). Reduced motion
 // freezes its clock (uTime), so it is a still veil.
+//
+// The storm front (storm.js, SU.air) strengthens it: x adds to the veil's strength (2.5x by the end of
+// the approach, easing back over a minute after), and inside the storm a second, denser and faster
+// layer of streaming sand (y its strength, z its own clock, which reduced motion freezes). With no
+// storm the branch is not taken and the colour is as before.
 
-import { vec2, float, clamp, smoothstep, max, mix, dot, pow } from 'three/tsl';
+import { vec2, float, clamp, smoothstep, max, mix, dot, pow, If } from 'three/tsl';
 import { G, DEG } from '../look-test/params.js';
+import { SU } from './storm.js';
 
 export const AIR = {
   speed1: 1.3, speed2: 2.2, speedGust: 0.7,  // downwind drift (m/s) of the two octaves and the gusts
@@ -44,6 +50,19 @@ export function airHook({ col, xz, dist, rd, grad, alb, U, vnoise, sh }) {
   // the layer is a few tens of centimetres deep: where the ground is in shadow, so is the sand above it
   const lit = alb.mul(fs(U.uSun1Dir, U.uSun1Col.mul(sh[0])).add(fs(U.uSun2Dir, U.uSun2Col.mul(sh[1]))).add(fs(U.uSun3Dir, U.uSun3Col.mul(sh[2]))).add(fs(U.uSun4Dir, U.uSun4Col.mul(sh[3])))
     .add(U.uAmbSky.mul(0.8))).mul(1.15);
-  return mix(col, lit, amount);
+  const out = mix(col, lit, amount).toVar();
+  If(SU.on.greaterThan(0.5), () => {
+    // the approach and the after: the same veil, thicker
+    out.assign(mix(out, lit, clamp(d.mul(expo).mul(graze).mul(AIR.opacity).mul(SU.air.x), 0.0, 0.45)));
+    // inside: sand streaming along the ground, short dense tongues racing downwind
+    If(SU.air.y.greaterThan(0.0), () => {
+      const ph = SU.air.z;
+      const m1 = vnoise(vec2(a.sub(ph.mul(9.0)).div(2.6), c.div(0.55).add(31.0)));
+      const m2 = vnoise(vec2(a.sub(ph.mul(13.0)).div(1.1), c.div(0.3).add(7.0)));
+      const dn = smoothstep(-0.2, 0.7, m1.mul(0.6).add(m2.mul(0.4))).mul(float(1.0).sub(smoothstep(4.0, 14.0, dist)).mul(0.7).add(0.3));
+      out.assign(mix(out, lit.mul(1.1), clamp(dn.mul(graze).mul(SU.air.y).mul(0.32).mul(expo.mul(0.5).add(0.5)), 0.0, 0.6)));
+    });
+  });
+  return out;
 }
 

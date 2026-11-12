@@ -185,7 +185,18 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     const dl = Math.hypot(dx, dz);
     const rise = dl > 1e-6 ? (gx * dx + gz * dz) / dl : 0;  // rise per metre along the wish
     const factor = rise > 0 ? 1 / (1 + WALK.climbK * rise) : 1 + WALK.descendK * Math.min(-rise, WALK.descendMax);
-    const wishSpeed = (run ? WALK.run : WALK.walk) * m * factor;
+    let wishSpeed = (run ? WALK.run : WALK.walk) * m * factor;
+    // the storm front (intent.storm = { k 0..1, gust 0..1, ...STORM }): into the wind is slower (to
+    // 60%), with it a little faster, running is capped lower; across it you are nudged downwind
+    // (below). Not passed, or k = 0: unchanged
+    const sk = intent.storm && intent.storm.k > 0 ? intent.storm.k : 0;
+    let nudge = 0;
+    if (sk > 0 && dl > 1e-6) {
+      const S = intent.storm, along = (dx * WIND[0] + dz * WIND[1]) / dl, g = 0.85 + 0.3 * (S.gust ?? 0.5);
+      wishSpeed *= along < 0 ? 1 + S.intoWind * sk * g * along : 1 + S.withWind * sk * along;
+      if (run) wishSpeed = Math.min(wishSpeed, (WALK.run - S.runCap * sk) * m * factor);
+      nudge = S.nudge * sk * g * Math.sqrt(Math.max(0, 1 - along * along));
+    }
     const tvx = dx * wishSpeed, tvz = dz * wishSpeed;  // dx,dz already carry |dl| <= 1
     const ka = 1 - Math.exp(-dt / (air ? LEAP.airTau : WALK.accelTau));
     s.vx += (tvx - s.vx) * ka; s.vz += (tvz - s.vz) * ka;
@@ -200,6 +211,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     const px = s.x, pz = s.z;
     // running down a slip face does not add up without limit
     let tx = s.vx + s.sx, tz = s.vz + s.sz;
+    if (nudge > 0 && !air) { const kw = smooth(0.2, 1.0, Math.hypot(s.vx, s.vz)) * nudge; tx += WIND[0] * kw; tz += WIND[1] * kw; }
     const tot = Math.hypot(tx, tz);
     if (tot > WALK.maxSpeed) { tx *= WALK.maxSpeed / tot; tz *= WALK.maxSpeed / tot; }
     s.x += tx * dt; s.z += tz * dt;

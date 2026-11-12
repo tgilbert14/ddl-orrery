@@ -7,7 +7,10 @@
 //   resumes the context synchronously, builds the noise in later tasks, and returns a Promise of
 //   true (running) or false (refused or unavailable: every call stays a silent no-op). Never rejects.
 //   Steps arriving before the build finishes (about 30 ms on desktop) are dropped.
-//   update({ dt, windSpeed, windDirRel, exposure, walkerSpeed, sliding }) once per frame.
+//   update({ dt, windSpeed, windDirRel, exposure, walkerSpeed, sliding, storm, stormGust }) once per
+//   frame. storm 0..1 (optional) is the storm front at the listener: the wind rises and darkens into
+//   a roar with slow gust swells (stormGust 0..1, 3 to 8 s), a hiss of sand on top, the steps nearly
+//   gone; all of it eases back as it falls. See STORM_MIX for the measured levels.
 //   step(strength 0..1) once per footfall.
 //   land(strength 0..1) once per crest-leap landing (third person; optional for the caller).
 //
@@ -27,6 +30,18 @@
 // flutter are control-rate noise buffers fed straight into gain AudioParams.
 
 const TAU = Math.PI * 2;
+
+// The storm front's mix. Rendered offline (OfflineAudioContext, 20 s after a 4 s settle, no steps),
+// the storm at full strength against the calm wind at the same spot: +7.3 dB RMS in a trough
+// (exposure 0.3; its loudest second +9.5 dB over the calm RMS), +5.6 dB (+8.0) at exposure 0.6, +3.2 dB
+// (+5.8) on a crest. Sample peaks stay under -4 dBFS. Nobody has listened to it yet.
+export const STORM_MIX = {
+  wind: 0.4,      // the wind's strength at the ears goes up by this share (and by the swells)
+  swell: 0.35,    // gust swells: +-this share of that
+  dark: 0.42,     // the filters close by this share (a roar, not a whistle)
+  sand: 0.085,    // the hiss of sand on top
+  steps: 0.9,     // the steps' bus drops by this share
+};
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -231,6 +246,7 @@ export function createSound(opts = {}) {
     gust: 1, gustTarget: 1, gustTimer: 0, gustRise: 1.2,
     gustB: 1, gustBTarget: 1, gustBTimer: 0,
     sinceParams: 1, stepSide: 1,
+    stormIn: 0, storm: 0, stormGust: 0.5,
   };
 
   function now() { return ctx.currentTime; }
@@ -406,13 +422,16 @@ export function createSound(opts = {}) {
     const faceN = 0.5 + 0.5 * face;
     const side = Math.sin(st.windDirRel);                 // +1 from the right
     const rush = st.rush;                                 // 0..1 running air
-    const shelter = 0.22 + 0.78 * e;                      // how much wind reaches you
-    const local = wn * st.gust * shelter;                 // effective wind at the ears
+    // the storm front: no shelter anywhere, the wind up and swelling, every filter closing
+    const S = st.storm, swell = 1 + STORM_MIX.swell * (st.stormGust * 2 - 1);
+    const shelter = lerp(0.22 + 0.78 * e, 1, S);          // how much wind reaches you
+    const local = wn * st.gust * shelter * (1 + STORM_MIX.wind * S * swell);   // effective wind at the ears
     const crest = Math.pow(e, 1.6);                       // the bright stuff needs real exposure
+    const dark = 1 - STORM_MIX.dark * S;
 
     // Body: always there, narrows and darkens in a trough.
     const bodyLevel = 0.30 * Math.pow(Math.min(local, 2) + 0.12, 0.9) * (0.85 + 0.15 * faceN) * (1 + 0.6 * rush);
-    const bodyCut = 150 + 300 * Math.min(local, 1.8) + 80 * faceN + 120 * rush;
+    const bodyCut = (150 + 300 * Math.min(local, 1.8) + 80 * faceN + 120 * rush) * dark;
     set(g.bodyV.gain, bodyLevel, tau);
     set(g.bodyLp.frequency, bodyCut, tau);
     set(g.bodyLp2.frequency, bodyCut * 1.3, tau);
@@ -427,26 +446,27 @@ export function createSound(opts = {}) {
     const lB = midBase * 0.8 * st.gustB;
     set(g.midA.v.gain, lA, tau);
     set(g.midA.depth.gain, lA * 0.45, tau);
-    set(g.midA.bp.frequency, (320 + 520 * Math.min(local, 1.8)) * (0.85 + 0.3 * faceN) + 250 * rush, tau);
+    set(g.midA.bp.frequency, ((320 + 520 * Math.min(local, 1.8)) * (0.85 + 0.3 * faceN) + 250 * rush) * dark, tau);
     set(g.midA.pan.pan, clamp(0.55 * side + 0.1, -1, 1), tau);
     set(g.midB.v.gain, lB, tau);
     set(g.midB.depth.gain, lB * 0.5, tau);
-    set(g.midB.bp.frequency, (700 + 900 * Math.min(local, 1.8)) * (0.8 + 0.4 * faceN) + 400 * rush, tau);
+    set(g.midB.bp.frequency, ((700 + 900 * Math.min(local, 1.8)) * (0.8 + 0.4 * faceN) + 400 * rush) * dark, tau);
     set(g.midB.pan.pan, clamp(0.45 * side - 0.15, -1, 1), tau);
 
     // Hiss: almost gone in a trough, opens on a crest, duller from behind.
-    const hissLevel = 0.11 * Math.pow(Math.max(0, local - 0.25), 1.6) * crest * (0.5 + 0.5 * faceN) + 0.05 * rush * rush;
+    const hissLevel = (0.11 * Math.pow(Math.max(0, local - 0.25), 1.6) * crest * (0.5 + 0.5 * faceN) + 0.05 * rush * rush) * (1 - 0.6 * S);
     set(g.hissV.gain, hissLevel, tau);
     set(g.hissDepth.gain, hissLevel * 0.5, tau);
-    set(g.hissLp.frequency, 3200 + 5200 * faceN * (0.5 + 0.5 * e), tau);
+    set(g.hissLp.frequency, (3200 + 5200 * faceN * (0.5 + 0.5 * e)) * dark, tau);
     set(g.hissPan.pan, 0.65 * side, tau);
 
     // Sand: windSpeed x exposure. Grains start moving around 3 m/s.
     const drive = clamp((ws * st.gust - 2.5) / 6, 0, 1.4);
-    const sandLevel = 0.11 * Math.pow(drive, 1.4) * Math.pow(e, 2.2);
+    const sandLevel = 0.11 * Math.pow(drive, 1.4) * Math.pow(e, 2.2) * (1 - S) + STORM_MIX.sand * S * (0.75 + 0.5 * st.stormGust);
     set(g.sandV.gain, sandLevel, tau);
     set(g.sandDepth.gain, sandLevel * 0.9, tau);
-    set(g.sandBp.frequency, 5200 + 2200 * faceN, tau);
+    set(g.sandBp.frequency, lerp(5200 + 2200 * faceN, 3800 + 900 * faceN, S), tau);
+    set(g.stepBus.gain, (0.56 / 0.75) * (1 - STORM_MIX.steps * S), 0.3);
     set(g.sandPan.pan, 0.3 * side, tau);
 
     // Sliding: rises with it; the smoothed value gives the tail.
@@ -531,6 +551,11 @@ export function createSound(opts = {}) {
     if (Number.isFinite(state.exposure)) st.exposure = clamp(state.exposure);
     if (Number.isFinite(state.walkerSpeed)) st.walkerSpeed = Math.max(0, state.walkerSpeed);
     if (Number.isFinite(state.sliding)) st.sliding = clamp(state.sliding);
+    if (Number.isFinite(state.storm)) st.stormIn = clamp(state.storm);
+    if (Number.isFinite(state.stormGust)) st.stormGust = clamp(state.stormGust);
+    // the storm eases in and out over a couple of seconds
+    st.storm += (st.stormIn - st.storm) * (1 - Math.exp(-dt / 1.5));
+    if (st.storm < 1e-4 && st.stormIn === 0) st.storm = 0;
 
     // Exposure follows within a quarter second; slide rises fast and tails off slowly.
     st.exp += (st.exposure - st.exp) * (1 - Math.exp(-dt / 0.25));

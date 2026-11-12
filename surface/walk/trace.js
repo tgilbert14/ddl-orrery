@@ -38,6 +38,8 @@ export const TRACE = {
   scarShade: 0.8,     // third person: how dark a scar's own shadow gets (0.8: a print's)
   carve: false,       // third person: slide stamps carve (a dent never filled by a later stamp's berm,
                       // a berm only on untouched sand) and their walls are lobed; see slideShape
+  healMul: 1,         // the storm front (storm.js) sets this: each heal step counts this many times over,
+                      // so prints fill in within seconds inside it (1: as before)
 };
 
 export function createTrace(renderer, pour = null) {
@@ -216,7 +218,7 @@ export function createTrace(renderer, pour = null) {
     const heal = healAcc >= TRACE.tick;
     if (shx === 0 && shz === 0 && !heal && queue.length === 0 && !force) return false;
     uShift.value.set(shx, shz);
-    uHeal.value.set(heal ? healAcc : 0, heal ? 1 : 0);
+    uHeal.value.set(heal ? healAcc * TRACE.healMul : 0, heal ? 1 : 0);
     if (heal) healAcc = 0;
     for (let i = 0; i < TRACE.slots; i++) {
       const e = queue.shift();

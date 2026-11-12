@@ -39,7 +39,9 @@ export function createTslMaterials(values, opts, shadowTex) {
   // ---- walk slice (surface/walk/): optional, additive. Without opts.walk nothing below changes the
   // look test's graph. With it: a second shadow map and a cross-fade between the two, two more suns
   // (the next time of day, faded in while the current two fade out), a bake that reads its own sun
-  // uniforms and centre, and hooks for the ground's position (the clipmap), the trace map and the air.
+  // uniforms and centre, and hooks for the ground's position (the clipmap), the trace map and the air,
+  // and the storm front (walk.storm: composited last over the ground and the sky, a branch on its own
+  // uniform; the look test passes no walk options and is unchanged).
   const WK = opts.walk || null;
   if (WK) {
     for (const k of ['uSun3Dir', 'uSun4Dir', 'uSun3Col', 'uSun4Col', 'uSun3Disc', 'uSun4Disc', 'uSun3Tint', 'uSun4Tint', 'uBakeSun1', 'uBakeSun2']) U[k] = uniform(new THREE.Vector3());
@@ -659,6 +661,9 @@ export function createTslMaterials(values, opts, shadowTex) {
       col.assign(mix(col, mix(sandColor(rd), vec3(dot(sandColor(rd), vec3(0.3333))), 0.25).mul(1.1), clamp(ribbons(xz, grad, dist, fw), 0.0, 1.0)));
       col.assign(mix(col, sandColor(rd), sandHaze(rd, dist, float(0.0))));
     });
+    // walk slice: the storm front (surface/walk/storm.js), over everything; a branch on a uniform, so
+    // with no storm the colour is untouched. The pixel's angular size is taken here, outside any branch.
+    if (WK && WK.storm) WK.storm({ col, ro, rd, dist, face: { vnoise, domes, px: length(fwidth(rd)).toVar() } });
 
     return vec4(finish(col), 1.0);
   })();
@@ -674,6 +679,8 @@ export function createTslMaterials(values, opts, shadowTex) {
       // the bottom of the layer, so the base eases to 0 there and the two join without a line
       col.assign(mix(col, sandColor(rd), sandHaze(rd.mul(-1.0), float(1e5), smoothstep(0.0, 0.04, rd.y).mul(CAM.eye))));
     });
+    // walk slice: the storm front (see the ground)
+    if (WK && WK.storm) WK.storm({ col, ro, rd, dist: float(1e9), face: { vnoise, domes, px: length(fwidth(rd)).toVar() } });
     return vec4(finish(col), 1.0);
   })();
 

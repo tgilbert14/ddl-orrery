@@ -143,7 +143,9 @@ function terrainLitFor(U) {
   };
 }
 
-export function createPilgrim({ U, shade, scene, reduced = false }) {
+// fog (optional, storm.js stormFog): the storm front's dust over the figure's pixels, applied before
+// the tone map; without it the shaders are as before
+export function createPilgrim({ U, shade, scene, reduced = false, fog = null }) {
   const terrainLit = terrainLitFor(U);
   const aces = (x) => clamp(x.mul(x.mul(2.51).add(0.03)).div(x.mul(x.mul(2.43).add(0.59)).add(0.14)), 0.0, 1.0);
   const srgb = (c) => mix(c.mul(12.92), pow(c, vec3(1.0 / 2.4)).mul(1.055).sub(0.055), step(vec3(0.0031308), c));
@@ -160,6 +162,10 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
   const uHandR = uniform(new THREE.Vector3());
   const uHandL = uniform(new THREE.Vector3());
   const uBody = uniform(1.0), uGlow = uniform(0.5);
+  // the storm front: the hood streams downwind (local wind x, z, amount); the glow sprite's share
+  // that gets through the dust (1 with no storm)
+  const uHoodW = uniform(new THREE.Vector3());
+  const uGlowT = uniform(1.0);
   // the dunes' shadow on the figure: per sun, how much reaches its base and its head (the same march
   // and soft edge as the ground's baked map, worked out on the CPU at the two points each frame), and
   // the height of its base
@@ -256,6 +262,9 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     // sleeves follow the hands
     p.addAssign(uHandR.mul(smoothstep(0.0, 1.0, w).mul(isR)));
     p.addAssign(uHandL.mul(w.mul(isL)));
+    // the storm front: the hood's back and point stream downwind, fluttering a little
+    const hw = isHood.mul(smoothstep(1.52, 1.78, p0.y)).mul(uHoodW.z).mul(sin(t.mul(9.0).add(p0.y.mul(14.0))).mul(0.15).add(0.85));
+    p.x.addAssign(uHoodW.x.mul(hw).mul(0.07)); p.z.addAssign(uHoodW.y.mul(hw).mul(0.07)); p.y.subAssign(hw.mul(0.015));
     // the hood turns toward where it goes
     const a = uGait.z.mul(isHood);
     const hx = p.x.sub(0.07), hz = p.z;
@@ -346,6 +355,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const d2 = dot(dv, dv).toVar();
     const l = dv.div(sqrt(d2));
     col.addAssign(alb.mul(uLampCol).mul(uLamp.w).mul(max(dot(n, l).add(0.25), 0.0).div(1.25)).div(d2.add(0.02)));
+    if (fog) fog(col, P, { pos: uLamp, col: uLampCol });
     return vec4(finish(col), 1.0);
   })();
 
@@ -364,16 +374,17 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const dv = uLamp.xyz.sub(P).toVar();
     const d2 = dot(dv, dv).toVar();
     col.addAssign(alb.mul(uLampCol).mul(uLamp.w).mul(max(dot(n, dv.div(sqrt(d2))).add(0.25), 0.0).div(1.25)).div(d2.add(0.02)));
+    if (fog) fog(col, P, { pos: uLamp, col: uLampCol });
     return vec4(finish(col), 1.0);
   })();
 
   const glassMat = new THREE.MeshBasicNodeMaterial();
-  glassMat.fragmentNode = vec4(vec3(1.0, 0.78, 0.46).mul(uBody), 1.0);
+  glassMat.fragmentNode = fog ? Fn(() => { const c = vec3(1.0, 0.78, 0.46).mul(uBody).toVar(); fog(c, positionWorld); return vec4(c, 1.0); })() : vec4(vec3(1.0, 0.78, 0.46).mul(uBody), 1.0);
   const glowMat = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   {
     const rr = length(uv().sub(0.5)).mul(2.0);
     const fall = exp(rr.mul(rr).mul(-9.0)).mul(0.75).add(exp(rr.mul(rr).mul(-60.0)).mul(0.5)).mul(float(1.0).sub(smoothstep(0.85, 1.0, rr)));
-    glowMat.colorNode = vec3(1.0, 0.6, 0.28).mul(fall).mul(uGlow).mul(uBody);
+    glowMat.colorNode = fog ? vec3(1.0, 0.6, 0.28).mul(fall).mul(uGlow).mul(uBody).mul(uGlowT) : vec3(1.0, 0.6, 0.28).mul(fall).mul(uGlow).mul(uBody);
     glowMat.opacityNode = float(1.0);
   }
 
@@ -471,6 +482,12 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     leanFT += reduced ? 0 : 0.004 * Math.sin(t * 0.7) * breathe;
     // the leap: leaning a little forward off the brink, back before landing; the crouch on landing
     leanFT += airS * (0.07 - 0.24 * fallN) + 0.06 * crouch;
+    // the storm front (wind.storm = { k, lampT }): leaning into the wind, harder in the gusts
+    const sk = wind.storm ? wind.storm.k : 0;
+    if (sk > 0) {
+      const wF0 = wind.dir[0] * fx + wind.dir[1] * fz, wR0 = wind.dir[0] * rx + wind.dir[1] * rz, lk = sk * (0.09 + 0.05 * (reduced ? 0.5 : wind.gust)) * (1 - st.slideSm) * (1 - airS);
+      leanFT -= wF0 * lk; leanST -= wR0 * lk;
+    }
     st.bob = bobT - 0.12 * crouch; st.sway += (swayT - st.sway) * ease(dt || 1e-3, 0.05);
     const kl = ease(dt || 1e-3, 0.12);
     st.leanF += (leanFT - st.leanF) * kl; st.leanS += (leanST - st.leanS) * kl;
@@ -484,6 +501,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     // the wind in the local frame
     const wF = wind.dir[0] * fx + wind.dir[1] * fz, wR = wind.dir[0] * rx + wind.dir[1] * rz;
     uWindL.value.set(wF, wR, wind.strength, reduced ? 0 : wind.gust);
+    uHoodW.value.set(wF, wR, sk * (reduced ? 0.8 : 0.7 + 0.5 * wind.gust));
     uPose.value.set(st.bob, st.sway, st.leanF, st.leanS);
     uGait.value.set(gaitA, Math.min(1.5, walkSpeed / 1.6) * moving * (1 - 0.7 * st.slideSm) * (1 - airS), st.hood, reduced ? 0 : t);
     uRun.value = ws.running * (1 - st.slideSm);
@@ -578,7 +596,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
       const hv = hang.clone().sub(st.hang).divideScalar(dt);   // the hang point's velocity
       const ap = hv.clone().sub(st.hv).divideScalar(dt);       // and its acceleration
       st.hv.copy(hv);
-      const loose = clamp01(Math.max(st.slideSm, airS));
+      const loose = clamp01(Math.max(st.slideSm, airS, 0.35 * sk));
       const al = ap.length(), cap = lerp(LAMP_ACAP, 40, loose);
       if (al > cap) ap.multiplyScalar(cap / al);
       ap.multiplyScalar(lerp(LAMP_FOLLOW, 1, loose));
@@ -600,8 +618,12 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     lampG.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hang.clone().sub(st.lamp).normalize());
     lampG.updateMatrixWorld(true);
     st.flick = reduced ? 0 : 0.03 * Math.sin(t * 13.1 + Math.sin(t * 3.7) * 2) + 0.02 * Math.sin(t * 29.3) + 0.015 * Math.sin(t * 5.3);
-    uLamp.value.set(st.lamp.x, st.lamp.y, st.lamp.z, (st.pool ?? 1.6) * (1 + st.flick) * (st.visible ? 1 : 0));
-    uBody.value = (LAMP_BODY[curTime] ?? 1) * (1 + st.flick * 0.6);
+    // the storm front: the pool brighter inside it (wind.storm.lamp), the glow sprite dimmed by the
+    // dust between it and the eye (the glow in the dust itself is storm.js's)
+    const lb = wind.storm ? wind.storm.lamp : 0;
+    uLamp.value.set(st.lamp.x, st.lamp.y, st.lamp.z, (st.pool ?? 1.6) * (1 + st.flick) * (st.visible ? 1 : 0) * (lb > 0 ? 1 + lb : 1));
+    uBody.value = (LAMP_BODY[curTime] ?? 1) * (1 + st.flick * 0.6) * (lb > 0 ? 1 + 0.5 * lb : 1);
+    uGlowT.value = wind.storm ? wind.storm.lampT : 1;
 
     // ---- the dunes' shadow at the figure's base and head (smoothed a little: the march is exact)
     {

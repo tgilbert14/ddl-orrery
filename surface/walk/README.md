@@ -1,7 +1,7 @@
-# Dust Sea: the walk (step 1, calm weather)
+# Dust Sea: the walk (step 1)
 
-The first walkable slice of the Dust Sea. Calm weather only: no storm, no landing or leaving, no
-shuttle, no colossus, no score.
+The first walkable slice of the Dust Sea. Calm weather with a storm front every several minutes (see
+"The storm front" below); no landing or leaving, no shuttle, no colossus, no score.
 
 **The default view is third person**: the Pilgrim (figure A of the look test: floor-length cloak,
 deep hood, a 2.2 m crook staff with a lantern hanging above head height) walks the dunes and a
@@ -80,7 +80,8 @@ A hint line fades out after your first movement.
 | `air=0` | no drifting sand (cost and comparison only) |
 | `mesh=polar` | the look test's moving polar grid instead of the clipmap (evidence only) |
 | `sun=time,bearing,elev` | move a time's pale sun (tuning only) |
-| `test=1` | no loop until a script drives `window.__walk` (captures and timing) |
+| `test=1` | no loop until a script drives `window.__walk` (captures and timing); no storm unless `storm=` |
+| `storm=off\|now\|fast`, `seed=N` | the storm front: never; 8 s after ready; every phase at 4x. `seed` seeds its schedule |
 | `figure=a\|b\|c&shot=behind\|wide\|side` | the look test's static figures (figure.js), as before |
 
 ## What is in it
@@ -182,6 +183,7 @@ A hint line fades out after your first movement.
   reduced motion the slide's sand stays (it is the interaction); the footfall kicks do not.
 - `air.js`: a faint veil of drifting sand along the wind, in the ground shader.
 - `times.js`: one sun placement per time of day, fixed in the world.
+- `storm.js`: the storm front (see its own section).
 - `input.js`: keys, mouse, touch, tap-to-walk, V.
 - `main.js`: boot, the loop, the view switch, the time cross-fade, the pixel-ratio governor, the
   readout, device loss (re-initialises at most twice, then the poster), and the script handle
@@ -386,8 +388,119 @@ compared in level against a running step: with the wind bed subtracted, a full-s
 is 4.6 dB louder over its loudest 50 ms, and 5.6 dB in all since it is longer; a half-strength one,
 1 dB). The contact sheet is `frames/sheet-leap.jpg`.
 
+## The storm front, 11 Nov 2026
+
+**Lead's change after the worker's build:** a near face (within about 3 km, fully by 300 m) is now
+darkened and reddened from the base up, keeping the light only near its top, and the creases between
+its lobes are softened. Up close the pale, evenly lit face had read as cracked plaster. A far face on
+the horizon is unchanged. The console sweep (both backends, reduced motion, first person, every
+phase) was re-run after this and stayed empty. The contact sheet `frames/sheet-storm.jpg` predates it.
+
+Something happens in the Dust Sea besides your walk: every several minutes a wall of sand comes over
+the upwind horizon, swallows you, passes, and leaves the sand clean. `storm.js` owns it: a small state
+machine, the shaders' uniforms, the sand racing past (sprites), and one shading function that the
+ground, the sky, the figure, the lantern and the thrown sand all use, so they agree.
+
+**What it is.** A shaped body, not a simulation, and no ray marching. A slab of dust standing across
+the wind: a leading face and a trailing face, each with a soft edge (140 m at the front, so it reads as
+a wall; 520 m at the back, so it thins from the upwind side), a billowed top about 560 m up, and low
+dust blown out ahead of the front and left behind it. While a face is far off it bends along its length
+(up to 22% of its distance, at most 1.2 km), so it is not a ruled line; near, it is a plane across the
+wind. Everything is measured along the wind from the visitor, so the timing does not depend on where you
+walk. For each view ray, closed-form integrals give the optical depth through the slab (two clamped
+ramps along a straight line), through the blown dust (an exponential in distance from the face and in
+height), and the lantern's light scattered by the dust along the ray (an atan). Seen from outside, the
+face is shaded where the ray enters it: the look test's cauliflower domes (three octaves, drifting
+slowly along the front and rising), darker and redder toward the base, lit by the two suns (a sun
+behind it wraps round the lobes and glows through its top), a faint warm glow low inside it, and the
+base dissolving into the blown dust. It looks right from any heading: turn round and it is behind you;
+look along the front and it recedes into the haze both ways.
+
+**Phases** (seconds at scale 1):
+
+| Phase | s | What happens |
+|---|---|---|
+| approach | 75 | The wall rises on the upwind horizon (its leading face from 9 km to 300 m, along A e^(-t/62.5 s) - B, so it creeps up and then looms, about 60 m/s at the end). The drift along the ground strengthens (to 2.5x), the wind sound rises, the light goes ochre; at day, when the sun is upwind, the wall swallows the sun and its shadow comes over the sand. |
+| arrival | 8 | It crosses the last 300 m and the soft edge passes over: the far dunes go first (the blown dust ahead of it), then fast darkening. |
+| inside | 55 | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, dull ochre at day. The suns are dim glows with a faint disc. Sheets and streaks of sand race past along the wind (16 m round the camera, about 14 to 23 m/s), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. |
+| passing | 25 | It thins from the upwind side; light returns from there. Turn downwind and the wall is leaving across the dunes. |
+| after | 60 | Calm. No tracks anywhere. The drift stays stronger (1.5x, easing to normal); the wall sinks and fades into the haze downwind over the last 25 s. |
+
+Inside, the dust thins toward the eye (its density ramps up from nothing over 12 m), so the figure 5 m
+off is about 35% through the dust and readable as a silhouette while the sand 8.5 m off is gone. That
+is a stylisation, chosen so third person works; real dust is uniform.
+
+**In the storm.** The Pilgrim leans into the wind (harder in gusts), the cloak streams downwind hard,
+the hood's back and point stream and flutter, and the lantern swings a little looser (its loose factor
+0.35, not a slide's 1). The lantern's pool is 1.9x brighter, its glow sprite is dimmed by the dust in
+front of it, and the dust round it glows: in the storm the lantern is the brightest thing in frame.
+Walking into the wind is 60% of the calm speed (54% to 63% with the gusts), with it 112%, across it you
+drift downwind about 0.3 m/s; running is capped at 3.1 m/s. Prints and the slide's groove fill in
+within a few seconds (the trace heals 15x faster inside, 40x in its last 6 s), and when the inside
+ends the trace and the pour are wiped: nothing older survives. The third-person boom comes in to 5 m
+(eased over about 3 s) and goes back out after. There is no camera shake in any mode. Both views have
+the storm; the figure's part is third person only. The time-of-day buttons keep working: the storm
+dims and tints whatever the time is (and a cross-fade) on its way to the shaders.
+
+**Reduced motion** (`reduced=1`): the storm still comes (it changes what you can see). Nothing races:
+the wall's drift is still, there are no gusts, the streaks are gone and the sheets stand still (a
+veil), the ground's fast sand layer is still, the cloak holds a streaming pose. The boom still comes in
+to 5 m, eased over about 3 s like the rest (without it the figure is lost in the dust).
+
+**Sound** (`sound.js`, `STORM_MIX`): no shelter anywhere, the wind up 40% at the ears with slow swells
+(the storm's gusts), every filter closed by up to 42% (a roar, not a whistle), a hiss of sand on top,
+the steps' bus down 90%; all of it eases in and out over about 1.5 s. No thunder, no lightning.
+
+**Switches and test API.** `storm=off` (never), `storm=now` (the approach 8 s after ready), `storm=fast`
+(every phase and the schedule at 4x), `seed=N` (seeds the schedule). The first storm comes 150 to 240 s
+after ready, then one 300 to 480 s after the last one ended. With `test=1` there is no schedule unless
+`storm=` asks. `__walk.storm.start({ scale })`, `state()` -> `{ phase, t, k, next }` (k: 0..1, the storm's
+strength at the visitor), `skipTo(phase | 'none')`, `hold(bool)` (stops the phase clock),
+`visibility()`; `__walk.state().storm`; `__walk.traceStats()` (the largest dent, rim, disturbance and
+scar in the trace map). `fps=1` shows the phase, k and the live sprites.
+
+**What was measured** (headless Chrome on one Mac, 11 Nov 2026):
+
+- No storm: `view=first` and third person are pixel-identical to HEAD 541e1a8 on WebGPU and WebGL2 (one
+  frame after a 4 s run, 1280x720). The storm adds branches on a uniform and nothing else when off.
+- Visibility inside: 8.5 m to 5% contrast (7.1 m to 9.9 m at the gusts' extremes), from the integral
+  the shaders use; the figure at 5 m keeps 35% of its contrast.
+- Walking on flat sand for 3 s (first person, the same walker as third person): into the wind 2.67 m
+  against 4.47 m calm (60%), with it 4.98 against 4.45 (112%), across it 4.57 m with 0.86 m of downwind
+  drift, running into it 7.55 against 12.57 (60%).
+- The trace: after a 15 s walk (957 marked texels, prints 2 cm deep) and a storm through, 0 marked
+  texels half a second into the passing and at the end (read back from the render target).
+- Frame times: the same 600 m route and method as before (1440x900 CSS at DPR 2, each frame timed until
+  the GPU finished), HEAD 541e1a8 in the same session. "Storm held" is the storm stopped 25 s into the
+  inside (deep inside) for the whole route, walking with W (into the wind is slower, so more frames).
+
+  | Run | Frames | All frames, median / p99 / worst | Plain frames, median / worst |
+  |---|---|---|---|
+  | HEAD 541e1a8, WebGPU | 15,077 | 5.5 / 7.5 / 9.2 ms | 5.5 / 7.8 ms |
+  | this change, no storm, WebGPU | 15,077 | 5.5 / 7.4 / 8.8 ms | 5.4 / 8.3 ms |
+  | this change, storm held, WebGPU | 16,516 | 6.3 / 8.0 / 11.1 ms | 6.3 / 10.1 ms |
+  | HEAD 541e1a8, WebGL2 | 15,077 | 5.4 / 7.5 / 9.0 ms | 5.3 / 7.4 ms |
+  | this change, no storm, WebGL2 | 15,077 | 5.4 / 7.5 / 9.2 ms | 5.3 / 9.2 ms |
+  | this change, storm held, WebGL2 | 16,521 | 6.1 / 8.1 / 17.7 ms | 6.0 / 17.7 ms |
+
+  Deep inside costs 0.7 to 0.8 ms a frame (the shaders take a short path once both soft edges are more
+  than 30 m off; the sand sprites, the ground's fast sand layer and the lantern's glow are about 0.5 ms
+  of it). Calm is within noise of HEAD. Not on that route: while a face is near (the end of the
+  arrival, the first second of the inside, the passing; about 30 s of a storm) the full path runs, and
+  a 120 m stretch of the route measured 1.8 ms over calm there. The 17.7 ms worst on WebGL2 was one
+  frame; its p99 is 8.1 ms.
+- Sound, rendered offline (OfflineAudioContext, 20 s after a 4 s settle, no steps), the storm at full
+  strength against the calm wind at the same spot: +7.3 dB RMS in a trough (exposure 0.3; its loudest
+  second 9.5 dB over the calm RMS), +5.6 dB (+8.0) at exposure 0.6, +3.2 dB (+5.8) on a crest; sample
+  peaks under -4 dBFS.
+- The console was empty on WebGPU, WebGL2, reduced motion and first person, through every phase.
+
+**Not measured:** any phone (the 390x844 at DPR 3 still is a Mac in a phone-sized window); the sound
+has not been heard by a person; the storm's cost on a slower GPU. The contact sheet is
+`frames/sheet-storm.jpg`.
+
 ## Not built yet
 
-The storm, brink plumes, the hub landing and leaving, the shuttle, the colossus and the score. There
+Brink plumes, the hub landing and leaving, the shuttle, the colossus and the score. There
 are no collisions (nothing to collide with). In first person the trail reads for about 24 m behind
 you (the trace window); in third person about 40 m.

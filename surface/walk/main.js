@@ -11,6 +11,8 @@
 // view=first: the first-person walk as it was before the Pilgrim (the default is third person: the
 // Pilgrim, pilgrim.js, followed by a spring camera, follow.js, with sand puffs, puffs.js). V switches
 // between the two at runtime.
+// storm=off|now|fast: the storm front (storm.js): never; the approach 8 s after ready; every phase and
+// the schedule at 4x. seed=N seeds its schedule. With test=1 there is no schedule unless storm= asks.
 // Figure look test (opt-in): figure=a|b|c places a static figure at the end of a 20 m trail and
 // switches to a third-person camera, shot=behind|wide|side (see figure.js). Without figure= nothing
 // below changes.
@@ -63,6 +65,10 @@ let timeFade = null;                  // { to, phase: 'baking' | 'fading', t, ma
 let pendingTime = null;
 
 const API = (window.__walk = { ready: false, backend: null, error: null, reduced, events: { foot: 0, slide: 0, leap: 0, land: 0 }, losses: 0 });
+// the storm front (storm.js): its state machine outlives a lost device; made with the graphics
+const STORM_MODE = ['off', 'now', 'fast'].includes(q.get('storm')) ? q.get('storm') : null;
+const SEED = /^\d{1,10}$/.test(q.get('seed') || '') ? +q.get('seed') : null;
+let storm = null, stormMod = null, stormWas = false;
 // third person: the figure's heading (turned toward where it wants to go at a limited rate)
 let figYaw = ws.yaw, figAngVel = 0, animTime = 0;
 let pourKick = 0;   // the crest leap: a landing on a slip face feeds the pour for a moment
@@ -121,6 +127,9 @@ async function buildGraphics() {
   const air = await import('./air.js');
   const { SHMAP } = await import('../look-test/params.js');
   const figMod = FIGURE ? await import('./figure.js') : null;
+  // the storm front: not in the figure look test
+  stormMod = FIGURE ? null : await import('./storm.js');
+  if (stormMod && !storm) storm = stormMod.createStorm({ reduced, seed: SEED, mode: STORM_MODE, testMode });
   const pilMod = FIGURE ? null : await import('./pilgrim.js');
   const figShade = figMod ? figMod.createFigureShading() : pilMod ? (await import('./figure.js')).createFigureShading({ fade: true }) : null;
   // view=first keeps the ground's shader as it was: the figure's shadow, contact and lantern pool
@@ -164,6 +173,7 @@ async function buildGraphics() {
       trace: trace.hook,
       air: q.get('air') === '0' ? null : air.airHook,
       ...(groundFig ? { figure: groundFig.groundHook } : {}),
+      ...(stormMod ? { storm: (a) => stormMod.stormApply(a.col, { ...a, lamp: figShade ? { pos: figShade.uLamp, col: figShade.uLampCol } : null }) } : {}),
     },
   }, rtA.texture);
 
@@ -190,12 +200,14 @@ async function buildGraphics() {
   const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, pour, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
   if (pilMod) {
-    g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced });
-    g.puffs = (await import('./puffs.js')).createPuffs({ U: mats.uniforms, shade: figShade, scene });
+    const fog = stormMod ? stormMod.stormFog : null;
+    g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced, fog });
+    g.puffs = (await import('./puffs.js')).createPuffs({ U: mats.uniforms, shade: figShade, scene, fog });
     g.follow = (await import('./follow.js')).createFollow({ reduced });
     g.follow.setYaw(figYaw);
     g.pil.setVisible(viewMode === 'third');
   }
+  if (stormMod) g.sand = stormMod.createStormSand({ U: mats.uniforms, shade: figShade, scene, storm, reduced });
   if (figMod) {
     g.fig = figMod.createFigure({ kind: FIGURE, U: mats.uniforms, shade: figShade, scene });
     g.persp = camera;
@@ -390,8 +402,20 @@ function traceCentre() {
 function windNow() {
   const w = walker.wind(animTime);
   const gust = Math.max(0, Math.min(1, 0.5 + 0.35 * Math.sin(animTime * 0.37) * Math.sin(animTime * 0.13 + 1.7) + 0.3 * Math.sin(animTime * 1.1 + Math.sin(animTime * 0.29) * 2)));
-  return { dir: WIND, strength: Math.min(1.1, 0.25 + w.windSpeed / 8), gust, sound: w };
+  const out = { dir: WIND, strength: Math.min(1.1, 0.25 + w.windSpeed / 8), gust, sound: w };
+  if (storm && storm.active) {
+    // the storm front: the cloak streams hard, the gusts are the storm's, the lantern's pool brighter
+    // and its glow sprite dimmed by the dust between it and the eye
+    const sw = storm.wind, sg = storm.gust;
+    out.strength += (1.45 + 0.45 * sg - out.strength) * sw;
+    out.gust += (sg - out.gust) * sw;
+    let lampT = 1;
+    if (G && G.pil) { const l = G.pil.state.lamp, c = G.camera.position; lampT = Math.exp(-storm.tauAt(Math.hypot(l[0] - c.x, l[1] - c.y, l[2] - c.z))); }
+    out.storm = { k: storm.k, lamp: storm.STORM.lampBoost * storm.k, lampT };
+  }
+  return out;
 }
+function stormIntent() { return storm && storm.active && storm.k > 0 ? { k: storm.k, gust: storm.gust, ...storm.STORM } : null; }
 // place the figure and the camera without advancing time (start, a new pose, a view switch)
 function primeThird() {
   if (!G || !G.pil || viewMode !== 'third') return;
@@ -424,7 +448,7 @@ function tickThird(dt, intent) {
   ws.yaw = figYaw;
   // climbing, the steps are shorter (third person only: the walker's default stride is unchanged)
   // the crest leap is third person only (intent.leap)
-  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2, leap: true });
+  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2, leap: true, storm: stormIntent() });
   ws.yaw = figYaw;
   const wind = windNow();
   for (const e of events) if (e.type === 'land') G.pil.land(e);
@@ -453,7 +477,8 @@ function tickThird(dt, intent) {
   const tv = Math.hypot(ws.vx, ws.vz) > 0.3 ? Math.atan2(ws.vz, ws.vx) : null;
   const sd = timeNow.uSun1Dir, sh = Math.hypot(sd[0], sd[2]) || 1;
   F.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz), sliding: ws.sliding, running: ws.running, travelYaw: tv,
-    slide: [ws.sx, ws.sz], sun: [sd[0] / sh, sd[2] / sh], wind: WIND, airborne: ws.airborne, airHeight: ws.airHeight }, look);
+    slide: [ws.sx, ws.sz], sun: [sd[0] / sh, sd[2] / sh], wind: WIND, airborne: ws.airborne, airHeight: ws.airHeight,
+    storm: storm ? storm.boom : 0, stormBoom: storm ? storm.STORM.boom : 0 }, look);
   // the slide scar: no prints while sliding, a broad shallow groove with raised edges instead,
   // scaled with the slide speed (first person keeps the walker's own trough)
   const out = [];
@@ -491,6 +516,29 @@ function tickFade(dt) {
   fadeEl.style.opacity = String(fadeT / FADE);
 }
 
+// the storm front's uniforms, after the time of day has written its own: the light dimmed and
+// tinted through storm.modify, the shaders' storm uniforms, the sand racing past. When it ends, the
+// time's own values are written back once.
+function applyStorm(dt) {
+  if (!storm) return;
+  if (storm.active) {
+    const fading = timeFade && timeFade.phase === 'fading';
+    const f = fading ? Math.min(1, timeFade.t / TIME_FADE) : 0, ff = f * f * (3 - 2 * f), b = fading ? timeFade.to : null;
+    const mixv = (k) => (b ? timeNow[k].map((x, i) => x + (b[k][i] - x) * ff) : timeNow[k]);
+    const base = { sun1Col: mixv('uSun1Col'), sun2Col: mixv('uSun2Col'), sun1Dir: b && ff > 0.5 ? b.uSun1Dir : timeNow.uSun1Dir, sun2Dir: b && ff > 0.5 ? b.uSun2Dir : timeNow.uSun2Dir,
+      ambSky: mixv('uAmbSky'), horizon: mixv('uHorizon') };
+    const c = G.camera.position;
+    storm.apply(base, { x: ws.x, ground: ws.ground, z: ws.z }, [c.x, c.y, c.z]);
+    applyBlend((name, v) => G.mats.set(name, storm.modify(name, v)), timeNow, b, ff, ws.ground);
+    stormWas = true;
+  } else if (stormWas) {
+    storm.apply(null, null, null);
+    if (!(timeFade && timeFade.phase === 'fading')) setAllTime(ws.ground);
+    stormWas = false;
+  }
+  G.sand?.update(dt, G.camera);
+}
+
 function tick(dt) {
   const t0 = performance.now();
   if (G.pil) { if (!prevPose.p) { prevPose.p = G.camera.position.clone(); prevPose.q = G.camera.quaternion.clone(); } else { prevPose.p.copy(G.camera.position); prevPose.q.copy(G.camera.quaternion); } }
@@ -500,8 +548,14 @@ function tick(dt) {
     if (hit) { intent.target = { x: hit.x, z: hit.z }; lastTap = { x: hit.x, z: hit.z }; }
   }
   animTime += dt;
+  // the storm front's clock; when the inside ends every track is gone (the trace and the pour wiped)
+  if (storm) {
+    const sev = storm.update(dt);
+    if (sev.cleared) { G.trace.clear(); G.pour?.clear(); traceC = null; }
+  }
   const third = G.pil && viewMode === 'third';
-  const events = third ? tickThird(dt, intent) : walker.update(dt, { ...intent, reducedMotion: reduced });
+  const si = third ? null : stormIntent();
+  const events = third ? tickThird(dt, intent) : walker.update(dt, si ? { ...intent, reducedMotion: reduced, storm: si } : { ...intent, reducedMotion: reduced });
   for (const e of events) {
     if (!e.noPrint) G.trace.stamp(e);
     // No step sound while sliding: the slide voice carries it, and the sound module's levels assume the two do not overlap.
@@ -521,6 +575,7 @@ function tick(dt) {
     G.puffs.update(dt, ws, windNow(), G.camera, reduced, b1 >= b2 ? timeNow.uSun1Dir : timeNow.uSun2Dir);
   }
   updateTime(dt);
+  applyStorm(dt);
   const fogBase = ws.ground;
   const f = timeFade && timeFade.phase === 'fading' ? null : timeNow;
   if (f) { G.mats.set('uFog', [f.uFog[0], f.uFog[1], f.uFog[2], fogBase]); G.mats.set('uGroundY', fogBase); }
@@ -530,12 +585,14 @@ function tick(dt) {
   if (pourKick < 0.03) pourKick = 0;
   if (G.pour) G.pour.update(dt, { x: ws.x, z: ws.z, sx: ws.sx, sz: ws.sz, amount: third ? Math.max(ws.sliding, pourKick) : 0, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz) });
   const tc = traceCentre();
+  G.traceMod.TRACE.healMul = storm && storm.active ? storm.erase : 1;
   const traceDid = G.trace.update(dt, tc[0], tc[1], !G.fig);
   G.mats.set('uTime', simTime);
   G.renderer.render(G.scene, G.camera);
   try {
     const wnd = walker.wind(simTime);
-    sound?.update({ dt, windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding });
+    sound?.update({ dt, windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding,
+      storm: storm && storm.active ? storm.wind : 0, stormGust: storm ? storm.gust : 0.5 });
   } catch { /* no sound */ }
   const work = performance.now() - t0;
   return { work, bake: bakeDid, trace: traceDid };
@@ -588,6 +645,7 @@ function readout() {
     `prints: ${API.events.foot} steps, trace passes ${G.trace.passes}`,
     `at ${ws.x.toFixed(1)}, ${ws.z.toFixed(1)}  heading ${(((ws.yaw / DEG) % 360) + 360) % 360 | 0}  ${ws.speed.toFixed(1)} m/s  slope ${ws.slopeDeg.toFixed(0)}  slide ${ws.sliding.toFixed(2)}`,
     timeFade ? `time: ${timeNow.name} -> ${timeFade.to.name} (${timeFade.phase})` : `time: ${timeNow.name}`,
+    storm ? `storm: ${storm.phase}${storm.active ? ` ${storm.state.t.toFixed(0)} s, k ${storm.k.toFixed(2)}, sand ${G.sand ? G.sand.live : 0}` : storm.state.next !== null ? `, next in ${Math.max(0, storm.state.next - storm.state.clock).toFixed(0)} s` : ''}` : 'storm: none',
   ].join('\n');
 }
 
@@ -659,6 +717,7 @@ API.state = () => ({
     slideView: G.follow ? r3(G.follow.state.sm) : null, pitchDeg: G.follow ? r3(G.follow.state.viewPitch / DEG) : null } : null,
   figure: G && G.pil ? { headingDeg: r3(((figYaw / DEG) % 360 + 360) % 360), ...G.pil.state } : null,
   puffs: G && G.puffs ? G.puffs.live : null,
+  storm: storm ? { phase: storm.phase, t: r3(storm.state.t), k: r3(storm.k) } : null,
   frame: frameStats(), dpr, backend: API.backend, running, locked: input.locked, lockRefused: input.lockRefused,
   canvas: G ? [G.renderer.domElement.width, G.renderer.domElement.height] : null, hintGone, sound: sound ? (muted ? 'muted' : 'on') : (soundMod === false ? 'unavailable' : 'not started'),
 });
@@ -675,6 +734,16 @@ if (FIGURE) {
     info: () => ({ kind: FIGURE, shot: shotName, ...G.fig.state, triangles: G.fig.triangles, lamp: G.fig.lamp }),
   };
 }
+// the storm front: start({ scale }), state() -> { phase, t, k }, skipTo(phase), hold(bool) (stops the
+// phase clock: a storm held inside for a timing run), visibility() (m)
+API.storm = {
+  start: (o = {}) => storm?.start(o),
+  state: () => (storm ? { phase: storm.phase, t: r3(storm.state.t), k: r3(storm.k), next: storm.state.next !== null ? r3(storm.state.next - storm.state.clock) : null } : null),
+  skipTo: (phase) => storm?.skipTo(phase),
+  hold: (h = true) => storm?.setHold(h),
+  visibility: () => (storm ? storm.visNow() : null),
+  raw: () => storm?.state,
+};
 API.lookOverride = (v) => { lookOv = v; };
 API.cameraOverride = (v) => { camOv = v; if (!v && G) resize(); };
 API.setView = (m) => setView(m);
@@ -730,6 +799,21 @@ API.traceProbe = async (x, z, r = 0.6) => {
   const wx = c[0] + ((bi + 0.5) / N - 0.5) * T.size;
   const wzA = c[1] + ((bj + 0.5) / N - 0.5) * T.size, wzB = c[1] + ((N - bj - 0.5) / N - 0.5) * T.size;
   return { deepest: best, i: bi, j: bj, worldX: wx, worldZifRowsUp: wzA, worldZifRowsDown: wzB, expect: { x, z }, texel, typed: data.constructor.name };
+};
+
+// the trace map's contents: the largest dent, rim, disturbance and scar anywhere in it, and how many
+// texels hold anything (the storm's check that the sand is clean)
+API.traceStats = async () => {
+  const T = G.traceMod.TRACE, rt = G.trace.target();
+  const d = await G.renderer.readRenderTargetPixelsAsync(rt, 0, 0, T.N, T.N);
+  const rowLen = d.length / T.N, f = (v) => (d instanceof Uint16Array ? G.THREE.DataUtils.fromHalfFloat(v) : v);
+  let dent = 0, rim = 0, dis = 0, scar = 0, n = 0;
+  for (let j = 0; j < T.N; j++) for (let i = 0; i < T.N; i++) {
+    const o = j * rowLen + i * 4, r = f(d[o]), g = f(d[o + 1]), a = f(d[o + 3]);
+    dent = Math.min(dent, r); rim = Math.max(rim, r); dis = Math.max(dis, g); scar = Math.max(scar, a);
+    if (Math.abs(r) > 1e-4 || g > 0.005 || a > 0.005) n++;
+  }
+  return { dent, rim, disturbed: dis, scar, texelsMarked: n, texels: T.N * T.N };
 };
 
 // the pour's contents: mass, stopped sand and speed, summed and at their largest (debugging)

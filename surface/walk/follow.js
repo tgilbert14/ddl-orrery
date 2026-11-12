@@ -102,7 +102,7 @@ export function createFollow({ reduced = false } = {}) {
   }
 
   // f: { x, z, ground, speed, sliding, running, travelYaw|null, slide: [sx, sz] (m/s), sun: [x, z],
-  // wind: [x, z], airborne 0/1, airHeight (m) }; look: { dx, dy } radians
+  // wind: [x, z], airborne 0/1, airHeight (m), storm 0..1, stormBoom (m) }; look: { dx, dy } radians
   function update(dt, f, look) {
     if (!s.init) snap(f);
     // the crest leap (none of it under reduced motion: the camera does as it would without the leap)
@@ -166,6 +166,10 @@ export function createFollow({ reduced = false } = {}) {
     }
     if (!moving && !reduced) Lt = Math.max(Lt, s.L);   // standing never pulls the camera back in
     Lt += FOLLOW.airOut * airK;
+    // the storm front: inside it the boom comes in (to f.stormBoom m), so the figure and its lantern
+    // stay readable in 8 m of visibility; f.storm is eased by the caller (about 3 s). Also under
+    // reduced motion: it is slow, and without it the figure is lost in the dust
+    if (f.storm > 0) Lt += (Math.min(Lt, f.stormBoom) - Lt) * f.storm;
     s.Lt = Lt;
     const tauL = Lt > s.L ? (airK > 0.1 ? 0.7 : 2.2) : 0.9;
     s.L += (Lt - s.L) * (1 - Math.exp(-dt / tauL));

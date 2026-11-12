@@ -24,7 +24,8 @@ const GRAINY = { kick: 1, clump: 1, spray: 1, dust: 0, haze: 0 };
 // fine grains), clump 2 (fewer, larger), spray 5
 const ALB = { kick: 0.785, clump: 0.775, spray: 0.74, dust: 0.95, haze: 1.0 };
 
-export function createPuffs({ U, shade, scene }) {
+// fog (optional, storm.js stormFog): the storm front's dust over the sprites
+export function createPuffs({ U, shade, scene, fog = null }) {
   const aces = (x) => clamp(x.mul(x.mul(2.51).add(0.03)).div(x.mul(x.mul(2.43).add(0.59)).add(0.14)), 0.0, 1.0);
   const srgb = (c) => mix(c.mul(12.92), pow(c, vec3(1.0 / 2.4)).mul(1.055).sub(0.055), step(vec3(0.0031308), c));
   const finish = (col) => srgb(aces(col.mul(U.uExposure)));
@@ -80,6 +81,7 @@ export function createPuffs({ U, shade, scene }) {
     const light = sun(U.uSun1Dir, U.uSun1Col).add(sun(U.uSun2Dir, U.uSun2Col)).add(U.uAmbSky.mul(0.6)).add(U.uAmbGround.mul(0.5)).toVar();
     const dv = uLamp.xyz.sub(P).toVar();
     light.addAssign(uLampCol.mul(uLamp.w).div(dot(dv, dv).add(0.1)).mul(0.8));
+    if (fog) { const c = alb.mul(light).toVar(); fog(c, P); return finish(c); }
     return finish(alb.mul(light));
   })();
 
