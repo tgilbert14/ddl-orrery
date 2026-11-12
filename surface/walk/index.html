@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Dust Sea - walk</title>
+<title>Dust Sea · The Orrery</title>
 <link rel="icon" href="data:,">
 <script type="importmap">
 { "imports": {
@@ -41,8 +41,31 @@
   #readout { position: fixed; z-index: 3; left: 10px; top: 10px; margin: 0; padding: 7px 9px; max-width: calc(100% - 40px); white-space: pre-wrap;
     background: rgba(12, 9, 7, 0.72); border-radius: 4px; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
   #readout[hidden] { display: none; }
-  @media (prefers-reduced-motion: reduce) { #hint { transition: none; } }
+  /* the way home: back to the orrery in orbit */
+  #orbit { left: 12px; top: 12px; }
+  #orbit a { font-size: 13px; color: #f4e8d6; background: rgba(20, 13, 9, 0.55); border: 1px solid rgba(244, 232, 214, 0.35);
+    border-radius: 999px; padding: 6px 12px; min-height: 34px; box-sizing: border-box; display: inline-flex; align-items: center; text-decoration: none; }
+  #orbit a:hover { background: rgba(244, 232, 214, 0.86); color: #24170f; }
+  #orbit a:focus-visible { outline: 2px solid #ffd9a0; outline-offset: 2px; }
+  #readout { top: 56px; }
+  /* arriving from orbit (?from=orbit): the hub's warp flood carries over, then clears onto the sand */
+  #arrive { position: fixed; inset: 0; z-index: 6; pointer-events: none; opacity: 0; visibility: hidden;
+    background: radial-gradient(circle at 50% 55%, #fff6e6 0%, #ffd79a 38%, #ffb25e 100%); }
+  html.from-orbit #arrive { opacity: 1; visibility: visible; }
+  html.from-orbit.landed #arrive { opacity: 0; visibility: hidden; transition: opacity 1.6s ease, visibility 0s linear 1.6s; }
+  @media (prefers-reduced-motion: reduce) { #hint { transition: none; } html.from-orbit.landed #arrive { transition: opacity 0.4s linear, visibility 0s linear 0.4s; } }
 </style>
+<script>
+  /* before first paint: keep the warp's flood up until the surface is drawing (or has failed to the poster) */
+  if (new URLSearchParams(location.search).get('from') === 'orbit') {
+    document.documentElement.classList.add('from-orbit');
+    var landT = setInterval(function () {
+      var w = window.__walk;
+      if (w && (w.ready || w.error)) { clearInterval(landT); requestAnimationFrame(function () { document.documentElement.classList.add('landed'); }); }
+    }, 100);
+    setTimeout(function () { clearInterval(landT); document.documentElement.classList.add('landed'); }, 20000);
+  }
+</script>
 </head>
 <body>
 <div id="poster">
@@ -56,6 +79,8 @@
   <button type="button" data-time="dusk" aria-pressed="true">Dusk</button>
   <button type="button" data-time="ember" aria-pressed="false">Ember</button>
 </div>
+<nav class="ui" id="orbit" aria-label="Leave the surface"><a href="../../#/">Return to orbit</a></nav>
+<div id="arrive" aria-hidden="true"></div>
 <div class="ui" id="soundbox"><button type="button" id="mute" aria-pressed="false">Sound on</button></div>
 <pre id="readout" hidden aria-live="off"></pre>
 <noscript><p style="position:fixed;left:16px;top:16px;z-index:5;margin:0;padding:10px 12px;background:rgba(18,12,8,.8);color:#efe2cf;border-radius:6px">The Dust Sea walk draws with WebGPU or WebGL and needs JavaScript. This is a still of the dune sea at dusk.</p></noscript>
