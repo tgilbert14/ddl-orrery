@@ -102,11 +102,19 @@ A hint line fades out after your first movement.
   only when that point is 1.5 m away, healing half as fast (an e-folding time of 50 s in a trough,
   26 s on an exposed crest), so the trail reads about 40 m back on a crest and longer in a trough.
   Third person, a slide leaves no prints: it leaves a scar, a broad shallow groove (0.3 to 0.6 m
-  wide, 4 to 9 cm deep, both with the slide's speed) with raised edges, and its avalanched sand is
-  kept in the map's fourth channel and darkened 20% at any distance, so the scar reads from the
-  foot of the face, where its low relief alone does not. The pour (`pour.js`) folds the sand it
-  leaves behind into that fourth channel and into the disturbed channel, so the scar keeps the
-  lobed edge of the tongues that made it.
+  wide, up to 7.5 cm deep, both with the slide's speed) with raised edges, and its avalanched sand is
+  kept in the map's fourth channel and darkened 15% at any distance, so the scar reads from the
+  foot of the face, where its low relief alone does not. The groove is carved: its width and depth
+  wander with a noise fixed on the ground (lobed walls from the first frame), its walls are soft,
+  a later stamp's dent never gets filled by its berm and the berm sits only on untouched sand, and
+  it fades in over the brink and out as the slide dies. (Before, every stamp overwrote the last, so
+  where a slide stopped on the flat its final round stamp left a pale raised ring about 1 m across.)
+  The ground mesh is displaced by the scar's relief, so the groove is a real trough from the side;
+  its own shadow is worked out against the face's slope (on a face turned to a low sun it is lit
+  nearly to its floor). The pour (`pour.js`) folds the sand it leaves behind into that fourth
+  channel and into the disturbed channel, so the scar keeps the lobed edge of the tongues that made
+  it, and its lobes settle into the groove (it is never more than about half filled) and lie a few
+  millimetres proud on open sand.
 - `pilgrim.js`: the Pilgrim in motion, all procedural, no skeleton. One body mesh whose positionNode
   moves each rest point with the gait, the wind, the slide and the slope. The walk reads from behind
   without legs: a 3.4 cm bob (lowest at each footfall, with a small extra dip and a forward pitch as
@@ -130,6 +138,14 @@ A hint line fades out after your first movement.
   the face and crouches, and the cloak lifts, streams uphill and flaps. The capsule shadow and
   contact darkening (figure.js's ground hook) follow the pose every frame. It also stamps the staff
   marks, the hem's drag line and the staff's drag line while sliding into the trace map.
+  The dunes' shadow falls on the figure: each frame the bake's own horizon march (the same steps,
+  limits and soft edge as the ground's map) is run on the CPU for each sun at the figure's base and
+  at head height, and the cloth and the staff take the sun through it, blended up the body, with the
+  ground's shade fill from the horizon in shade. So standing on a shaded slope it falls to the shade
+  around it, half-lit when only its head clears a crest; the lantern still glows. Its cast shadow on
+  the sand fades with distance along it (from 3.5 m to gone at 20 m) and each capsule's shadow loses
+  its core once the sun's penumbra is wider than the capsule (the dragged staff's shadow is soft a
+  metre or two off), so a long low-sun shadow never ends in a detached blob on a far slope.
   The hood is a soft, heavy cowl: figure A's point, shorter (0.15 m against 0.26) and rounder,
   drooping back under its own weight. The body's lean is a shear up to the neck (1.47 m); above it
   the head takes only 22% of the lean, as a rotation, so the hood keeps its outline and stays nearly
@@ -137,19 +153,29 @@ A hint line fades out after your first movement.
 - `pour.js`: the slip face avalanching around a slide. A small flow simulation in a 512 x 512 texture
   (5 cm texels, 25.6 m, following the figure in whole texels): flowing sand, the sand it has dropped,
   and the flow's velocity. Each frame the sand is advected along its own velocity (semi-Lagrangian),
-  spread a little sideways, driven toward the fall line (from the ground's own height formula) at a
-  speed that grows with the slope and the sand's thickness, and drained: thin or slow sand drops
-  out. The figure sets sand loose at its feet and either side in pulses that vary across its width,
-  thrown a little ahead at its own speed and fanned out, and the walls of its groove slump behind it.
-  So the face fails in a sheet that breaks into tongues; their thick heads lead with round fronts,
-  they spread, slow where the face eases and stop. The ground draws the flowing sand in relief,
-  darker and rougher than the face, with a pale front and a 2.5 cm grain speckle that creeps
-  downslope with it (a flow map), and smothers the ripples under it; the stopped sand goes into the
-  trace map. The passes run while sliding and for 8 s after.
+  driven toward the fall line (from the ground's own height formula) at a speed that grows with the
+  slope and the sand's thickness, and drained: thin or slow sand drops out. Its velocity is smoothed
+  across a tongue (mass weighted), so the thin edges keep pace with the thick middle and a head
+  stays round instead of running to a point. A front (little sand just ahead along the flow) is
+  slowed by half and spreads sideways, and where the flow converges the sand piles up, so the
+  material behind catches up and the head thickens and widens. Lanes of the face run faster or
+  slower (a noise fixed on the face, 0.45 to 1.5 times), so neighbouring tongues reach different
+  lengths and their fronts are staggered. The figure sets sand loose at its feet and either side in
+  patches fixed on the face (each slab fails once as the bow passes over it, so the sheet breaks
+  into separate tongues of different sizes rather than continuous lanes), thrown a little ahead at
+  its own speed and fanned out, and the walls of its groove slump behind it in small tongues that
+  fall in toward it. The ground mesh is displaced by the flowing sand (4.5 cm per unit, up to 9 cm
+  in a piled-up head), so fronts stand up from the side; its slopes catch the low sun (a lit lip on
+  a front) and cast their own shadow against the face's slope (a shaded lee). It is drawn a little
+  darker than the face, with round grains (2.5 cm cells) and soft clumps (7 cm) that travel
+  downslope with it (a flow map), paler where a front rolls over, and smothers the ripples under
+  it; the stopped sand goes into the trace map. The passes run while sliding and for 8 s after.
 - `follow.js`: the third-person camera.
 - `puffs.js`: sand thrown up, sand-coloured and lit like the sand under it (the key sun's dune
-  shadow and the face turning from it, worked out once per sprite): at each footfall a low spray of
-  grains thrown back and to the sides that falls back within about 0.4 s (barely there walking), with
+  shadow and the face turning from it, worked out once per sprite): at each footfall a fan of fine
+  grains thrown back and out from under the hem, most of them slow so it is densest at the foot and
+  thins outward, gone within about 0.3 s, with a few heavier clumps that go further (38 sprites
+  running: 34 of a few 5 mm grains each and 4 of one or two larger ones; 4 small ones walking), and
   a faint dust tail drifting downwind running; sliding, grains bouncing and fanning out sideways from
   the feet and hem, and a thin pale haze drifting downwind. Grain sprites are clusters of separate
   grains, never soft puffs. A fixed pool of 384 sprites in one draw, simulated on the CPU. With
@@ -167,7 +193,9 @@ A hint line fades out after your first movement.
   heading, not the camera's, so the listener stays with the figure.
 
 The look-test files gained optional, additive walk hooks (`opts.walk` in `tsl-material.js`; the
-trace hook may now also return a `tone`, which only the third-person trace does). The look test
+trace hook may now also return a `tone`, which only the third-person trace does, and a `disp`, the
+sand's surface above the formula's, which the figure's cast shadow is then traced from; it is also
+handed the ground's slope). The look test
 itself draws the same pixels as round three. With `view=first` the ground's shader is built without
 the figure hook and the old trace numbers, and a frame is byte-identical to the walk before this
 change (checked against HEAD 5d4b0a6 on one frame after a 2.8 m walk). Switching to third person
@@ -251,6 +279,24 @@ worst), its worst frames all in a slow first 30 s; the row above is a second pas
 pass stopped sampling the pour while it is idle. `view=first` and `figure=a&shot=behind` were
 byte-identical to HEAD 820970b. The console was empty on WebGPU, WebGL2, reduced motion and first
 person.
+
+### The last sand pass, 11 Nov 2026
+
+The same 600 m route and method (1440x900 CSS at DPR 2, 15,077 frames from the old start at heading
+48, 708 of them sliding, each timed until the GPU finished), with HEAD 4d5696a run twice in the same
+session (the machine drifted between the two).
+
+| Run | All frames, median / p99 / worst | Plain frames, median / worst |
+|---|---|---|
+| HEAD 4d5696a, WebGPU (first / last run of the session) | 5.5 / 7.1 / 9.0, 6.2 / 7.8 / 10.1 ms | 5.4 / 8.9, 6.2 / 10.1 ms |
+| this change, WebGPU | 5.6 / 7.5 / 8.9 ms | 5.5 / 8.1 ms |
+| HEAD 4d5696a, WebGL2 | 5.5 / 7.3 / 8.8 ms | 5.4 / 7.1 ms |
+| this change, WebGL2 | 5.4 / 7.6 / 9.7 ms | 5.4 / 8.5 ms |
+
+Within run-to-run noise of HEAD. The ground mesh's new displacement (the pour and the scar) is only
+sampled within 30 m of the camera; before that limit the WebGPU median was 0.3 ms higher.
+`view=first` and `figure=a&shot=behind` were pixel-identical to HEAD 4d5696a. The console was empty
+on WebGPU, WebGL2, reduced motion (both backends) and first person.
 
 ## Not built yet
 

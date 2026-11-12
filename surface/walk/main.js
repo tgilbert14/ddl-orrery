@@ -121,14 +121,14 @@ async function buildGraphics() {
   const { SHMAP } = await import('../look-test/params.js');
   const figMod = FIGURE ? await import('./figure.js') : null;
   const pilMod = FIGURE ? null : await import('./pilgrim.js');
-  const figShade = figMod ? figMod.createFigureShading() : pilMod ? (await import('./figure.js')).createFigureShading() : null;
+  const figShade = figMod ? figMod.createFigureShading() : pilMod ? (await import('./figure.js')).createFigureShading({ fade: true }) : null;
   // view=first keeps the ground's shader as it was: the figure's shadow, contact and lantern pool
   // are only compiled into the ground when the walk starts in third person (V later shows the
   // Pilgrim without them)
   const groundFig = figShade && (figMod || START_VIEW === 'third') ? figShade : null;
   // third person: the trail must read about 40 m back, so the trace window is larger (same texel)
   // and heals more slowly; the first-person view keeps its own numbers
-  if (START_VIEW === 'third' && !FIGURE) Object.assign(traceMod.TRACE, { N: 1536, size: 72, tau: 50, rateCrest: 0.9, blur: 0.12, farTone: 0.22 });
+  if (START_VIEW === 'third' && !FIGURE) Object.assign(traceMod.TRACE, { N: 1536, size: 72, tau: 50, rateCrest: 0.9, blur: 0.12, farTone: 0.22, scarTone: 0.15, scarShade: 0.35, carve: true });
 
   if (/^\d{3}$/.test(q.get('grid') || '')) clip.CLIP.n = Math.max(64, Math.round(+q.get('grid') / 8) * 8);
   if (/^\d{1,3}$/.test(q.get('slices') || '')) shMod.SHADOW.slices = Math.max(1, +q.get('slices'));
@@ -158,7 +158,7 @@ async function buildGraphics() {
   const mats = createTslMaterials(values, {
     shadows: 'map', normal: 'analytic', ripples: true,
     walk: {
-      groundPosition: polar ? null : ({ height }) => clip.clipmapPosition(height, uCam, clip.CLIP.n),
+      groundPosition: polar ? null : ({ height }) => clip.clipmapPosition(height, uCam, clip.CLIP.n, pour ? (xz) => pour.disp(xz).add(trace.scarDisp(xz)) : null),
       shadowTexB: rtB.texture,
       trace: trace.hook,
       air: q.get('air') === '0' ? null : air.airHook,
@@ -442,7 +442,8 @@ function tickThird(dt, intent) {
   const out = [];
   for (const e of events) {
     if (e.type === 'foot' && e.slide > 0.5) { e.noPrint = true; out.push(e); continue; }
-    if (e.type === 'slide') { const k = ws.sliding; out.push({ ...e, depth: 0.035 + 0.04 * k, width: 0.28 + 0.2 * k, berm: 0.85, scar: 0.12 + 0.18 * k }); continue; }
+    // it fades in over the brink and out as the slide dies (no stamp with a full-depth round end)
+    if (e.type === 'slide') { const k = ws.sliding, fin = Math.min(1, Math.max(0, (k - 0.15) / 0.3)); out.push({ ...e, depth: (0.035 + 0.04 * k) * fin, width: 0.28 + 0.2 * k, berm: 0.85 * fin + 0.01, scar: (0.12 + 0.18 * k) * (0.3 + 0.7 * fin) }); continue; }
     out.push(e);
   }
   return out;

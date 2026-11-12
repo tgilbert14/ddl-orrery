@@ -23,6 +23,7 @@ import { Fn, uniform, attribute, vec3, vec4, float, normalize, dot, max, min, mi
   normalWorld, normalGeometry, positionWorld, positionGeometry, cameraPosition, modelWorldMatrix, negateOnBackSide, varying, Discard, If, mx_noise_float, uv } from 'three/tsl';
 import { lathe, tube, blob, cloak, hood, lantern, C, LAMP, NCAP } from './figure.js';
 import { height, heightD } from '../look-test/height.js';
+import { SH } from '../look-test/params.js';
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -117,7 +118,28 @@ function buildLantern() {
   return { frame: mergeC(parts), glass: mergeC(glass) };
 }
 
+// How much of sun n (1 or 2, the uniforms in U) reaches a point: the bake's horizon march
+// (tsl-material.js horizonMarch, the same steps and limits) and the soft edge the ground makes of it.
+function terrainLitFor(U) {
+  return (x, y, z, n) => {
+    const L = U[`uSun${n}Dir`].value, col = U[`uSun${n}Col`].value, sky = U[`uSun${n}Sky`].value;
+    if (col.x + col.y + col.z <= 0) return 1;
+    const k = 1 / Math.tan(Math.max(sky.w * SH.penumbra, 0.002));
+    let hm = -8, t = SH.start;
+    for (let i = 0; i < SH.steps; i++) {
+      const qx = x + L.x * t, qy = y + L.y * t, qz = z + L.z * t;
+      const d = qy - height(qx, qz);
+      hm = Math.max(hm, L.y - d / t);
+      t += Math.min(Math.max(Math.max(d, 0) * SH.dStep + t * SH.grow, SH.minStep), t * 0.35 + 1);
+      if ((L.y - hm) * k < 0.002 || t > SH.maxDist || qy > SH.ceiling) break;
+    }
+    const r = clamp01((L.y - hm) * k);
+    return r * r * (3 - 2 * r);
+  };
+}
+
 export function createPilgrim({ U, shade, scene, reduced = false }) {
+  const terrainLit = terrainLitFor(U);
   const aces = (x) => clamp(x.mul(x.mul(2.51).add(0.03)).div(x.mul(x.mul(2.43).add(0.59)).add(0.14)), 0.0, 1.0);
   const srgb = (c) => mix(c.mul(12.92), pow(c, vec3(1.0 / 2.4)).mul(1.055).sub(0.055), step(vec3(0.0031308), c));
   const finish = (col) => srgb(aces(col.mul(U.uExposure)));
@@ -132,6 +154,19 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
   const uHandR = uniform(new THREE.Vector3());
   const uHandL = uniform(new THREE.Vector3());
   const uBody = uniform(1.0), uGlow = uniform(0.5);
+  // the dunes' shadow on the figure: per sun, how much reaches its base and its head (the same march
+  // and soft edge as the ground's baked map, worked out on the CPU at the two points each frame), and
+  // the height of its base
+  const uTerr = uniform(new THREE.Vector4(1, 1, 1, 1));   // sun 1 base, sun 1 head, sun 2 base, sun 2 head
+  const uTerrY = uniform(new THREE.Vector2(0, 1.6));      // base y, head y
+  const terrK = (P) => smoothstep(uTerrY.x.add(0.1), uTerrY.y, P.y);
+  const terrSh = (P) => { const k = terrK(P); return [mix(uTerr.x, uTerr.y, k), mix(uTerr.z, uTerr.w, k)]; };
+  // in the dunes' shade, the same fill the ground gets there: the bright horizon under the pale sun
+  const shadeFill = (alb, n, s1) => {
+    const Lf = normalize(vec3(U.uSun1Dir.x, 0.0, U.uSun1Dir.z).add(vec3(0.0, 0.45, 0.0)));
+    const lf = max(dot(n, Lf).add(0.35).div(1.35), 0.0);
+    return alb.mul(U.uHorizon).mul(lf.mul(lf)).mul(float(1.0).sub(s1)).mul(U.uFill);
+  };
 
   // ---- the body's vertex motion: disp() moves one rest point (p0 with its cdat tags); the normal is
   // taken from two more displaced points a little way along the rest surface (finite differences),
@@ -285,9 +320,12 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
       const sheen = edge.mul(max(dot(n, L), 0.0)).mul(float(1.0).sub(rough)).mul(0.035).mul(smoothstep(0.012, 0.035, alb.x));   // none in the hood's hollow
       return Cc.mul(upk).mul(alb.mul(diff).add(thru.mul(0.05)).add(sheen.mul(float(1.0).sub(dust.mul(0.6)))));
     };
-    const col = sun(U.uSun1Dir, U.uSun1Col).add(sun(U.uSun2Dir, U.uSun2Col)).toVar();
+    const [ts1, ts2] = terrSh(P);
+    const t1 = ts1.toVar();
+    const col = sun(U.uSun1Dir, U.uSun1Col).mul(t1).add(sun(U.uSun2Dir, U.uSun2Col).mul(ts2)).toVar();
     col.addAssign(alb.mul(mix(U.uAmbGround, U.uAmbSky, n.y.mul(0.5).add(0.5))));
     col.addAssign(alb.mul(U.uAmbSky).mul(edge).mul(0.5));
+    col.addAssign(shadeFill(alb, n, t1));
     const dv = uLamp.xyz.sub(P).toVar();
     const d2 = dot(dv, dv).toVar();
     const l = dv.div(sqrt(d2));
@@ -302,8 +340,11 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const P = positionWorld.toVar();
     const alb = attribute('fcol', 'vec3').toVar();
     const sun = (L, Cc) => Cc.mul(smoothstep(-0.02, 0.02, L.y)).mul(alb).mul(max(dot(n, L).add(0.3), 0.0).div(1.3));
-    const col = sun(U.uSun1Dir, U.uSun1Col).add(sun(U.uSun2Dir, U.uSun2Col)).toVar();
+    const [ts1, ts2] = terrSh(P);
+    const t1 = ts1.toVar();
+    const col = sun(U.uSun1Dir, U.uSun1Col).mul(t1).add(sun(U.uSun2Dir, U.uSun2Col).mul(ts2)).toVar();
     col.addAssign(alb.mul(mix(U.uAmbGround, U.uAmbSky, n.y.mul(0.5).add(0.5))));
+    col.addAssign(shadeFill(alb, n, t1));
     const dv = uLamp.xyz.sub(P).toVar();
     const d2 = dot(dv, dv).toVar();
     col.addAssign(alb.mul(uLampCol).mul(uLamp.w).mul(max(dot(n, dv.div(sqrt(d2))).add(0.25), 0.0).div(1.25)).div(d2.add(0.02)));
@@ -515,6 +556,15 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     st.flick = reduced ? 0 : 0.03 * Math.sin(t * 13.1 + Math.sin(t * 3.7) * 2) + 0.02 * Math.sin(t * 29.3) + 0.015 * Math.sin(t * 5.3);
     uLamp.value.set(st.lamp.x, st.lamp.y, st.lamp.z, (st.pool ?? 1.6) * (1 + st.flick) * (st.visible ? 1 : 0));
     uBody.value = (LAMP_BODY[curTime] ?? 1) * (1 + st.flick * 0.6);
+
+    // ---- the dunes' shadow at the figure's base and head (smoothed a little: the march is exact)
+    {
+      const g0 = height(st.x, st.z), kT = st.init ? ease(dt, 0.12) : 1;
+      const s = [terrainLit(st.x, g0 + 0.15, st.z, 1), terrainLit(st.x, g0 + 1.55, st.z, 1), terrainLit(st.x, g0 + 0.15, st.z, 2), terrainLit(st.x, g0 + 1.55, st.z, 2)];
+      const v = uTerr.value;
+      v.set(v.x + (s[0] - v.x) * kT, v.y + (s[1] - v.y) * kT, v.z + (s[2] - v.z) * kT, v.w + (s[3] - v.w) * kT);
+      uTerrY.value.set(g0, g0 + 1.55);
+    }
 
     // ---- the capsules for the ground's shadow and contact darkening (world)
     const caps = [

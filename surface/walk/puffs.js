@@ -14,13 +14,15 @@
 // cluster (no white forward glow; a little for the haze), sky and ground light, and the lantern.
 
 import * as THREE from 'three/webgpu';
-import { Fn, vec2, vec3, float, max, mix, abs, clamp, smoothstep, length, pow, exp, step, dot, normalize, uv, floor, fract, hash,
+import { Fn, vec2, vec3, float, max, mix, abs, clamp, smoothstep, length, pow, exp, step, dot, normalize, uv, floor, fract, hash, select,
   cameraPosition, instancedDynamicBufferAttribute, mx_noise_float } from 'three/tsl';
 import { height, heightD } from '../look-test/height.js';
 
 export const POOL = 384;
-const GRAINY = { kick: 1, spray: 1, dust: 0, haze: 0 };
-const ALB = { kick: 0.78, spray: 0.74, dust: 0.95, haze: 1.0 };
+const GRAINY = { kick: 1, clump: 1, spray: 1, dust: 0, haze: 0 };
+// the albedo scale also picks a grain sprite's lattice (shape below): kick 4 grains across (a few
+// fine grains), clump 2 (fewer, larger), spray 5
+const ALB = { kick: 0.785, clump: 0.775, spray: 0.74, dust: 0.95, haze: 1.0 };
 
 export function createPuffs({ U, shade, scene }) {
   const aces = (x) => clamp(x.mul(x.mul(2.51).add(0.03)).div(x.mul(x.mul(2.43).add(0.59)).add(0.14)), 0.0, 1.0);
@@ -46,8 +48,9 @@ export function createPuffs({ U, shade, scene }) {
     const env = exp(r.mul(r).mul(-2.2)).mul(float(1.0).sub(smoothstep(0.7, 1.0, r))).toVar();
     const seed = floor(D.w.mul(997.0));
     // grains: a lattice of dots, each cell kept or not by a hash, its dot jittered and sized by more
-    const G = 5.0;
-    const gq = uv().mul(vec2(G, G * 0.6)).toVar();
+    const ab = abs(Rt.z);
+    const G = select(ab.greaterThan(0.78), float(4.0), select(ab.greaterThan(0.77), float(2.0), float(5.0)));
+    const gq = uv().mul(vec2(G, G.mul(0.6))).toVar();
     const cell = floor(gq), f = fract(gq).sub(0.5).toVar();
     const h1 = hash(cell.x.add(cell.y.mul(16.0)).add(seed.mul(256.0)).add(5.0));
     const h2 = hash(cell.x.add(cell.y.mul(16.0)).add(seed.mul(256.0)).add(91.0));
@@ -110,23 +113,27 @@ export function createPuffs({ U, shade, scene }) {
     Object.assign(ps[next], o, { on: true, age: 0, seed: rnd() }); next = (next + 1) % POOL;
   }
 
-  // a footfall (walking or running), at e.x, e.z; wind {dir, strength}; fwd: the walk's direction
+  // a footfall (walking or running), at e.x, e.z; wind {dir, strength}; fwd: the walk's direction.
+  // A fan of fine grains thrown back and out from the foot, most of them slow (they land close, so the
+  // spray is densest at the foot and thins outward), with a few heavier clumps that go further.
   function foot(e, wind, fwd) {
     const g = height(e.x, e.z);
     const run = e.run || 0;
     const R = run > 0.5;
     const rx = -fwd[1], rz = fwd[0];
-    const n = R ? 12 : 2;
-    for (let i = 0; i < n; i++) {
-      // grains thrown back and to the sides, low; they fall back within about 0.4 s
-      const side = (rnd() - 0.5) * 2 * (R ? 1.3 : 0.5);
-      const back = R ? 1.0 + 1.4 * rnd() : 0.25 + 0.3 * rnd();
-      const vy = R ? 0.7 + 0.9 * rnd() : 0.3 + 0.25 * rnd();
+    const fine = R ? 34 : 4, clumps = R ? 4 : 0;
+    for (let i = 0; i < fine + clumps; i++) {
+      const clump = i >= fine;
+      // a fan behind the foot, about 110 degrees wide, out from under the hem; speed skewed low (u^2)
+      const a = (rnd() - 0.5) * (R ? 1.9 : 1.2), u = rnd(), sp = clump ? (R ? 1.9 + 0.9 * rnd() : 0.5) : (R ? 0.95 + 1.9 * u * u : 0.25 + 0.4 * u * u);
+      const bx = -fwd[0] * Math.cos(a) + rx * Math.sin(a), bz = -fwd[1] * Math.cos(a) + rz * Math.sin(a);
+      const vy = (clump ? 1.1 + 0.6 * rnd() : 0.6 + 1.0 * rnd()) * (R ? 1 : 0.6);
       spawn({
-        kind: 'kick', x: e.x - fwd[0] * 0.08 + rx * side * 0.05, y: g + 0.03, z: e.z - fwd[1] * 0.08 + rz * side * 0.05,
-        vx: -fwd[0] * back + rx * side + wind.dir[0] * wind.strength * 0.2, vy, vz: -fwd[1] * back + rz * side + wind.dir[1] * wind.strength * 0.2,
-        life: R ? 0.32 + 0.12 * rnd() : 0.22 + 0.08 * rnd(), size: R ? 0.18 + 0.12 * rnd() : 0.09 + 0.04 * rnd(), aspect: 0.6,
-        alpha: R ? 0.95 : 0.45, grow: R ? 1.6 : 1.3, g: 9.0,
+        kind: clump ? 'clump' : 'kick', x: e.x - fwd[0] * 0.06 + bx * 0.03, y: g + 0.02, z: e.z - fwd[1] * 0.06 + bz * 0.03,
+        vx: bx * sp + wind.dir[0] * wind.strength * 0.2, vy, vz: bz * sp + wind.dir[1] * wind.strength * 0.2,
+        life: clump ? 0.36 + 0.08 * rnd() : (R ? 0.26 + 0.1 * rnd() : 0.2 + 0.06 * rnd()),
+        size: clump ? 0.11 + 0.04 * rnd() : (R ? 0.08 + 0.04 * rnd() : 0.06 + 0.02 * rnd()), aspect: 0.6,
+        alpha: R ? 1.0 : 0.5, grow: clump ? 1.1 : 1.3, g: 9.0,
       });
     }
     // running: a faint dust tail drifting downwind

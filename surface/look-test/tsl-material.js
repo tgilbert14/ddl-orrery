@@ -566,10 +566,12 @@ export function createTslMaterials(values, opts, shadowTex) {
     const W = vec2(WX, WZ);
     // walk slice: the trace map (prints, slide troughs). It returns a slope to add to the ground's,
     // how disturbed the sand is (ripples are trodden out), and a self-shadow toward a light.
-    const tr = WK && WK.trace ? WK.trace({ xz, fw, dist, U }) : null;
+    const tr = WK && WK.trace ? WK.trace({ xz, fw, dist, U, grad }) : null;
     // walk slice, figure look test (surface/walk/figure.js, ?figure= only): a figure's cast shadow
     // per sun, contact darkening at its feet and hem, and its lantern's pool of light
-    const fg = WK && WK.figure ? WK.figure({ xz, sp, U }) : null;
+    // (third person: from the sand's displaced surface, so a shadow's edge is broken by the groove and
+    // the pour's relief)
+    const fg = WK && WK.figure ? WK.figure({ xz, sp: tr && tr.disp ? sp.add(vec3(0.0, tr.disp, 0.0)) : sp, U }) : null;
     if (opts.ripples) {
       const lee = dot(grad, W).negate();
       let ripOnE = float(1.0).sub(smoothstep(G.ripLeeLo, G.ripLeeHi, lee)).mul(float(1.0).sub(smoothstep(G.ripL * 0.15, G.ripL * 0.5, fw)));

@@ -23,7 +23,7 @@
 // level. The world position is built in the vertex shader from one uniform, the walker's (x, z).
 
 import * as THREE from 'three/webgpu';
-import { Fn, vec2, vec3, floor, uniform, positionLocal, exp2, abs, max, clamp, select, If, mix } from 'three/tsl';
+import { Fn, vec2, vec3, float, floor, uniform, positionLocal, exp2, abs, max, clamp, select, If, mix, length } from 'three/tsl';
 
 export const CLIP = {
   s0: 1 / 32,      // finest cell (m); a power of two, so every level's lattice is exact in float32
@@ -68,7 +68,12 @@ export function buildClipmap(n = CLIP.n, levels = levelsFor(n)) {
 }
 
 // The positionNode hook for tsl-material.js (opts.walk.groundPosition). uCam is the walker's (x, z).
-export function clipmapPosition(height, uCam, n = CLIP.n) {
+// extra (third person only): a displacement in metres added to the formula's height (the pour's
+// flowing sand), morphed with it, so the levels stay joined.
+export function clipmapPosition(heightF, uCam, n = CLIP.n, extra = null) {
+  // (only within EXTRA_R of the camera: beyond, a few centimetres of relief is under a pixel)
+  const near = (xz) => { const v = float(0.0).toVar(); If(length(xz.sub(uCam)).lessThan(EXTRA_R), () => { v.assign(extra(xz)); }); return v; };
+  const height = extra ? (xz) => heightF(xz).add(near(xz)) : heightF;
   const node = Fn(() => {
   const half = n / 2, q = n / 4, B = CLIP.band;
   const ij = positionLocal.xz;
@@ -101,5 +106,7 @@ export function clipmapPosition(height, uCam, n = CLIP.n) {
   })();
   return { position: node, world: node };
 }
+
+const EXTRA_R = 30;
 
 export function createClipUniform() { return uniform(new THREE.Vector2()); }

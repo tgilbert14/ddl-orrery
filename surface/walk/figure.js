@@ -370,7 +370,12 @@ const LEAN = 0.06;
 const leanM = new THREE.Matrix4().set(1, LEAN, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
 
 // ---------------------------------------------------------------- shading shared with the ground
-export function createFigureShading() {
+// opts.fade (the Pilgrim; the look test keeps its shadow as it was): the cast shadow fades with
+// distance along it, and a capsule's shadow loses its core once the penumbra is wider than the capsule
+// (the staff's shadow is soft and light a metre or two off; a small figure's shadow far off is not a
+// solid shape), so a long low-sun shadow never ends in a detached blob
+export const SHADOW_FADE = { from: 3.5, to: 20 };
+export function createFigureShading(opts = {}) {
   const capA = [], capB = [];
   for (let i = 0; i < NCAP; i++) { capA.push(uniform(new THREE.Vector4())); capB.push(uniform(new THREE.Vector4())); }
   const uFig = uniform(new THREE.Vector4(0, 0, 0, 0));    // world centre x, y, z; 1 when placed
@@ -404,7 +409,8 @@ export function createFigureShading() {
           const d = length(w0.add(u.mul(s)).sub(L.mul(t)));
           const r = mix(A.w, B.w, s);
           const pen = t.mul(0.011).add(0.02);
-          const occ = float(1.0).sub(smoothstep(r.sub(pen), r.add(pen), d)).mul(step(0.001, A.w.add(B.w)));
+          let occ = float(1.0).sub(smoothstep(r.sub(pen), r.add(pen), d)).mul(step(0.001, A.w.add(B.w)));
+          if (opts.fade) occ = occ.mul(float(1.0).sub(smoothstep(SHADOW_FADE.from, SHADOW_FADE.to, t))).mul(clamp(r.add(0.005).div(pen), 0.0, 1.0));
           o.mulAssign(float(1.0).sub(occ.mul(0.94)));
         }
       });
