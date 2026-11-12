@@ -4587,12 +4587,40 @@ const warpEl = document.getElementById('warpfx');
 function endWarp() { clearTimeout(warpClearTimer); html.classList.remove('warping'); warp.active = false; }
 warpEl.addEventListener('animationend', endWarp);
 
+/* THE SURFACES (open worlds, one planet at a time): a world listed here has a
+   walkable surface on its own page. Choosing it from orbit still flies the
+   shuttle and fires the warp, then the flood's peak hands over to that page
+   instead of the in-page scene. The in-page scene stays for deep links
+   (#/world/<slug>), the Grand Tour (the autopilot cannot leave this page)
+   and the no-JS brochure. The surface page links home with ../../#/ . */
+const SURFACES = { 'dust-sea': 'surface/walk/?from=orbit' };
+function surfaceFor(slug) {
+  return SURFACES[slug] && !(TourController && TourController.running) ? SURFACES[slug] : null;
+}
+function goSurface(slug) {
+  markSurveyed(slug);                                  /* the landing counts as the survey */
+  Scenes.transitioning = false;
+  location.href = SURFACES[slug];
+}
+/* Back from a surface page can restore this page from the back/forward cache
+   mid-warp: clear the flood and the latch so orbit is usable again */
+addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  endWarp(); Scenes.transitioning = false;
+  if (travelTimer) { clearTimeout(travelTimer); travelTimer = null; }
+  if (window.SphereForge && SphereForge.recall) SphereForge.recall();
+  if (!skyTask && !reduced()) Orrery.startAmbient();
+});
+
 function travel(slug, fromBeat) {
   if (Scenes.transitioning || Scenes.current === slug) return;
   const w = bySlug[slug];
   if (!w) return;
 
-  if (reduced()) { location.hash = '#/world/' + slug; return; }   /* router does a crossfade */
+  if (reduced()) {                                     /* router does a crossfade */
+    if (surfaceFor(slug)) goSurface(slug); else location.hash = '#/world/' + slug;
+    return;
+  }
 
   /* the departure (M2, rebuilt for the Derelict): on desktop the SHUTTLE
      undocks and flies to the chosen world — the warp fires on arrival. On
@@ -4675,9 +4703,10 @@ function travel(slug, fromBeat) {
   Orrery.events.dispatchEvent(new CustomEvent('warp', { detail: { slug } }));
 
   travelTimer = setTimeout(() => {
+    travelTimer = null;
+    if (surfaceFor(slug)) { goSurface(slug); return; } /* the surface page takes over at the peak */
     location.hash = '#/world/' + slug;                 /* the scene lands under the flood peak */
     Scenes.transitioning = false;
-    travelTimer = null;
   }, 495);
 }
 
@@ -4723,8 +4752,7 @@ anchors.forEach((a, slug) => {
     e.preventDefault();
     if (grabConsumed) return;                          /* that gesture was a THROW, not a choice */
     if (transitConsumed) return;                       /* that tap was a CATCH, not a departure */
-    if (reduced()) { location.hash = '#/world/' + slug; return; }
-    travel(slug);
+    travel(slug);                                      /* reduced motion is handled inside */
   });
 });
 armGrabPhysics();
