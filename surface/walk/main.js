@@ -62,9 +62,10 @@ let timeNow = timeValues(startName);  // the time of day on screen (suns 1 and 2
 let timeFade = null;                  // { to, phase: 'baking' | 'fading', t, map }
 let pendingTime = null;
 
-const API = (window.__walk = { ready: false, backend: null, error: null, reduced, events: { foot: 0, slide: 0 }, losses: 0 });
+const API = (window.__walk = { ready: false, backend: null, error: null, reduced, events: { foot: 0, slide: 0, leap: 0, land: 0 }, losses: 0 });
 // third person: the figure's heading (turned toward where it wants to go at a limited rate)
 let figYaw = ws.yaw, figAngVel = 0, animTime = 0;
+let pourKick = 0;   // the crest leap: a landing on a slip face feeds the pour for a moment
 let traceC = null, travelDir = [Math.cos(ws.yaw), Math.sin(ws.yaw)];
 
 // ---------------------------------------------------------------- sound (another module; optional)
@@ -422,11 +423,27 @@ function tickThird(dt, intent) {
   figYaw = Math.atan2(Math.sin(figYaw + figAngVel * dt), Math.cos(figYaw + figAngVel * dt));
   ws.yaw = figYaw;
   // climbing, the steps are shorter (third person only: the walker's default stride is unchanged)
-  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2 });
+  // the crest leap is third person only (intent.leap)
+  const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2, leap: true });
   ws.yaw = figYaw;
   const wind = windNow();
+  for (const e of events) if (e.type === 'land') G.pil.land(e);
   const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ] });
   for (const st of stamps) G.trace.stamp(st);
+  for (const e of events) {
+    if (e.type === 'leap') { e.noPrint = true; continue; }
+    if (e.type !== 'land') continue;
+    e.noPrint = true;
+    const k = Math.min(1, Math.max(0, (Math.abs(e.vy) - 1) / 4));
+    // one dent, a short skid along the way it was going: carved (a berm of almost nothing, so no
+    // raised ring), lightly darkened as disturbed sand
+    const len = 0.3 + 0.15 * k;
+    G.trace.stamp({ type: 'slide', x0: e.x, z0: e.z, x1: e.x + e.dirX * len, z1: e.z + e.dirZ * len, depth: 0.025 + 0.03 * k, width: 0.3 + 0.1 * k, berm: 0.01, scar: 0.12, exposure: e.exposure });
+    // the burst (sand thrown by the landing is the interaction, so it stays under reduced motion)
+    G.puffs.land(e, wind);
+    // onto a slip face: the face lets go under the landing and runs from there
+    if (e.slip) pourKick = Math.max(pourKick, 0.8 + 0.4 * k);
+  }
   for (const e of events) {
     if (e.type !== 'foot') continue;
     const sm = G.pil.foot(e, ws);
@@ -436,7 +453,7 @@ function tickThird(dt, intent) {
   const tv = Math.hypot(ws.vx, ws.vz) > 0.3 ? Math.atan2(ws.vz, ws.vx) : null;
   const sd = timeNow.uSun1Dir, sh = Math.hypot(sd[0], sd[2]) || 1;
   F.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz), sliding: ws.sliding, running: ws.running, travelYaw: tv,
-    slide: [ws.sx, ws.sz], sun: [sd[0] / sh, sd[2] / sh], wind: WIND }, look);
+    slide: [ws.sx, ws.sz], sun: [sd[0] / sh, sd[2] / sh], wind: WIND, airborne: ws.airborne, airHeight: ws.airHeight }, look);
   // the slide scar: no prints while sliding, a broad shallow groove with raised edges instead,
   // scaled with the slide speed (first person keeps the walker's own trough)
   const out = [];
@@ -489,6 +506,8 @@ function tick(dt) {
     if (!e.noPrint) G.trace.stamp(e);
     // No step sound while sliding: the slide voice carries it, and the sound module's levels assume the two do not overlap.
     if (e.type === 'foot') { API.events.foot++; if (!(e.slide > 0.5)) { try { sound?.step(e.strength); } catch { /* no sound */ } } }
+    else if (e.type === 'land') { API.events.land++; API.lastLand = e; try { sound?.land?.(Math.min(1, Math.max(0.3, (Math.abs(e.vy) + 0.3 * e.speed) / 5.5))); } catch { /* no sound */ } }
+    else if (e.type === 'leap') { API.events.leap++; API.lastLeap = e; }
     else API.events.slide++;
   }
   if (G.fig) G.fig.trail(events, ws, G.trace);
@@ -507,7 +526,9 @@ function tick(dt) {
   if (f) { G.mats.set('uFog', [f.uFog[0], f.uFog[1], f.uFog[2], fogBase]); G.mats.set('uGroundY', fogBase); }
   const bakeDid = G.shadows.update(dt, [ws.x, ws.z], [ws.vx + ws.sx, ws.vz + ws.sz], timeNow.shadow, reduced);
   // figure look test: the prints do not heal, so the 20 m approach reads as if just walked
-  if (G.pour) G.pour.update(dt, { x: ws.x, z: ws.z, sx: ws.sx, sz: ws.sz, amount: third ? ws.sliding : 0, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz) });
+  pourKick *= Math.exp(-dt / 0.3);
+  if (pourKick < 0.03) pourKick = 0;
+  if (G.pour) G.pour.update(dt, { x: ws.x, z: ws.z, sx: ws.sx, sz: ws.sz, amount: third ? Math.max(ws.sliding, pourKick) : 0, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz) });
   const tc = traceCentre();
   const traceDid = G.trace.update(dt, tc[0], tc[1], !G.fig);
   G.mats.set('uTime', simTime);
@@ -626,6 +647,7 @@ API.state = () => ({
   eyeY: r3(walker.eye()[1]), ground: r3(ws.ground), groundPoint: r3(ws.groundPoint),
   eyeAboveGround: r3(walker.eye()[1] - ws.groundPoint), sink: r3(ws.sink), bob: r3(ws.bob),
   speed: r3(ws.speed), sliding: r3(ws.sliding), slopeDeg: r3(ws.slopeDeg), running: r3(ws.running), exposure: r3(ws.exposure),
+  airborne: ws.airborne, airTime: r3(ws.airTime), airHeight: r3(ws.airHeight),
   distance: r3(ws.distance), steps: ws.steps, target: ws.target ? { x: r3(ws.target.x), z: r3(ws.target.z) } : null,
   time: timeNow.name, timeFade: timeFade ? { to: timeFade.to.name, phase: timeFade.phase, t: r3(timeFade.t) } : null,
   bake: G ? { state: G.shadows.stats.state, job: G.shadows.job, current: G.shadows.current, mix: r3(G.shadows.mix), bakes: G.shadows.stats.bakes, slicesRun: G.shadows.stats.slicesRun, centres: G.shadows.centres } : null,
@@ -664,7 +686,7 @@ API.pause = () => { paused = true; syncLoop(); };
 API.resume = () => { paused = false; syncLoop(); };
 API.setPose = (p) => {
   walker.setPose(p);
-  figYaw = ws.yaw; figAngVel = 0; traceC = null;
+  figYaw = ws.yaw; figAngVel = 0; traceC = null; pourKick = 0;
   if (G && G.pil) { G.pil.reset(); G.puffs.clear(); G.follow.setYaw(p.camYawDeg !== undefined ? p.camYawDeg * DEG : ws.yaw); G.follow.state.init = false; G.follow.state.still = 0; G.follow.resetSlide(); primeThird(); }
   if (G) { placeCamera(); G.shadows.cancelJobs(); G.shadows.reset([ws.x, ws.z], timeNow.shadow); if (p.clearTrace !== false) { G.trace.clear(); G.pour?.clear(); } const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); }
 };

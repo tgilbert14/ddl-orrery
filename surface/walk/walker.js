@@ -41,6 +41,33 @@ export const WALK = {
   pitchMin: -1.15, pitchMax: 0.9,
 };
 
+// The crest leap (third person only: intent.leap). Running over a brink, the figure is carried off
+// it: each frame, while running, the path it would fly from here is worked out (its horizontal
+// velocity, a vertical speed from the ground's slope under it plus a running stride's own lift,
+// under gravity); if within one running step that path clears the sand by more than `thresh`, it
+// takes off. In the air its horizontal velocity is kept (a little air control) and it falls from the
+// take-off speed; it lands when its feet reach the sand (the crossing is found within the frame, so
+// the landing point does not depend on the frame rate). Landing on a slip face starts the slide with
+// the speed it carried; on gentler sand it is a heavy step that loses speed.
+export const LEAP = {
+  g: 7.0,          // m/s^2 in the air. Not 9.81: at true gravity no brink in this field throws a runner
+                   // clear (the sharpest, the dusk crest's, turns from flat to 25 degrees over 1.2 m, a
+                   // radius of about 3 m; v^2/R at 4.1 m/s is under g). 0.71 g: the cloak's drag, stylised
+  push: 0.8,       // m/s: a running stride's own lift at full run (a runner's flight phase), added to the
+                   // ground's vertical speed under the moving figure
+  vyMax: 1.0,      // never an upward launch faster than this (m/s)
+  spring: 1.5,     // m/s: once a brink is found, the Pilgrim springs off the lip by this much more (the
+                   // lead's call: the passive path alone cleared the sand by only 0.2 m, a hop)
+  minRun: 0.6,     // the share of running needed (about 3.3 m/s on the flat)
+  thresh: 0.15,    // take off when the flight path clears the sand by more than this within one step (m)
+  samples: 8,      // points along that path
+  airTau: 3.0,     // air control: the horizontal velocity follows the wish with this time constant (s)
+  cool: 0.4,       // seconds after a landing before another take-off
+  slipDeg: 22,     // landing on a face steeper than this starts the slide with the speed carried
+  heavyKeep: 0.6,  // landing on gentler sand keeps this share of the speed (a heavy step)
+  maxAir: 3.0,     // a safety: no flight lasts longer (s)
+};
+
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -88,12 +115,21 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     phase: 0, side: 1, steps: 0, distance: 0, slideDist: 0,
     target: null, targetStall: 0, targetBest: Infinity, wishX: 0, wishZ: 0,
     exposure: exposureAt(x, z), exposureT: 0,
+    // the crest leap (third person): airborne 0/1, this (or the last) flight's time, the feet's height
+    // above the sand under them, their vertical speed, the flight's highest point, time since landing
+    airborne: 0, airTime: 0, airHeight: 0, airVy: 0, airMax: 0, sinceLand: 99,
+    feetY: height(x, z), air: null,
   };
   s.eyeY = s.ground + WALK.eye - s.sink;
 
   function update(dt, intent = {}) {
     const events = [];
     dt = clamp(dt, 0, 0.1);
+    // the leap is third person only: called without it (first person, V mid-flight), the feet are put
+    // back on the sand
+    if (s.airborne && !intent.leap) { s.airborne = 0; s.air = null; s.airHeight = 0; s.airVy = 0; }
+    const air = s.airborne === 1;
+    if (intent.leap) s.sinceLand += dt;
     // ---- look
     s.yaw = wrapPi(s.yaw + (intent.turn || 0) * WALK.turnRate * dt + (intent.lookX || 0));
     s.pitch = clamp(s.pitch + (intent.lookY || 0), WALK.pitchMin, WALK.pitchMax);
@@ -151,13 +187,15 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     const factor = rise > 0 ? 1 / (1 + WALK.climbK * rise) : 1 + WALK.descendK * Math.min(-rise, WALK.descendMax);
     const wishSpeed = (run ? WALK.run : WALK.walk) * m * factor;
     const tvx = dx * wishSpeed, tvz = dz * wishSpeed;  // dx,dz already carry |dl| <= 1
-    const ka = 1 - Math.exp(-dt / WALK.accelTau);
+    const ka = 1 - Math.exp(-dt / (air ? LEAP.airTau : WALK.accelTau));
     s.vx += (tvx - s.vx) * ka; s.vz += (tvz - s.vz) * ka;
 
-    // ---- the slide: down the fall line, growing with the slope
-    const slideTarget = WALK.slideMax * smooth(WALK.slideLoDeg * DEG, WALK.slideHiDeg * DEG, theta);
-    const ks = 1 - Math.exp(-dt / WALK.slideTau);
-    s.sx += (-ux * slideTarget - s.sx) * ks; s.sz += (-uz * slideTarget - s.sz) * ks;
+    // ---- the slide: down the fall line, growing with the slope (in the air it is carried as it was)
+    if (!air) {
+      const slideTarget = WALK.slideMax * smooth(WALK.slideLoDeg * DEG, WALK.slideHiDeg * DEG, theta);
+      const ks = 1 - Math.exp(-dt / WALK.slideTau);
+      s.sx += (-ux * slideTarget - s.sx) * ks; s.sz += (-uz * slideTarget - s.sz) * ks;
+    }
 
     const px = s.x, pz = s.z;
     // running down a slip face does not add up without limit
@@ -175,12 +213,66 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     const moved = Math.hypot(s.x - px, s.z - pz);
     s.distance += moved;
 
-    // ---- feet: stride phase, footfalls, the slide trough
+    // ---- the crest leap (third person only)
+    if (air) {
+      const A = s.air;
+      A.t += dt;
+      const yPrev = s.feetY, sepPrev = yPrev - height(px, pz);
+      const y = A.y0 + A.vy0 * A.t - 0.5 * LEAP.g * A.t * A.t;
+      const gp = height(s.x, s.z), sep = y - gp;
+      s.feetY = y; s.airVy = A.vy0 - LEAP.g * A.t; s.airTime = A.t;
+      s.airHeight = Math.max(0, sep); s.airMax = Math.max(s.airMax, sep);
+      if (sep <= 0 || A.t > LEAP.maxAir) {
+        // the feet reached the sand during this frame: where and when (linear within the frame)
+        const f = sepPrev > 0 && sep < 0 ? clamp(sepPrev / (sepPrev - sep), 0, 1) : 1;
+        const lx = px + (s.x - px) * f, lz = pz + (s.z - pz) * f, tl = A.t - (1 - f) * dt;
+        const vyL = A.vy0 - LEAP.g * tl;
+        const [, lgx, lgz] = heightD(lx, lz), ls = Math.hypot(lgx, lgz), lth = Math.atan(ls);
+        const hv = Math.hypot(s.vx + s.sx, s.vz + s.sz);
+        const dirX = hv > 0.05 ? (s.vx + s.sx) / hv : Math.cos(s.yaw), dirZ = hv > 0.05 ? (s.vz + s.sz) / hv : Math.sin(s.yaw);
+        const slip = lth > LEAP.slipDeg * DEG;
+        if (slip) {
+          // onto a slip face: the fall's speed along the face feeds the slide (no dead stop)
+          const ulx = ls > 1e-6 ? lgx / ls : 0, ulz = ls > 1e-6 ? lgz / ls : 0;
+          const along = Math.min(WALK.slideMax, Math.abs(vyL) * Math.sin(lth) * Math.cos(lth));
+          s.sx -= ulx * along; s.sz -= ulz * along;
+        } else {
+          // gentler sand: a heavy step that loses speed
+          s.vx *= LEAP.heavyKeep; s.vz *= LEAP.heavyKeep; s.sx *= LEAP.heavyKeep; s.sz *= LEAP.heavyKeep;
+        }
+        s.airborne = 0; s.air = null; s.airHeight = 0; s.airVy = 0; s.airTime = tl; s.sinceLand = 0;
+        s.feetY = height(s.x, s.z);
+        events.push({ type: 'land', x: lx, z: lz, speed: hv, vy: vyL, slopeDeg: lth / DEG, slip, airTime: tl, height: s.airMax,
+          dirX, dirZ, exposure: s.exposure });
+      }
+    } else if (intent.leap) {
+      s.feetY = height(s.x, s.z);
+      const v = Math.hypot(tx, tz);
+      if (run && s.running > LEAP.minRun && s.sliding < 0.3 && s.sinceLand > LEAP.cool && v > 1) {
+        // the path it would fly from here: the ground's vertical speed under it plus a stride's lift
+        const [, gx2, gz2] = heightD(s.x, s.z);
+        const vyT = Math.min(LEAP.vyMax, gx2 * tx + gz2 * tz + LEAP.push * s.running);
+        const y0 = s.feetY, H = WALK.strideRun / v;
+        let best = -1;
+        for (let k = 1; k <= LEAP.samples; k++) {
+          const t = (H * k) / LEAP.samples;
+          best = Math.max(best, y0 + vyT * t - 0.5 * LEAP.g * t * t - height(s.x + tx * t, s.z + tz * t));
+        }
+        if (best > LEAP.thresh) {
+          const vy0 = vyT + LEAP.spring;                 // the brink is found with the passive path; the leap itself springs off it
+          s.airborne = 1; s.air = { t: 0, y0, vy0 }; s.airTime = 0; s.airHeight = 0; s.airVy = vy0; s.airMax = 0;
+          events.push({ type: 'leap', x: s.x, z: s.z, vy: vy0, speed: v, clear: best });
+        }
+      }
+    }
+    const flying = air || s.airborne === 1;
+
+    // ---- feet: stride phase, footfalls, the slide trough (none in the air)
     let stride = WALK.strideWalk + (WALK.strideRun - WALK.strideWalk) * s.running;
     // third person only (intent.climbStride): shorter steps up a slope
     if (intent.climbStride) stride /= 1 + intent.climbStride * clamp(rise, 0, 0.35) * (1 - s.running);
     const prevPhase = s.phase;
-    s.phase += (walkSpeed * dt) / stride;
+    if (!flying) s.phase += (walkSpeed * dt) / stride;
     s.sink = WALK.sinkBase + WALK.sinkSlip * smooth(WALK.slideLoDeg * DEG, 31 * DEG, theta) + WALK.sinkRun * s.running;
     if (Math.floor(s.phase) > Math.floor(prevPhase)) {
       s.side = -s.side; s.steps++;
@@ -192,7 +284,7 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
         strength: clamp(0.35 + 0.45 * s.running + 0.25 * s.sliding + 0.15 * (walkSpeed / WALK.walk - 1) * 0.3, 0, 1),
         exposure: s.exposure });
     }
-    if (s.sliding > 0.15) {
+    if (s.sliding > 0.15 && !flying) {
       s.slideDist += slideSpeed * dt;
       events.push({ type: 'slide', x0: px, z0: pz, x1: s.x, z1: s.z, depth: 0.045 + 0.05 * s.sliding, width: 0.24 + 0.1 * s.sliding, exposure: s.exposure });
     }
@@ -202,9 +294,9 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     s.groundPoint = height(s.x, s.z);
     s.ground = footHeight(s.x, s.z);
     const bobAmp = reducedMotion ? 0 : (WALK.bobWalk + (WALK.bobRun - WALK.bobWalk) * s.running) * smooth(0.15, 1.0, walkSpeed);
-    s.bob = -bobAmp * Math.cos(2 * Math.PI * s.phase);
+    s.bob = s.airborne ? 0 : -bobAmp * Math.cos(2 * Math.PI * s.phase);
     s.swayX = reducedMotion ? 0 : WALK.sway * smooth(0.15, 1.0, walkSpeed) * Math.sin(Math.PI * s.phase);
-    s.eyeY = s.ground + WALK.eye - s.sink + s.bob;
+    s.eyeY = s.ground + s.airHeight + WALK.eye - s.sink + s.bob;
 
     // ---- exposure (slow; for sound and how fast prints heal)
     s.exposureT += dt;
@@ -228,7 +320,8 @@ export function createWalker({ x, z, headingDeg = 0, pitchDeg = 0, reducedMotion
     if (p.headingDeg !== undefined) s.yaw = p.headingDeg * DEG;
     if (p.pitchDeg !== undefined) s.pitch = p.pitchDeg * DEG;
     s.vx = s.vz = s.sx = s.sz = 0; s.target = null;
-    s.ground = footHeight(s.x, s.z); s.groundPoint = height(s.x, s.z);
+    s.airborne = 0; s.air = null; s.airHeight = 0; s.airVy = 0; s.sinceLand = 99;
+    s.ground = footHeight(s.x, s.z); s.groundPoint = height(s.x, s.z); s.feetY = s.groundPoint;
     s.exposure = exposureAt(s.x, s.z);
     s.eyeY = s.ground + WALK.eye - s.sink;
   }

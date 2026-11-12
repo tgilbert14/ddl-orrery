@@ -19,7 +19,7 @@
 // Local frame as in figure.js: x forward, y up, z right; y = 0 is the sand under the centre.
 
 import * as THREE from 'three/webgpu';
-import { Fn, uniform, attribute, vec3, vec4, float, normalize, dot, max, min, mix, clamp, smoothstep, length, pow, exp, step, sqrt, sin, cos, cross, sign,
+import { Fn, uniform, attribute, vec3, vec4, float, normalize, dot, max, min, mix, clamp, abs, smoothstep, length, pow, exp, step, sqrt, sin, cos, cross, sign,
   normalWorld, normalGeometry, positionWorld, positionGeometry, cameraPosition, modelWorldMatrix, negateOnBackSide, varying, Discard, If, mx_noise_float, uv } from 'three/tsl';
 import { lathe, tube, blob, cloak, hood, lantern, C, LAMP, NCAP } from './figure.js';
 import { height, heightD } from '../look-test/height.js';
@@ -156,6 +156,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
   const uWindL = uniform(new THREE.Vector4());  // local wind toward x, z; strength; gust
   const uSlide = uniform(new THREE.Vector4());  // local downhill x, z; slide amount; extra hem bury
   const uGround = uniform(new THREE.Vector4()); // local ground slope (rise per metre) forward, right; acceleration forward, right
+  const uAir = uniform(new THREE.Vector2());    // the crest leap: cloak flare 0..1, fall 0..1 (0 rising, 1 falling fast)
   const uHandR = uniform(new THREE.Vector3());
   const uHandL = uniform(new THREE.Vector3());
   const uBody = uniform(1.0), uGlow = uniform(0.5);
@@ -237,6 +238,16 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     p.y.addAssign(sl.mul(k).mul(k).mul(up.mul(0.5).add(0.7)).mul(0.26));
     const flap = sl.mul(k).mul(k).mul(sin(th.mul(7.0).add(t.mul(17.0)).add(p0.y.mul(5.0))).mul(0.6).add(sin(th.mul(3.0).sub(t.mul(11.0))).mul(0.4))).mul(0.04);
     p.x.addAssign(c.mul(flap)); p.z.addAssign(s.mul(flap)); p.y.addAssign(flap.mul(0.5));
+    // the crest leap: the cloak flares with the fall. The bell widens and lifts, more at the front
+    // and sides than at the back (so it never opens toward a camera behind by more than a few
+    // centimetres), and the lower cloak trails behind the leap
+    const fa = uAir.x, fallN = uAir.y;
+    const fk = fa.mul(k).mul(k).mul(isCloak).toVar();
+    p.x.subAssign(fa.mul(k).mul(isCloak).mul(0.14));
+    p.x.addAssign(c.mul(fk).mul(0.06)); p.z.addAssign(s.mul(fk).mul(0.09));
+    p.y.addAssign(fk.mul(max(c, 0.0).mul(0.11).add(abs(s).mul(0.06)).add(0.025)).mul(fallN.mul(0.6).add(0.4)));
+    const aflap = fk.mul(sin(th.mul(6.0).add(t.mul(15.0)).add(p0.y.mul(4.0))).mul(0.6).add(sin(th.mul(2.0).sub(t.mul(9.0))).mul(0.4))).mul(0.025);
+    p.x.addAssign(c.mul(aflap)); p.z.addAssign(s.mul(aflap));
     // acceleration drags the hem back
     p.x.subAssign(uGround.z.mul(k).mul(0.03)); p.z.subAssign(uGround.w.mul(k).mul(0.03));
     // a ragged hem
@@ -387,6 +398,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     tip: new THREE.Vector3(), tipMode: 'stand', planted: false, swingFrom: null, feet: 0,
     hang: new THREE.Vector3(), lamp: new THREE.Vector3(), lampD: new THREE.Vector3(0, -0.2, 0), lampV: new THREE.Vector3(), hv: new THREE.Vector3(), init: false,
     hemLast: null, dragLast: null, flick: 0, slideSm: 0,
+    airSm: 0, landK: 0,   // the crest leap: airborne (smoothed), the last landing's weight 0..1
   };
   const M = new THREE.Matrix4(), Mi = new THREE.Matrix4(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
   const toWorld = (lx, ly, lz, out = new THREE.Vector3()) => out.set(lx, ly, lz).applyMatrix4(M);
@@ -408,8 +420,16 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const stamps = [];
     const h = heading, fx = Math.cos(h), fz = Math.sin(h), rx = -fz, rz = fx;
     const g = height(ws.x, ws.z);
-    const slipBury = 0.035 * sstep(24, 31, ws.slopeDeg);
-    st.x = ws.x; st.z = ws.z; st.y = g - ws.sink - 0.01; st.heading = h;
+    // the crest leap: airborne, smoothed (quick off the sand, a little slower back onto it)
+    const airNow = ws.airborne ? 1 : 0;
+    st.airSm += (airNow - st.airSm) * (dt > 0 ? ease(dt, airNow > st.airSm ? 0.07 : 0.12) : 0);
+    const airS = st.airSm, airH = ws.airHeight || 0;
+    const fallN = clamp01(-(ws.airVy || 0) / 3.5);
+    // the landing crouch: the body drops (about 0.12 m at a full landing) and recovers over 0.35 s
+    const sl0 = ws.sinceLand ?? 99;
+    const crouch = sl0 < 0.4 ? st.landK * sstep(0, 0.06, sl0) * (1 - sstep(0.06, 0.35, sl0)) : 0;
+    const slipBury = 0.035 * sstep(24, 31, ws.slopeDeg) * (1 - airS);
+    st.x = ws.x; st.z = ws.z; st.y = g - ws.sink * (1 - airS) - 0.01 + airH; st.heading = h;
     group.position.set(st.x, st.y, st.z);
     group.rotation.set(0, -h, 0);
     group.updateMatrixWorld(true);
@@ -438,7 +458,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     // slope and acceleration; breathing when still. The gait stays under reduced motion (it is not
     // vestibular, and the camera does not follow it).
     const gaitA = Math.PI * ws.phase;
-    const run = ws.running, gm = moving * (1 - st.slideSm);
+    const run = ws.running, gm = moving * (1 - st.slideSm) * (1 - airS);
     const breathe = reduced ? 0 : (1 - moving);
     const land = Math.pow(Math.max(0, Math.cos(2 * gaitA)), 3);   // 1 at each footfall
     const climb = sstep(0.03, 0.2, sF) * gm * (1 - run);
@@ -449,7 +469,9 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     let leanST = Math.max(-0.07, Math.min(0.07, 0.02 * angVel * walkSpeed)) + 0.01 * st.accR + 0.034 * Math.sin(gaitA - 0.25) * gm * (1 - 0.5 * run);
     leanFT -= 0.24 * st.slideSm * dF; leanST -= 0.24 * st.slideSm * dR;     // sit back into the face
     leanFT += reduced ? 0 : 0.004 * Math.sin(t * 0.7) * breathe;
-    st.bob = bobT; st.sway += (swayT - st.sway) * ease(dt || 1e-3, 0.05);
+    // the leap: leaning a little forward off the brink, back before landing; the crouch on landing
+    leanFT += airS * (0.07 - 0.24 * fallN) + 0.06 * crouch;
+    st.bob = bobT - 0.12 * crouch; st.sway += (swayT - st.sway) * ease(dt || 1e-3, 0.05);
     const kl = ease(dt || 1e-3, 0.12);
     st.leanF += (leanFT - st.leanF) * kl; st.leanS += (leanST - st.leanS) * kl;
     st.climb = climb;
@@ -463,16 +485,20 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const wF = wind.dir[0] * fx + wind.dir[1] * fz, wR = wind.dir[0] * rx + wind.dir[1] * rz;
     uWindL.value.set(wF, wR, wind.strength, reduced ? 0 : wind.gust);
     uPose.value.set(st.bob, st.sway, st.leanF, st.leanS);
-    uGait.value.set(gaitA, Math.min(1.5, walkSpeed / 1.6) * moving * (1 - 0.7 * st.slideSm), st.hood, reduced ? 0 : t);
+    uGait.value.set(gaitA, Math.min(1.5, walkSpeed / 1.6) * moving * (1 - 0.7 * st.slideSm) * (1 - airS), st.hood, reduced ? 0 : t);
     uRun.value = ws.running * (1 - st.slideSm);
-    uSlide.value.set(dF, dR, st.slideSm, slipBury + 0.01);
-    uGround.value.set(sF, sR, st.accF, st.accR);
+    uSlide.value.set(dF, dR, st.slideSm, (slipBury + 0.01) * (1 - airS));
+    // in the air the hem is not laid on the slope under it
+    uGround.value.set(sF * (1 - airS), sR * (1 - airS), st.accF, st.accR);
+    // reduced motion: the leap keeps its pose (lean, crouch, staff), not the cloak's flare
+    uAir.value.set(reduced ? 0 : airS, fallN);
 
     // ---- the staff
     const ahead = (fwd, side, out) => out.set(ws.x + fx * fwd + rx * side, 0, ws.z + fz * fwd + rz * side);
     const tipLocal = () => { tmp.copy(st.tip).applyMatrix4(Mi); return tmp; };
     let mode = 'stand';
-    if (st.slideSm > 0.3) mode = 'slide';
+    if (ws.airborne || airS > 0.5) mode = 'air';
+    else if (st.slideSm > 0.3) mode = 'slide';
     else if (ws.running > 0.45) mode = 'carry';
     else if (walkSpeed > 0.3) mode = 'walk';
     if (!st.init) { ahead(0.12, 0.36, st.tip); st.tip.y = height(st.tip.x, st.tip.z) - 0.03; st.planted = true; }
@@ -487,6 +513,12 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
         const prog = clamp01(1 - d / Math.max(d0, 0.05));
         approach(tgt.x, height(st.tip.x, st.tip.z) + 0.24 * Math.sin(Math.PI * prog) + 0.01, tgt.z, 10);
       }
+    } else if (mode === 'air') {
+      // carried off the sand and angled back: the tip forward and low, the top behind
+      st.planted = false;
+      const tgt = ahead(0.72, 0.36, tmp2);
+      approach(tgt.x, st.y + 0.42, tgt.z, 9);
+      st.tip.y = Math.max(st.tip.y, height(st.tip.x, st.tip.z) + 0.05);
     } else if (mode === 'carry') {
       st.planted = false;
       const tgt = ahead(0.55, 0.36, tmp2);
@@ -546,7 +578,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
       const hv = hang.clone().sub(st.hang).divideScalar(dt);   // the hang point's velocity
       const ap = hv.clone().sub(st.hv).divideScalar(dt);       // and its acceleration
       st.hv.copy(hv);
-      const loose = clamp01(st.slideSm);
+      const loose = clamp01(Math.max(st.slideSm, airS));
       const al = ap.length(), cap = lerp(LAMP_ACAP, 40, loose);
       if (al > cap) ap.multiplyScalar(cap / al);
       ap.multiplyScalar(lerp(LAMP_FOLLOW, 1, loose));
@@ -611,7 +643,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     // ---- the hem's drag line (lighter when running, none while the cloth flies on a slide)
     const wob = 0.035 * Math.sin(ws.distance * 2.3);
     const hp2 = [ws.x - fx * PILGRIM.hemBack + rx * wob, ws.z - fz * PILGRIM.hemBack + rz * wob];
-    if (!st.hemLast) st.hemLast = hp2;
+    if (!st.hemLast || ws.airborne || airS > 0.3) st.hemLast = hp2;   // no drag line in the air
     else if (Math.hypot(hp2[0] - st.hemLast[0], hp2[1] - st.hemLast[1]) > 0.2) {
       if (st.slideSm < 0.4) stamps.push({ type: 'slide', x0: st.hemLast[0], z0: st.hemLast[1], x1: hp2[0], z1: hp2[1], depth: 0.006 * (1 - 0.6 * ws.running) + slipBury * 0.15, width: PILGRIM.hemWidth, exposure: ws.exposure });
       st.hemLast = hp2;
@@ -643,11 +675,17 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     st.visible = v; group.visible = staff.visible = lampG.visible = v;
     if (!v) { shade.uFig.value.w = 0; shade.uLamp.value.w = 0; }
   }
-  function reset() { st.init = false; st.hemLast = null; st.dragLast = null; st.feet = 0; st.planted = false; st.still = 0; }
+  function reset() { st.init = false; st.hemLast = null; st.dragLast = null; st.feet = 0; st.planted = false; st.still = 0; st.airSm = 0; st.landK = 0; }
+
+  // the crest leap's landing: how hard (the crouch's depth), and a jolt to the lantern
+  function land(e) {
+    st.landK = clamp01(0.45 + 0.55 * Math.min(1, Math.abs(e.vy || 0) / 4.5));
+    st.lampV.y -= 0.6 * st.landK;
+  }
 
   return {
-    update, foot, setTime: setTimeName, setVisible, reset, glowMat, glow, uGlow,
-    get state() { return { x: st.x, y: st.y, z: st.z, heading: st.heading, tip: st.tip.toArray(), planted: st.planted, mode: st.tipMode, lamp: st.lamp.toArray(), hang: st.hang.toArray(), bob: st.bob, sway: st.sway, leanF: st.leanF, still: st.still }; },
+    update, foot, land, setTime: setTimeName, setVisible, reset, glowMat, glow, uGlow,
+    get state() { return { x: st.x, y: st.y, z: st.z, heading: st.heading, tip: st.tip.toArray(), planted: st.planted, mode: st.tipMode, lamp: st.lamp.toArray(), hang: st.hang.toArray(), bob: st.bob, sway: st.sway, leanF: st.leanF, still: st.still, air: st.airSm }; },
     triangles,
   };
 }

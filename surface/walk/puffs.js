@@ -144,6 +144,41 @@ export function createPuffs({ U, shade, scene }) {
     });
   }
 
+  // the crest leap's landing, at e.x, e.z (e.dirX, e.dirZ: the way it was going; e.speed, e.vy):
+  // a low ring-fan of grains thrown forward and to the sides, none straight back, with heavier
+  // clumps and four faint dust puffs; scaled by the landing's speed, gone in about 0.6 s
+  function land(e, wind) {
+    const g = height(e.x, e.z);
+    const k = Math.min(1, Math.max(0.35, (Math.abs(e.vy) + 0.4 * e.speed) / 6));
+    const fx = e.dirX, fz = e.dirZ, rx = -fz, rz = fx;
+    const n = Math.round(48 + 60 * k), clumps = Math.round(6 + 8 * k);
+    for (let i = 0; i < n + clumps; i++) {
+      const clump = i >= n;
+      // round the ring from ahead to just behind square either side (about 250 degrees), densest ahead
+      const u = rnd() * 2 - 1, a = Math.sign(u) * Math.pow(Math.abs(u), 1.4) * 2.2;
+      const ox = fx * Math.cos(a) + rx * Math.sin(a), oz = fz * Math.cos(a) + rz * Math.sin(a);
+      const w = rnd(), sp = (clump ? 1.8 + 1.4 * rnd() : 0.8 + 2.6 * w * w) * (0.6 + 0.6 * k);
+      const r0 = 0.22 + 0.12 * rnd();   // out from under the hem's ring
+      // the figure's own way on, a little, so the fan leans forward
+      const carry = 0.25 * e.speed * (0.5 + 0.5 * Math.cos(a));
+      spawn({
+        kind: clump ? 'clump' : 'kick', x: e.x + ox * r0, y: g + 0.02, z: e.z + oz * r0,
+        vx: ox * sp + fx * carry + wind.dir[0] * wind.strength * 0.2, vy: (clump ? 1.1 + 0.8 * rnd() : 0.5 + 1.0 * rnd()) * (0.7 + 0.4 * k),
+        vz: oz * sp + fz * carry + wind.dir[1] * wind.strength * 0.2,
+        life: clump ? 0.42 + 0.14 * rnd() : 0.3 + 0.22 * rnd(),
+        size: clump ? 0.15 + 0.06 * rnd() : 0.11 + 0.06 * rnd(), aspect: 0.6, alpha: 1.0, grow: clump ? 1.15 : 1.4, g: 9.0,
+      });
+    }
+    for (let i = 0; i < 4; i++) {
+      const side = i % 2 ? 1 : -1;
+      spawn({
+        kind: 'dust', x: e.x + rx * side * (0.3 + 0.15 * (i >> 1)) + fx * (0.15 + 0.25 * (i >> 1)), y: g + 0.06, z: e.z + rz * side * (0.3 + 0.15 * (i >> 1)) + fz * (0.15 + 0.25 * (i >> 1)),
+        vx: rx * side * 0.7 + fx * 0.5 + wind.dir[0] * wind.strength * 0.8, vy: 0.12 + 0.08 * rnd(), vz: rz * side * 0.7 + fz * 0.5 + wind.dir[1] * wind.strength * 0.8,
+        life: 0.55 + 0.1 * rnd(), size: 0.5 + 0.25 * k, aspect: 0.45, alpha: 0.2 + 0.1 * k, grow: 2.4, g: 0,
+      });
+    }
+  }
+
   // one frame: sliding emission, motion, and the upload. ws: the walker's state
   function update(dt, ws, wind, camera, reduced, sun) {
     if (sun) key = sun;
@@ -213,5 +248,5 @@ export function createPuffs({ U, shade, scene }) {
     sprite.visible = live > 0;
   }
   function clear() { for (const p of ps) p.on = false; }
-  return { foot, update, clear, sprite, get live() { return live; } };
+  return { foot, land, update, clear, sprite, get live() { return live; } };
 }

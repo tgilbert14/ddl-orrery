@@ -35,6 +35,9 @@ export const FOLLOW = {
   idleWide: 3.0,
   omega: 3.2, omegaUp: 9.0, omegaDown: 2.4,
   swingRate: 0.45, swingAfter: 1.6,
+  // the crest leap: the boom eases out by this much, and the pivot's height follows the figure (not
+  // the sand) at this share of its usual rate, so the figure visibly drops in frame; no cut
+  airOut: 1.4, airLag: 0.45, airIn: 0.1, airOutTau: 0.6, airTilt: 0.16,
 };
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -47,6 +50,7 @@ export function createFollow({ reduced = false } = {}) {
     still: 0, sinceLook: 99, init: false, raised: 0, shortened: 0,
     look: [0, 0, 0], viewYaw: 0, viewPitch: 0, base: [0, 0, 0],
     sm: 0, cut: false, slideOn: false, slideSide: 1, slideOff: 0, slideElev: 0, sdir: [1, 0], fig: [0, 0, 0], gv: 0, lv: [0, 0],
+    air: 0,
   };
 
   function boomEnd(piv, yaw, elev, L) {
@@ -98,9 +102,13 @@ export function createFollow({ reduced = false } = {}) {
   }
 
   // f: { x, z, ground, speed, sliding, running, travelYaw|null, slide: [sx, sz] (m/s), sun: [x, z],
-  // wind: [x, z] }; look: { dx, dy } radians
+  // wind: [x, z], airborne 0/1, airHeight (m) }; look: { dx, dy } radians
   function update(dt, f, look) {
     if (!s.init) snap(f);
+    // the crest leap (none of it under reduced motion: the camera does as it would without the leap)
+    const airOn = !reduced && f.airborne ? 1 : 0;
+    if (dt > 0) s.air += (airOn - s.air) * (1 - Math.exp(-dt / (airOn > s.air ? FOLLOW.airIn : FOLLOW.airOutTau)));
+    const airK = s.air * s.air * (3 - 2 * s.air);
     s.base = [f.x, f.ground + 0.35, f.z];
     if (dt > 0) s.gv += ((f.ground - s.fig[1]) / dt - s.gv) * (1 - Math.exp(-dt / 0.15));   // the figure's vertical speed
     s.fig = [f.x, f.ground, f.z];
@@ -157,17 +165,23 @@ export function createFollow({ reduced = false } = {}) {
       Lt += (FOLLOW.close - FOLLOW.boom) * f.running;
     }
     if (!moving && !reduced) Lt = Math.max(Lt, s.L);   // standing never pulls the camera back in
+    Lt += FOLLOW.airOut * airK;
     s.Lt = Lt;
-    const tauL = Lt > s.L ? 2.2 : 0.9;
+    const tauL = Lt > s.L ? (airK > 0.1 ? 0.7 : 2.2) : 0.9;
     s.L += (Lt - s.L) * (1 - Math.exp(-dt / tauL));
-    // the pivot: no bob, smoothed (faster across, slower in height)
-    const pt = [f.x, f.ground + FOLLOW.pivotUp, f.z];
+    // the pivot: no bob, smoothed (faster across, slower in height). In a leap it follows the figure
+    // itself, more slowly, so the drop shows in frame
+    const pt = [f.x, f.ground + (airOn ? f.airHeight || 0 : 0) + FOLLOW.pivotUp, f.z];
     if (dt > 0) {
       [s.piv[0], s.pv[0]] = spring(s.piv[0], s.pv[0], pt[0], 9, dt);
       [s.piv[2], s.pv[2]] = spring(s.piv[2], s.pv[2], pt[2], 9, dt);
-      [s.piv[1], s.pv[1]] = spring(s.piv[1], s.pv[1], pt[1], 4.5 + 4.5 * s.sm, dt);
+      [s.piv[1], s.pv[1]] = spring(s.piv[1], s.pv[1], pt[1], (4.5 + 4.5 * s.sm) * (1 - (1 - FOLLOW.airLag) * airK), dt);
     }
-    const b = clearBoom(s.piv, s.yaw, s.elev, s.L);
+    // in a leap the boom also tilts up a little, so the landing past a brink is seen over its lip
+    const b = clearBoom(s.piv, s.yaw, Math.min(FOLLOW.elevMax, s.elev + FOLLOW.airTilt * airK), s.L);
+    // the slide view relaxes the line clearance; not while a leap's landing past a brink settles
+    // (the feet would drop behind the lip)
+    const relax = 0.6 * sm * (1 - airK);
     s.raised = b.raised; s.shortened = b.shortened;
     if (s.sm > 0) {
       // the slide view's camera, blended with the boom in polar form about the figure (no cut
@@ -185,16 +199,16 @@ export function createFollow({ reduced = false } = {}) {
       b.c = [f.x + Math.cos(ang) * len + vx * lead, b.c[1] + (sy - b.c[1]) * sm, f.z + Math.sin(ang) * len + vz * lead];
       // only the hard floor and a lighter line clearance in the slide view
       const ny = needY(s.piv, b.c[0], b.c[2]);
-      if (ny > b.c[1]) b.c[1] += (ny - b.c[1]) * (1 - 0.6 * sm);
+      if (ny > b.c[1]) b.c[1] += (ny - b.c[1]) * (1 - relax);
     }
     if (dt > 0) {
       [s.cam[0], s.cv[0]] = spring(s.cam[0], s.cv[0], b.c[0], FOLLOW.omega, dt);
       [s.cam[2], s.cv[2]] = spring(s.cam[2], s.cv[2], b.c[2], FOLLOW.omega, dt);
       // height: for where the camera is now (it trails the boom), not only where the boom ends
       const nyc = needY(s.piv, s.cam[0], s.cam[2]);
-      const yT = Math.max(b.c[1], b.c[1] + (nyc - b.c[1]) * (1 - 0.6 * sm));
+      const yT = Math.max(b.c[1], b.c[1] + (nyc - b.c[1]) * (1 - relax));
       const wy = yT > s.cam[1] ? FOLLOW.omegaUp : FOLLOW.omegaDown;
-      [s.cam[1], s.cv[1]] = spring(s.cam[1], s.cv[1], yT, wy + (FOLLOW.omega - wy) * sm, dt);
+      [s.cam[1], s.cv[1]] = spring(s.cam[1], s.cv[1], yT, wy + (FOLLOW.omega - wy) * sm * (1 - airK), dt);
     }
     if (s.cut) {   // a cut: no glide to the new view
       s.cam = b.c.slice(); s.cv = [0, 0, 0];
@@ -223,7 +237,7 @@ export function createFollow({ reduced = false } = {}) {
   return {
     state: s, update, snap,
     setYaw(y) { s.yaw = y; },
-    resetSlide() { s.sm = 0; s.cut = false; s.slideOn = false; s.slideOff = 0; s.slideElev = 0; s.lv = [0, 0]; s.gv = 0; },
+    resetSlide() { s.sm = 0; s.cut = false; s.slideOn = false; s.slideOff = 0; s.slideElev = 0; s.lv = [0, 0]; s.gv = 0; s.air = 0; },
     get position() { return s.cam; },
     // camera-relative axes for the controls (the boom's yaw, not the framing offset)
     get forward() { return [Math.cos(s.yaw), Math.sin(s.yaw)]; },

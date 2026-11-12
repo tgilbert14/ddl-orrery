@@ -2,13 +2,14 @@
 // No audio files, no dependencies, no network.
 //
 // Contract (the walker loads this with a dynamic import):
-//   createSound(opts?) -> { start(), update(state), step(strength), setMuted(bool), dispose() }
+//   createSound(opts?) -> { start(), update(state), step(strength), land(strength), setMuted(bool), dispose() }
 //   Nothing is created until start(). start() must be called from a user gesture; it creates and
 //   resumes the context synchronously, builds the noise in later tasks, and returns a Promise of
 //   true (running) or false (refused or unavailable: every call stays a silent no-op). Never rejects.
 //   Steps arriving before the build finishes (about 30 ms on desktop) are dropped.
 //   update({ dt, windSpeed, windDirRel, exposure, walkerSpeed, sliding }) once per frame.
 //   step(strength 0..1) once per footfall.
+//   land(strength 0..1) once per crest-leap landing (third person; optional for the caller).
 //
 // Test hook: createSound({ context, seed }) builds the same graph on a context you pass in
 // (an OfflineAudioContext for rendering). With a passed context nothing listens to page
@@ -579,6 +580,31 @@ export function createSound(opts = {}) {
     } catch (err) { /* silent */ }
   }
 
+  // The crest leap's landing (third person): a low, dry thump into sand. The same grain synthesis as a
+  // step, made heavy (the walking step's longer body, played about a fifth lower) and darkened (a
+  // lowpass near 1 kHz instead of the step's 4 to 9 kHz), scaled by the landing (strength 0..1). Rendered
+  // offline against a running step (strength 0.88), with the wind bed subtracted, a full-strength
+  // landing is about 4.6 dB louder over its loudest 50 ms (5.6 dB in all: it is longer); strength 0.5, 1 dB.
+  function land(strength) {
+    if (!ctx || !g || dead || disposed) return;
+    if (!external && (ctx.state !== 'running' || hidden)) return;
+    try {
+      const s = clamp(Number(strength) || 0);
+      if (s <= 0.01) return;
+      const src = ctx.createBufferSource();
+      src.buffer = stepBuffer(ctx, rndStep, 1, 0);
+      src.playbackRate.value = lerp(0.66, 0.76, rndStep());
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 55; hp.Q.value = 0.6;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+      lp.frequency.value = (700 + 600 * s) * lerp(0.9, 1.1, rndStep()); lp.Q.value = 0.6;
+      const v = ctx.createGain();
+      v.gain.value = 0.4 * (0.4 + 0.6 * s);
+      src.connect(hp); hp.connect(lp); lp.connect(v); v.connect(g.stepBus);
+      src.onended = () => { try { v.disconnect(); } catch (e) { /* already gone */ } };
+      src.start(now());
+    } catch (err) { /* silent */ }
+  }
+
   function setMuted(m) {
     muted = !!m;
     if (!ctx || !g || dead) return;
@@ -612,5 +638,5 @@ export function createSound(opts = {}) {
     dead = true;
   }
 
-  return { start, update, step, setMuted, dispose };
+  return { start, update, step, land, setMuted, dispose };
 }

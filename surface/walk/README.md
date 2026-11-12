@@ -298,6 +298,94 @@ sampled within 30 m of the camera; before that limit the WebGPU median was 0.3 m
 `view=first` and `figure=a&shot=behind` were pixel-identical to HEAD 4d5696a. The console was empty
 on WebGPU, WebGL2, reduced motion (both backends) and first person.
 
+## The crest leap, 11 Nov 2026
+
+**Lead's change after the worker's build:** the take-off test below is unchanged (it finds the brink
+with the passive path), but once a brink is found the Pilgrim now springs off the lip with a further
+1.5 m/s upward (`LEAP.spring`). The passive path alone cleared the sand by 0.19 m for 0.69 s, which
+read as a hop. With the spring, at the dusk brink: 1.03 m clear, 1.22 s in the air at a 1/60 step;
+1.04 m and 1.23 s at 1/120; identical on WebGL2; walking the same brink still does not leap; the slide
+is at full speed half a second after landing; the camera stays at least 2.1 m above the sand. The
+numbers in the rest of this section are the worker's, measured before the spring. The contact sheet
+`frames/sheet-leap.jpg` also predates it.
+
+Third person only. There is no jump button: running over a dune's brink, the Pilgrim is carried off
+it for a moment and lands into the slide. Walking over the same brink is unchanged (it steps down and
+slides), and `view=first` is unchanged (pixel-identical to HEAD 58f0d92's frame after a 4 s run, on
+WebGPU and WebGL2).
+
+How it decides (`walker.js`, `LEAP`, on only when `walker.update` is passed `leap: true`, which only
+the third-person tick does): each frame while running (at least 60% of the way from walk to run, about
+3.3 m/s, not sliding, 0.4 s after the last landing) the walker works out the path it would fly from
+where it is: its horizontal velocity, and a vertical speed from the ground's slope under it plus a
+running stride's own lift (0.8 m/s at a full run), capped at 1 m/s upward. If within one running step
+(the run stride over the speed, about 0.3 s, 8 points) that path clears the sand by more than 0.15 m,
+it takes off. In the air its horizontal velocity is kept (air control with a 3 s time constant, so
+very little), it falls from the take-off speed, and it lands where its feet reach the sand; the
+crossing is found within the frame, so the landing does not depend on the frame rate. On a face
+steeper than 22 degrees the fall's speed along the face goes into the slide (no dead stop); on gentler
+sand it is a heavy step that keeps 60% of its speed. No footsteps, prints, hem line or staff marks in
+the air.
+
+**Gravity in the air is 7.0 m/s^2, not 9.81.** At true gravity no brink in this field throws a runner
+clear by 0.15 m: the sharpest, the dusk crest's, turns from flat to 25 degrees over 1.2 m (a radius
+of about 3 m), and the others over 2.5 to 10 m; a runner at 4.1 m/s leaves the sand only where
+v^2/R exceeds g. 0.71 g gives the dusk brink a leap; it is one constant (`LEAP.g`) to overrule.
+
+The rest: the cloak flares in the air (the bell widens and lifts, more at the front and sides than
+the back, so it opens toward a camera behind by only a few centimetres; the lower cloak trails), the
+body leans forward off the brink and back before landing, the staff is carried off the sand angled
+back, and the lantern swings loose (as on a slide). Landing: the body drops up to 0.12 m and recovers
+over 0.35 s, the staff comes down, a ring-fan of grains is thrown forward and to the sides (none
+straight back; 82 to 126 sprites with the clumps and dust, scaled by the landing, gone in about
+0.6 s), one carved dent (a short skid along the way it went, with almost no berm, so no raised ring;
+lightly darkened), and on a slip face the pour is fed for a moment so sand runs from the landing.
+The camera does not cut: the boom eases out 1.4 m and tilts up 9 degrees, and its pivot follows the
+figure's own height at 45% of its usual rate, so the drop shows in frame; the slide view's relaxed
+line clearance waits until that has settled. Reduced motion: no camera change at all, and no flare;
+the leap, its pose and the landing's sand stay. Sound: a landing thump (`sound.js`, `land()`), the
+step's grain synthesis made heavy and dark; no whoosh at take-off. `__walk.state()` has `airborne`,
+`airTime` (this flight's, or the last one's once landed) and `airHeight`; `__walk.events` counts
+`leap` and `land`, and `__walk.lastLeap` and `__walk.lastLand` hold the last of each.
+
+Measured (headless Chrome on one Mac, the dusk brink from 12 m back at heading 40, holding run):
+
+| | Take-off vertical speed | Air time | Highest above the sand | Landing |
+|---|---|---|---|---|
+| WebGPU, dt 1/60 | 0.58 m/s | 0.688 s | 0.195 m | on the 31.6 degree face, 4.24 m/s down, sliding 0.91 half a second later |
+| WebGPU, dt 1/120 | 0.65 m/s | 0.694 s | 0.190 m | 4.1 cm from the 1/60 landing point (a 2.9 m flight) |
+| WebGL2, dt 1/60 | the same as WebGPU to the last digit | | | |
+
+Walking the same brink: no leap. Running 300 m from the dusk crest at heading 130 (rolling ground,
+slopes up to 13 degrees): no leap. The first-person 600 m route, running: no leap. In node, running
+straight 600 m lines at headings 40 and 48 from 40 m before the dusk crest leap once each, at that
+crest (headings 30 and 60 leap there too); the later brinks on those lines are too round even at
+0.71 g. Of eight other 300 m running lines, seven never leap and one leaps once, at a brink that
+turns from flat to 29 degrees over 2 m. So in practice it happens at sharp brinks only, and the leap is a short bound (about 0.2 m clear for 0.7 s), not a
+jump. The follow camera, 8 m back on the crest, still loses the figure's legs behind the lip for
+about the first half second after landing, until the slide view swings round.
+
+Frame times: the same 600 m route and method as before (1440x900 CSS at DPR 2, 15,077 frames from
+the old start at heading 48, each timed until the GPU finished), with HEAD 58f0d92 run in the same
+session. The route has no leap (its brinks are walked, or too round where it runs), so this measures
+the per-frame cost of the check and the new uniforms only. This session's machine ran about 0.8 ms
+slower than the last round's for HEAD and this change alike.
+
+| Run | All frames, median / p99 / worst | Plain frames, median / worst |
+|---|---|---|
+| HEAD 58f0d92, WebGPU | 6.4 / 8.5 / 13.4 ms | 6.2 / 9.5 ms |
+| this change, WebGPU (two runs) | 6.4 / 8.5 / 11.1, 6.5 / 8.6 / 11.0 ms | 6.3 / 9.9, 6.4 / 11.0 ms |
+| HEAD 58f0d92, WebGL2 | 6.2 / 8.4 / 10.8 ms | 6.0 / 9.0 ms |
+| this change, WebGL2 (two runs) | 6.1 / 8.3 / 10.3, 6.3 / 8.7 / 10.2 ms | 5.7 / 9.0, 6.1 / 8.8 ms |
+
+Within run-to-run noise of HEAD. The console was empty on WebGPU, WebGL2, reduced motion (both
+backends) and first person.
+
+Not measured: any phone; the sound has not been heard by a person (only rendered offline and
+compared in level against a running step: with the wind bed subtracted, a full-strength landing
+is 4.6 dB louder over its loudest 50 ms, and 5.6 dB in all since it is longer; a half-strength one,
+1 dB). The contact sheet is `frames/sheet-leap.jpg`.
+
 ## Not built yet
 
 The storm, brink plumes, the hub landing and leaving, the shuttle, the colossus and the score. There
