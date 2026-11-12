@@ -43,6 +43,11 @@ export const PILGRIM = {
   neckY: 1.47, headLean: 0.22,   // above the neck the head takes this share of the body's lean
 };
 
+const LAMP_DAMP = 5.0;    // 1/s, on the lantern's swing while walking (3.2 on a slide)
+const LAMP_FOLLOW = 0.3;  // share of the crook's acceleration the lantern feels while walking
+const LAMP_ACAP = 8;      // m/s^2, cap on that acceleration before the share is taken
+const LAMP_KICK = 0.12;   // m/s sideways per step (0.5x a plain step, 0.9x a staff plant, 2x running)
+
 // tag a geometry's vertices with (part, low, theta, w); fn(i, x, y, z) -> [low, theta, w]
 function tag(g, part, fn) {
   const P = g.attributes.position, n = P.count, a = new Float32Array(n * 4);
@@ -380,7 +385,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     x: 0, y: 0, z: 0, heading: 0, visible: true,
     bob: 0, sway: 0, leanF: 0, leanS: 0, hood: 0, accF: 0, accR: 0, pvx: 0, pvz: 0, still: 0,
     tip: new THREE.Vector3(), tipMode: 'stand', planted: false, swingFrom: null, feet: 0,
-    hang: new THREE.Vector3(), lamp: new THREE.Vector3(), lampPrev: new THREE.Vector3(), init: false,
+    hang: new THREE.Vector3(), lamp: new THREE.Vector3(), lampD: new THREE.Vector3(0, -0.2, 0), lampV: new THREE.Vector3(), hv: new THREE.Vector3(), init: false,
     hemLast: null, dragLast: null, flick: 0, slideSm: 0,
   };
   const M = new THREE.Matrix4(), Mi = new THREE.Matrix4(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
@@ -530,25 +535,34 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     const hang = new THREE.Vector3(...PILGRIM.hang).applyMatrix4(staff.matrix);
     const staffTop = new THREE.Vector3(0, PILGRIM.staffLen, 0).applyMatrix4(staff.matrix);
 
-    // ---- the lantern: a damped pendulum under the crook (position-based)
+    // ---- the lantern: a damped pendulum under the crook, integrated in the crook's own frame. The
+    // crook's acceleration reaches the lantern as a pseudo-force that is capped and scaled down
+    // (LAMP_FOLLOW), so the staff's big swing each stride rocks the lantern instead of flinging it.
+    // A slide lets the full force through again.
     const Lc = PILGRIM.cord;
-    if (!st.init) { st.lamp.set(hang.x, hang.y - Lc, hang.z); st.lampPrev.copy(st.lamp); st.hang.copy(hang); }
+    if (!st.init) { st.lampD.set(0, -Lc, 0); st.lampV.set(0, 0, 0); st.hv.set(0, 0, 0); st.hang.copy(hang); }
     const n = 4, h4 = (dt || 0) / n;
     if (h4 > 0) {
       const hv = hang.clone().sub(st.hang).divideScalar(dt);   // the hang point's velocity
+      const ap = hv.clone().sub(st.hv).divideScalar(dt);       // and its acceleration
+      st.hv.copy(hv);
+      const loose = clamp01(st.slideSm);
+      const al = ap.length(), cap = lerp(LAMP_ACAP, 40, loose);
+      if (al > cap) ap.multiplyScalar(cap / al);
+      ap.multiplyScalar(lerp(LAMP_FOLLOW, 1, loose));
+      const damp = lerp(LAMP_DAMP, 3.2, loose);
       for (let i = 0; i < n; i++) {
-        const hp = st.hang.clone().lerp(hang, (i + 1) / n);
-        const v = st.lamp.clone().sub(st.lampPrev).divideScalar(h4);
-        const rel = v.clone().sub(hv);
         const wf = reduced ? 0 : wind.strength * (0.4 + 0.6 * wind.gust);
-        const acc = new THREE.Vector3(wind.dir[0] * wf, -9.81, wind.dir[1] * wf).addScaledVector(rel, -3.2);
+        const acc = new THREE.Vector3(wind.dir[0] * wf, -9.81, wind.dir[1] * wf).sub(ap).addScaledVector(st.lampV, -damp);
         // sliding: the sand jolts the staff and the lantern swings hard
         if (st.slideSm > 0.05) { const jt = t * 9.0 + i * 0.3; acc.x += st.slideSm * 22 * (Math.sin(jt * 1.7) + 0.6 * Math.sin(jt * 3.1 + 1)) * rx; acc.z += st.slideSm * 22 * (Math.sin(jt * 1.7) + 0.6 * Math.sin(jt * 3.1 + 1)) * rz; acc.y += st.slideSm * 14 * Math.sin(jt * 2.3); }
-        const next = st.lamp.clone().addScaledVector(v, h4).addScaledVector(acc, h4 * h4);
-        const d = next.clone().sub(hp); d.multiplyScalar(Lc / Math.max(d.length(), 1e-4));
-        st.lampPrev.copy(st.lamp); st.lamp.copy(hp).add(d);
+        st.lampV.addScaledVector(acc, h4);
+        st.lampD.addScaledVector(st.lampV, h4);
+        st.lampD.multiplyScalar(Lc / Math.max(st.lampD.length(), 1e-4));          // the cord's length
+        st.lampV.addScaledVector(st.lampD, -st.lampV.dot(st.lampD) / (Lc * Lc));   // no speed along the cord
       }
-    } else { const d = st.lamp.clone().sub(hang); d.multiplyScalar(Lc / Math.max(d.length(), 1e-4)); st.lamp.copy(hang).add(d); st.lampPrev.copy(st.lamp); }
+    }
+    st.lamp.copy(hang).add(st.lampD);
     st.hang.copy(hang);
     lampG.position.copy(st.lamp);
     lampG.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hang.clone().sub(st.lamp).normalize());
@@ -612,8 +626,8 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
     // the lantern answers each step: a small kick across and down (more on a staff plant)
     if (st.init && !(e.slide > 0.5)) {
       const kk = (st.feet % 2 ? 0.5 : 0.9) * (1 + ws.running);
-      st.lampPrev.x -= -Math.sin(st.heading) * 0.012 * kk * (e.side || 1); st.lampPrev.z -= Math.cos(st.heading) * 0.012 * kk * (e.side || 1);
-      st.lampPrev.y += 0.008 * kk;
+      const kv = LAMP_KICK * kk * (e.side || 1);   // a sideways speed, m/s
+      st.lampV.x += -Math.sin(st.heading) * kv; st.lampV.z += Math.cos(st.heading) * kv;
     }
     if (st.tipMode !== 'walk' || st.feet % 2) return null;
     st.planted = true;
@@ -633,7 +647,7 @@ export function createPilgrim({ U, shade, scene, reduced = false }) {
 
   return {
     update, foot, setTime: setTimeName, setVisible, reset, glowMat, glow, uGlow,
-    get state() { return { x: st.x, y: st.y, z: st.z, heading: st.heading, tip: st.tip.toArray(), planted: st.planted, mode: st.tipMode, lamp: st.lamp.toArray(), bob: st.bob, sway: st.sway, leanF: st.leanF, still: st.still }; },
+    get state() { return { x: st.x, y: st.y, z: st.z, heading: st.heading, tip: st.tip.toArray(), planted: st.planted, mode: st.tipMode, lamp: st.lamp.toArray(), hang: st.hang.toArray(), bob: st.bob, sway: st.sway, leanF: st.leanF, still: st.still }; },
     triangles,
   };
 }
