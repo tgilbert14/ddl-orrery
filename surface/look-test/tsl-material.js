@@ -663,7 +663,7 @@ export function createTslMaterials(values, opts, shadowTex) {
     });
     // walk slice: the storm front (surface/walk/storm.js), over everything; a branch on a uniform, so
     // with no storm the colour is untouched. The pixel's angular size is taken here, outside any branch.
-    if (WK && WK.storm) WK.storm({ col, ro, rd, dist, face: { vnoise, domes, px: length(fwidth(rd)).toVar() } });
+    if (WK && WK.storm) WK.storm({ col, ro, rd, dist, face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar(), ground: true } });
 
     return vec4(finish(col), 1.0);
   })();
@@ -680,7 +680,9 @@ export function createTslMaterials(values, opts, shadowTex) {
       col.assign(mix(col, sandColor(rd), sandHaze(rd.mul(-1.0), float(1e5), smoothstep(0.0, 0.04, rd.y).mul(CAM.eye))));
     });
     // walk slice: the storm front (see the ground)
-    if (WK && WK.storm) WK.storm({ col, ro, rd, dist: float(1e9), face: { vnoise, domes, px: length(fwidth(rd)).toVar() } });
+    // (the sky's share is drawn at half resolution by storm.js and fetched here, when the walk asks)
+    if (WK && WK.stormSky) WK.stormSky({ col, face: { vnoise, vnoiseD, domes } });
+    else if (WK && WK.storm) WK.storm({ col, ro, rd, dist: float(1e9), face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar() } });
     return vec4(finish(col), 1.0);
   })();
 

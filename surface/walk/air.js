@@ -60,7 +60,7 @@ export function airHook({ col, xz, dist, rd, grad, alb, U, vnoise, sh }) {
       const m1 = vnoise(vec2(a.sub(ph.mul(9.0)).div(2.6), c.div(0.55).add(31.0)));
       const m2 = vnoise(vec2(a.sub(ph.mul(13.0)).div(1.1), c.div(0.3).add(7.0)));
       const dn = smoothstep(-0.2, 0.7, m1.mul(0.6).add(m2.mul(0.4))).mul(float(1.0).sub(smoothstep(4.0, 14.0, dist)).mul(0.7).add(0.3));
-      out.assign(mix(out, lit.mul(1.1), clamp(dn.mul(graze).mul(SU.air.y).mul(0.32).mul(expo.mul(0.5).add(0.5)), 0.0, 0.6)));
+      out.assign(mix(out, lit.mul(1.1), clamp(dn.mul(graze).mul(SU.air.y).mul(0.42).mul(expo.mul(0.5).add(0.5)), 0.0, 0.65)));
     });
   });
   return out;

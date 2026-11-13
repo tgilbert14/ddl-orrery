@@ -388,13 +388,111 @@ compared in level against a running step: with the wind bed subtracted, a full-s
 is 4.6 dB louder over its loudest 50 ms, and 5.6 dB in all since it is longer; a half-strength one,
 1 dB). The contact sheet is `frames/sheet-leap.jpg`.
 
+**The brink test, 12 Nov 2026.** The first build leapt only where the walker's own passive path left
+the ground, which happened at the two sharpest crests. `walker.js` now tests the ground directly while
+running with the stick held: a lip is where the slope along the run falls past 8 degrees, with a face
+of at least 19 degrees within 5 m and a turn of at least 15 degrees; the flight starts from the lip
+within the frame, the spring (0.8 m/s) scales with how sharp the brink is, and the predicted landing
+must be on a real face. Measured in Node over 503 slip-face brinks run head-on: 503 leap (93 before);
+none on rolling ground, while walking, when stopping on a crest, or running along one. About one in
+ten is a low bound of 0.16 to 0.34 m off a rounded brink. On random lines a leap comes about once a
+kilometre; `LEAP.faceDeg` and `LEAP.breakDeg` are the knobs if that is too often.
+
 ## The storm front, 11 Nov 2026
 
-**Lead's change after the worker's build:** a near face (within about 3 km, fully by 300 m) is now
-darkened and reddened from the base up, keeping the light only near its top, and the creases between
-its lobes are softened. Up close the pale, evenly lit face had read as cracked plaster. A far face on
-the horizon is unchanged. The console sweep (both backends, reduced motion, first person, every
-phase) was re-run after this and stayed empty. The contact sheet `frames/sheet-storm.jpg` predates it.
+**Second round, 12 Nov 2026** (four weak spots the owner asked to have fixed; the contact sheet
+`frames/sheet-storm.jpg` is from this round):
+
+- *The wall up close.* Within about 2.5 km a face is no longer a plane: it is a relief standing out
+  toward the eye (two rolling octaves of 230 m and 95 m, up to about 80 m deep, rolling along the front
+  and rising; the top leaning out over the sand by up to 110 m), taken where the ray meets the plane,
+  so the opacity integrals and the shading both follow it and it has parallax. Its largest billows grow
+  (to about 350 m) and lie 70 m deeper in the slab than the rest, so the two layers slide against each
+  other as the wall comes on and as you turn; the smallest fade out and are not evaluated within about
+  900 m. The lobes are shaded by how much of each the eye looks through (dark at their edges and in the
+  folds, whatever the light), the hollows of the relief fade into the dust, the dark base rises less
+  far, and the warm glow low in the face is stronger near and breathes in slow patches. Tongues of dust
+  run ahead along the ground: in streaks along the front the blown dust thickens (up to 10x) and the
+  base pushes 35 m forward, so the wall meets the dunes as a ragged, moving plume and not a line. The
+  lead's earlier change (a near face darkened and reddened from the base up) is kept. A far face is
+  unchanged (the approach still at 4.9 km differs from the first round by 0.14% RMS).
+- *The racing sand.* The 1 to 3 cm streaks (they read as scratches) are gone. Now 130 ribbons (soft
+  streams 0.9 to 2.4 m long, 14 to 42 cm wide, curved, their width swelling and thinning, broken into
+  patches; some lighter than the dust, some darker) and 28 sheets (torn veils 2.5 to 5.5 m) in an 11 m
+  box round the camera, most within a metre or two of the sand. Each runs a few degrees off the mean
+  wind, so they do not meet at one point. The gusts (3 to 8 s) bring more of them (each has its own
+  threshold on the gust) and drive them faster. They part round the Pilgrim and thin on the line from
+  the camera to the figure, so the figure and the lantern stay clear; ribbons seen end-on or near upright
+  on screen fade (a burst of rays, or rain). The ground's fast sand layer is a third stronger. Reduced
+  motion: no ribbons, the sheets a still veil, as before.
+- *Day inside.* The dust's colour inside was the light round it times the dust's tint, and at day the
+  blue sky in that light made it olive. With the suns high it is now dense ochre (linear 1 : 0.42 :
+  0.11) at the light's brightness times 1.9: a glowing tan-orange murk, the suns dim discs. Dusk and
+  ember (suns within a few degrees of the horizon) are unchanged (measured: dusk 81,32,8 against
+  83,33,9; ember 42,17,6 against 44,18,7; day 137,79,27 against 86,55,30, mean sRGB of the upper frame).
+- *Lead's change after the worker's build:* the worker's ribbons were 1.6 to 4.8 m long and 8 to
+  32 cm wide, and brighter than the dust by 1.3. At day, walking upwind, they crossed the frame and
+  met at the wind's vanishing point: a burst of light rays round the figure. They are now half as long
+  and wider, nearer the dust's own brightness (1.16 to 1.22), more of them darker than the dust, and a
+  ribbon fades sooner as it turns end-on. They read as low streams of sand. The console sweep (six
+  configurations, every phase) was re-run after this and stayed empty.
+- *Cost.* A face closer than 60 m is lost in the dust and is not shaded at all; the bend and the near
+  relief are worked out only for a ray that goes toward a face; while the eye is in one face's soft edge
+  with the other far off (the end of the arrival, the first second inside, the first half of the
+  passing) the shaders take a short path (that edge's ramp, the pocket and the dust beyond it); the dust
+  beyond the far face is skipped while the eye is outside the slab; the ground shader leaves the billows
+  out (it sees a face only low down, below the eye, where it is dark and dissolving into the blown
+  dust). The numbers are below: better than before nearly everywhere, but not 1.0 ms over calm
+  everywhere.
+
+**Third round, 13 Nov 2026 (cost).** A steadier measurement (standing at the dusk crest, storm and
+calm interleaved five times, four camera directions, 1440x900 at DPR 2, WebGPU) showed the second
+round's table missed the worst view: looking straight at a near wall cost about 2.4 ms over calm.
+Switching parts off showed where it went: the billows in the sky (27 dome cells a pixel), the wall's
+shading sitting in the ground shader, and the sand sprites (about 0.5 ms). Three changes:
+
+- The dome field is baked once on the CPU into a 1024x1024 half-float tiling texture (16 cells, four
+  rows a frame from the first frame, finished at once if a storm starts first), and the billows fetch
+  it: one fetch an octave. The wall looks the same (37 to 44 dB against the second round's stills).
+- The ground has its own short version of a face: no bend, no bulges or lean, flat light; it keeps the
+  tongues of dust and the dark base, which are what lie over the sand.
+- The sand sprites' colour is worked out per sprite in the vertex stage.
+
+After (ms over calm; down the route / upwind / across / back): approach 40 s 0.7 / 0.8 / 1.2 / 1.0;
+approach 68 s 1.3 / 0.8 / 1.3 / 1.4; arrival 1.5 s 1.5 / 0.8 / 1.3 / 1.3; arrival 5 s 0.8 / 0.8 /
+1.3 / 0.9; inside 0.3 s 0.7 / 0.8 / 1.3 / 1.0; deep inside 0.6 / 0.7 / 0.8 / 0.8; passing 3 s 1.0 /
+0.8 / 1.2 / 0.9; passing 12 s 1.4 / 1.4 / 1.6 / 1.6; passing 18 s 0.7 / 1.4 / 1.4 / 0.7. Repeats
+vary by 0.2 to 0.5 ms. So the worst is about 1.6 ms, not 2.4, and 1.0 ms everywhere is still not met.
+What is left is the closed-form dust on every pixel (about 0.5 ms) plus the sprites (about 0.5 ms);
+going lower means drawing the storm at half resolution in a pass of its own. Calm frames are
+pixel-identical to the second round on both backends, and the console sweep stayed empty.
+
+**Fourth round, 13 Nov 2026 (cost, the sky at half resolution).** Switching parts off again, with the
+view directions named correctly this time (in the third round's table "back" was the view facing the
+wall and "upwind" the view away from it), showed what was left: the sand sprites cost only 0.1 to
+0.3 ms, the wall's shading on every sky pixel was the dearest part when facing a near wall, and the
+rest was spread thinly through the ground's closed-form dust. Two changes:
+
+- The sky's share of the storm is drawn first into a target half the canvas's size each way
+  (`createStormSky` in `storm.js`), as added light and transmittance from black; the sky shader takes
+  one fetch of it. The sky is the one surface that needs no depth, and the ground, the figure and the
+  sand never read the target, so nothing of theirs can bleed at an edge. `stormApply` takes an
+  optional `trans` for this. `?skyfull=1` keeps the old path in the sky shader, for comparison. The
+  wall shots match the old path at 52 to 67 dB on both backends.
+- From inside the slab with a kilometre or more of it to the far face, the dust blown out beyond
+  that face is skipped (it was hidden anyway; before, only an eye outside the slab skipped it).
+
+After (ms over calm, WebGPU / WebGL2, the worst of four views, then the best): approach 40 s 0.8 /
+0.8, 0.6 / 0.4; approach 68 s 0.8 / 1.0, 0.6 / 0.5; arrival 1.5 s 0.7 / 0.9, 0.3 / 0.5; arrival 5 s
+0.8 / 0.9, 0.4 / 0.5; inside 0.3 s 1.1 / 1.0, 0.6 / 0.8; deep inside 0.9 / 0.7, 0.7 / 0.5; passing 3 s
+1.1 / 1.1, 0.8 / 0.6; passing 12 s 1.4 / 1.3, 0.9 / 0.9; passing 18 s 0.7 / 0.9, 0.4 / 0.6. Repeats
+vary by 0.1 to 0.6 ms. So the worst is about 1.4 ms, looking across the wind for the two seconds or
+so in which the trailing edge crosses the eye; every other state and view is at about 1.0 ms or
+under. On the 600 m route at 2880x1800: 5.5 ms calm, 6.3 ms held inside the storm (WebGPU), 5.3 ms
+calm (WebGL2). Calm frames are pixel-identical to the third round on both backends, and the console
+sweep stayed empty on all six configurations. What is left is the ground's dust (several small
+terms, none dominant) and the sprites; lower still would need the ground's dust in a froxel volume,
+which is not worth its risk for this.
 
 Something happens in the Dust Sea besides your walk: every several minutes a wall of sand comes over
 the upwind horizon, swallows you, passes, and leaves the sand clean. `storm.js` owns it: a small state
@@ -405,8 +503,8 @@ ground, the sky, the figure, the lantern and the thrown sand all use, so they ag
 the wind: a leading face and a trailing face, each with a soft edge (140 m at the front, so it reads as
 a wall; 520 m at the back, so it thins from the upwind side), a billowed top about 560 m up, and low
 dust blown out ahead of the front and left behind it. While a face is far off it bends along its length
-(up to 22% of its distance, at most 1.2 km), so it is not a ruled line; near, it is a plane across the
-wind. Everything is measured along the wind from the visitor, so the timing does not depend on where you
+(up to 22% of its distance, at most 1.2 km), so it is not a ruled line; near, it stands out toward the
+eye in rolling bulges (see the second round, above). Everything is measured along the wind from the visitor, so the timing does not depend on where you
 walk. For each view ray, closed-form integrals give the optical depth through the slab (two clamped
 ramps along a straight line), through the blown dust (an exponential in distance from the face and in
 height), and the lantern's light scattered by the dust along the ray (an atan). Seen from outside, the
@@ -422,7 +520,7 @@ look along the front and it recedes into the haze both ways.
 |---|---|---|
 | approach | 75 | The wall rises on the upwind horizon (its leading face from 9 km to 300 m, along A e^(-t/62.5 s) - B, so it creeps up and then looms, about 60 m/s at the end). The drift along the ground strengthens (to 2.5x), the wind sound rises, the light goes ochre; at day, when the sun is upwind, the wall swallows the sun and its shadow comes over the sand. |
 | arrival | 8 | It crosses the last 300 m and the soft edge passes over: the far dunes go first (the blown dust ahead of it), then fast darkening. |
-| inside | 55 | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, dull ochre at day. The suns are dim glows with a faint disc. Sheets and streaks of sand race past along the wind (16 m round the camera, about 14 to 23 m/s), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. |
+| inside | 55 | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, a glowing ochre at day. The suns are dim glows with a faint disc. Ribbons and sheets of sand race past along the wind (11 m round the camera, about 11 to 24 m/s, densest low), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. |
 | passing | 25 | It thins from the upwind side; light returns from there. Turn downwind and the wall is leaving across the dunes. |
 | after | 60 | Calm. No tracks anywhere. The drift stays stronger (1.5x, easing to normal); the wall sinks and fades into the haze downwind over the last 25 s. |
 
@@ -485,10 +583,40 @@ scar in the trace map). `fps=1` shows the phase, k and the live sprites.
 
   Deep inside costs 0.7 to 0.8 ms a frame (the shaders take a short path once both soft edges are more
   than 30 m off; the sand sprites, the ground's fast sand layer and the lantern's glow are about 0.5 ms
-  of it). Calm is within noise of HEAD. Not on that route: while a face is near (the end of the
-  arrival, the first second of the inside, the passing; about 30 s of a storm) the full path runs, and
-  a 120 m stretch of the route measured 1.8 ms over calm there. The 17.7 ms worst on WebGL2 was one
-  frame; its p99 is 8.1 ms.
+  of it). Calm is within noise of HEAD. The 17.7 ms worst on WebGL2 was one frame; its p99 is 8.1 ms.
+
+  **Second round** (12 Nov, the same route and method, the second round's code): no storm 5.5 / 7.4 /
+  8.8 ms on WebGPU and 5.4 / 7.5 / 8.9 on WebGL2; storm held deep inside 6.5 / 8.2 / 12.1 (16,513
+  frames) and 6.2 / 8.3 / 22.5 (16,519; one frame, p99 8.3). Deep inside now costs 0.8 to 1.0 ms (the
+  larger sand sprites are about 0.2 ms more than the streaks were).
+
+  **The storm at every stage**, second round against the first (HEAD 7bd3d52, served from a copy in the
+  same session). Each storm state held, then at once the same thing with no storm, and the difference of
+  the medians: "route" is 120 m of the route above (heading 48, so the wall upwind is behind the camera
+  until the passing), "facing" is 4 s standing with the camera turned to the face (heading 200, the
+  passing 22). Milliseconds over calm; WebGPU then WebGL2.
+
+  | Storm state | WebGPU route | WebGPU facing | WebGL2 route | WebGL2 facing |
+  |---|---|---|---|---|
+  | approach 40 s (face at 2.4 km) | 1.3 -> 1.0 | 1.5 -> 0.9 | 1.7 -> 1.4 | 1.9 -> 1.1 |
+  | approach 68 s (744 m) | 1.5 -> 1.3 | 1.5 -> 0.9 | 1.9 -> 1.8 | 1.8 -> 1.0 |
+  | arrival 1.5 s (211 m) | 1.5 -> 1.5 | 1.5 -> 0.9 | 2.0 -> 2.0 | 1.8 -> 1.1 |
+  | arrival 5 s (54 m) | 1.6 -> 1.6 | 1.5 -> 0.9 | 2.1 -> 2.0 | 1.9 -> 1.0 |
+  | inside 0.3 s (in the leading edge) | 1.8 -> 1.2 | 0.3 -> 0.0 | 1.9 -> 1.1 | 0.3 -> -0.4 |
+  | inside 25 s (deep) | 0.8 -> 1.0 | -0.5 -> -0.3 | 0.7 -> 0.9 | -0.8 -> -0.6 |
+  | passing 3 s (in the trailing edge) | 1.9 -> 1.2 | 2.1 -> 1.8 | 1.9 -> 1.1 | 2.4 -> 1.7 |
+  | passing 12 s (back face 9 m off) | 2.7 -> 2.0 | 1.9 -> 1.6 | 2.9 -> 1.7 | 2.3 -> 2.0 |
+  | passing 18 s (back face 235 m off) | 1.7 -> 1.6 | 1.0 -> 0.7 | 2.1 -> 2.0 | 1.6 -> 1.0 |
+
+  (The machine was busy for part of the last runs; where a run had 300 ms stalls in it the row uses the
+  same code's previous clean run. Repeat runs of a row agree within about 0.2 ms.) The target was no
+  more than 1.0 ms over calm anywhere: met looking at the face (except the passing) and deep inside,
+  not met on the route through the approach and the arrival (1.3 to 1.6 on WebGPU, 1.8 to 2.0 on
+  WebGL2) or in the passing. Measured with the code switched off piece by piece: on those route views no
+  face is in sight and none of the face's work runs, yet removing the face's code from the shader saves
+  about 0.5 ms (WebGPU); what remains is the presence of that code in the ground shader, not the work it
+  does. Cutting it further means moving the face out of the ground shader (a pass of its own), which
+  this round did not do.
 - Sound, rendered offline (OfflineAudioContext, 20 s after a 4 s settle, no steps), the storm at full
   strength against the calm wind at the same spot: +7.3 dB RMS in a trough (exposure 0.3; its loudest
   second 9.5 dB over the calm RMS), +5.6 dB (+8.0) at exposure 0.6, +3.2 dB (+5.8) on a crest; sample
@@ -497,7 +625,8 @@ scar in the trace map). `fps=1` shows the phase, k and the live sprites.
 
 **Not measured:** any phone (the 390x844 at DPR 3 still is a Mac in a phone-sized window); the sound
 has not been heard by a person; the storm's cost on a slower GPU. The contact sheet is
-`frames/sheet-storm.jpg`.
+`frames/sheet-storm.jpg` (second round: approach late, arrival, arrival looking along the face, inside
+at dusk, inside at day, the passing).
 
 ## Not built yet
 
