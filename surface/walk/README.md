@@ -445,6 +445,28 @@ kilometre; `LEAP.faceDeg` and `LEAP.breakDeg` are the knobs if that is too often
   dust). The numbers are below: better than before nearly everywhere, but not 1.0 ms over calm
   everywhere.
 
+**Third round, 13 Nov 2026 (cost).** A steadier measurement (standing at the dusk crest, storm and
+calm interleaved five times, four camera directions, 1440x900 at DPR 2, WebGPU) showed the second
+round's table missed the worst view: looking straight at a near wall cost about 2.4 ms over calm.
+Switching parts off showed where it went: the billows in the sky (27 dome cells a pixel), the wall's
+shading sitting in the ground shader, and the sand sprites (about 0.5 ms). Three changes:
+
+- The dome field is baked once on the CPU into a 1024x1024 half-float tiling texture (16 cells, four
+  rows a frame from the first frame, finished at once if a storm starts first), and the billows fetch
+  it: one fetch an octave. The wall looks the same (37 to 44 dB against the second round's stills).
+- The ground has its own short version of a face: no bend, no bulges or lean, flat light; it keeps the
+  tongues of dust and the dark base, which are what lie over the sand.
+- The sand sprites' colour is worked out per sprite in the vertex stage.
+
+After (ms over calm; down the route / upwind / across / back): approach 40 s 0.7 / 0.8 / 1.2 / 1.0;
+approach 68 s 1.3 / 0.8 / 1.3 / 1.4; arrival 1.5 s 1.5 / 0.8 / 1.3 / 1.3; arrival 5 s 0.8 / 0.8 /
+1.3 / 0.9; inside 0.3 s 0.7 / 0.8 / 1.3 / 1.0; deep inside 0.6 / 0.7 / 0.8 / 0.8; passing 3 s 1.0 /
+0.8 / 1.2 / 0.9; passing 12 s 1.4 / 1.4 / 1.6 / 1.6; passing 18 s 0.7 / 1.4 / 1.4 / 0.7. Repeats
+vary by 0.2 to 0.5 ms. So the worst is about 1.6 ms, not 2.4, and 1.0 ms everywhere is still not met.
+What is left is the closed-form dust on every pixel (about 0.5 ms) plus the sprites (about 0.5 ms);
+going lower means drawing the storm at half resolution in a pass of its own. Calm frames are
+pixel-identical to the second round on both backends, and the console sweep stayed empty.
+
 Something happens in the Dust Sea besides your walk: every several minutes a wall of sand comes over
 the upwind horizon, swallows you, passes, and leaves the sand clean. `storm.js` owns it: a small state
 machine, the shaders' uniforms, the sand racing past (sprites), and one shading function that the

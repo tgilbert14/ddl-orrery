@@ -42,7 +42,7 @@
 
 import * as THREE from 'three/webgpu';
 import { Fn, If, uniform, vec2, vec3, vec4, float, clamp, smoothstep, max, min, mix, abs, exp, pow, sqrt, atan, dot, length, normalize, select, step,
-  uv, floor, cameraPosition, instancedDynamicBufferAttribute } from 'three/tsl';
+  uv, floor, texture, varying, cameraPosition, instancedDynamicBufferAttribute } from 'three/tsl';
 import { G, DEG } from '../look-test/params.js';
 import { height } from '../look-test/height.js';
 
@@ -120,6 +120,60 @@ SU.front.value.set(-1e5, -1e5 - STORM.depth, STORM.El, STORM.Et);
 
 // ---------------------------------------------------------------- the shader side
 const Fi = (x) => { const c = clamp(x, 0.0, 1.0); return c.mul(c).mul(0.5).add(max(x.sub(1.0), 0.0)); };
+
+// The dome field the billows are built from, baked once into a tiling texture (height, slope x,
+// slope y): the look test's `domes` (a smooth maximum over the nine cells round a point) cost 27 cells
+// a pixel over three octaves, a third of the storm's frame time while the wall fills the view; one
+// fetch an octave costs almost nothing. DOME.cells cells across DOME.N texels, repeating (each octave
+// is rotated against the last, so the repeat does not line up). Baked on the CPU a few rows a frame
+// from the first frame (about 4 s), and finished at once if a storm starts before that.
+const DOME = { N: 1024, cells: 16, rows: 4 };
+const domeData = new Uint16Array(DOME.N * DOME.N * 4);
+const domeTex = new THREE.DataTexture(domeData, DOME.N, DOME.N, THREE.RGBAFormat, THREE.HalfFloatType);
+domeTex.wrapS = domeTex.wrapT = THREE.RepeatWrapping;
+domeTex.minFilter = domeTex.magFilter = THREE.LinearFilter;
+domeTex.generateMipmaps = false;
+let domeRow = 0;
+const domeHash = (ix, iy) => {
+  let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return (h >>> 8) / 16777216;
+};
+// the cells' centres and radii (wrapped), once
+const domeCell = (() => {
+  const C = DOME.cells, a = new Float32Array(C * C * 3);
+  for (let y = 0; y < C; y++) for (let x = 0; x < C; x++) {
+    const o = (y * C + x) * 3;
+    a[o] = (domeHash(x, y) - 0.5) * 0.6; a[o + 1] = (domeHash(x + 57, y) - 0.5) * 0.6; a[o + 2] = domeHash(x, y + 113) * 0.25 + 0.75;
+  }
+  return a;
+})();
+function bakeDomes(rows) {
+  if (domeRow >= DOME.N) return;
+  const { N, cells: C } = DOME, cr = STORM.crease, half = THREE.DataUtils.toHalfFloat;
+  const end = Math.min(N, domeRow + rows);
+  for (let ty = domeRow; ty < end; ty++) {
+    const py = ((ty + 0.5) / N) * C, iy = Math.floor(py);
+    for (let tx = 0; tx < N; tx++) {
+      const px = ((tx + 0.5) / N) * C, ix = Math.floor(px);
+      let best = 0, gx = 0, gy = 0;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        const o = ((((iy + j) % C) + C) % C * C + (((ix + i) % C) + C) % C) * 3;
+        const dx = px - (ix + i + 0.5 + domeCell[o]), dy = py - (iy + j + 0.5 + domeCell[o + 1]), r = domeCell[o + 2];
+        const h = Math.sqrt(Math.max(r * r - dx * dx - dy * dy, 0));
+        const m = Math.min(1, Math.max(0, ((h - best) / cr) * 0.5 + 0.5)), hh = Math.max(h, 0.2);
+        gx += (-dx / hh - gx) * m; gy += (-dy / hh - gy) * m;
+        best = best + (h - best) * m + m * (1 - m) * cr;
+      }
+      const q = (ty * N + tx) * 4;
+      domeData[q] = half(best); domeData[q + 1] = half(gx); domeData[q + 2] = half(gy); domeData[q + 3] = 0;
+    }
+  }
+  domeRow = end;
+  if (domeRow >= N) domeTex.needsUpdate = true;
+}
+const domesT = (p) => texture(domeTex, p.div(DOME.cells)).level(0).xyz;
 
 // cauliflower billows on the face (s along it, Y up, both metres): vec4(B 0..1, slope s, slope Y,
 // the two largest octaves alone). As the look test's haboob, three octaves.
@@ -220,11 +274,13 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
         // far off, each face bends along its length: find where the ray meets the straight face, and
         // move the face there by a slow noise
         const bendAt = (s, o) => face.vnoise(vec2(s.div(2600.0), o)).mul(0.7).add(face.vnoise(vec2(s.div(800.0), o + 4.0)).mul(0.3));
-        If(vL0.and(SU.shape.x.greaterThan(0.0)), () => {
+        // (the ground does without the bend: far off, where a face bends, the sand beyond it is a few
+        // rows of pixels under the horizon, in the blown dust)
+        if (!face.ground) If(vL0.and(SU.shape.x.greaterThan(0.0)), () => {
           const tl = clamp(lead.sub(u0).div(min(ru, -1e-3)), 0.0, 30000.0);
           lead.addAssign(bendAt(s0.add(rs.mul(tl)), 1.3).mul(SU.shape.x));
         });
-        If(vT0.and(SU.shape.y.greaterThan(0.0)), () => {
+        if (!face.ground) If(vT0.and(SU.shape.y.greaterThan(0.0)), () => {
           const tt = clamp(trail.sub(u0).div(max(ru, 1e-3)), 0.0, 30000.0);
           trail.addAssign(bendAt(s0.add(rs.mul(tt)), 7.9).mul(SU.shape.y));
         });
@@ -244,6 +300,13 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
           const rel = (ts, full) => {
             const tc = min(ts, L);
             const S = s0.add(rs.mul(tc)).toVar(), Y = y0.add(rd.y.mul(tc)).toVar();
+            if (face.ground) {
+              // the ground sees a face only low down: of the relief it keeps the tongues of dust (what
+              // lies over the sand), not the bulges or the lean, so the ground shader stays light
+              const tg = smoothstep(-0.35, 0.75, face.vnoise(vec2(S.div(85.0).add(t.mul(0.05)), t.mul(0.07).add(5.0))));
+              const tgl = tg.mul(exp(max(Y, 0.0).negate().div(STORM.tongueH))).mul(nr).toVar();
+              return vec4(tgl.mul(STORM.tongue), 0.0, 0.0, tgl);
+            }
 
             const a = face.vnoiseD(vec2(S.add(t.mul(2.0)).div(STORM.relF[0]), Y.sub(t.mul(1.6)).div(STORM.relF[0] * 0.7).add(3.7))).toVar();
             const b = full ? face.vnoiseD(vec2(S.sub(t.mul(1.3)).div(STORM.relF[1]).add(9.1), Y.sub(t.mul(3.0)).div(STORM.relF[1] * 0.7).add(1.9))).toVar() : vec3(0.0);
@@ -278,7 +341,28 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
     const Ht = H.toVar();
     const cWall = vec3(0.0).toVar();
     const edgeA = float(1.0).toVar();
-    if (face) {
+    if (face && face.ground) {
+      // the ground's share of a face: only its base is ever seen over the sand (dark, red, dissolving
+      // into the blown dust), so no billows, no top edge, no relief: flat light on a flat face
+      If(seen.and(SU.geo.y.greaterThan(0.0)).and(rd.y.greaterThan(-0.15)).and(ts.lessThan(L)).and(ts.greaterThan(STORM.faceMin)), () => {
+        const nS = float(1.0).sub(smoothstep(STORM.nearR * 0.35, STORM.nearR * 0.8, ts));
+        const dens = smoothstep(0.0, H.mul(0.7), Ye).mul(0.65).add(0.35).toVar();
+        const lit = (Ld, C) => {
+          const z = dot(Ld.xz, W).mul(fsg).toVar();
+          const back = max(z.negate(), 0.0).toVar();
+          const wr = back.mul(0.65).add(STORM.wrap);
+          return C.mul(max(z.add(wr).div(wr.add(1.0)), 0.0).mul(float(1.0).sub(back.mul(0.55))).mul(0.75).mul(dens.mul(0.5).add(0.5)));
+        };
+        const red = mix(vec3(0.7, 0.46, 0.32), vec3(1.0), smoothstep(0.0, 260.0, Ye));
+        cWall.assign(SU.wallBase.mul(red).mul(dens).mul(0.57).add(lit(SU.sun1, SU.wallSun1)).add(lit(SU.sun2, SU.wallSun2)));
+        const near = float(1.0).sub(smoothstep(300.0, 3000.0, ts));
+        const up = smoothstep(0.0, H.mul(0.95), Ye).toVar();
+        cWall.assign(cWall.mul(mix(vec3(1.0), mix(vec3(0.3, 0.2, 0.13), vec3(1.0, 0.97, 0.92), mix(up.mul(up), up, nS.mul(0.6))), near)));
+        cWall.addAssign(SU.glowCol.mul(exp(max(Ye, 0.0).negate().div(110.0))).mul(nS.mul(0.25 * STORM.glowNear).add(1.0).mul(0.8)));
+        cWall.assign(mix(cWall, SU.horizon, float(1.0).sub(exp(ts.div(-7000.0)))));
+        cWall.assign(mix(cWall, SU.hazeCol, float(1.0).sub(smoothstep(-10.0, 150.0, Ye)).mul(smoothstep(250.0, 1500.0, ts))));
+      });
+    } else if (face) {
       // (a face within faceMin metres is lost in the dust round the eye: below, cS is the dust's own
       // colour there, so nothing of it is worked out)
       If(seen.and(SU.geo.y.greaterThan(0.0)).and(Ye.lessThan(H.mul(1.5))).and(rd.y.greaterThan(-0.15)).and(ts.lessThan(L)).and(ts.greaterThan(STORM.faceMin)), () => {
@@ -294,7 +378,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
         const SD = s0.add(rs.mul(tD)).add(t.mul(1.5)), YD = y0.add(rd.y.mul(tD)).add(t.mul(2.5));
         // (the ground shader sees a face only low down, below the eye, where it is dark and dissolving
         // into the blown dust: it leaves the billows out, which keeps the ground shader light)
-        const B = (face.ground ? vec4(0.45, 0.0, 0.0, 0.45) : billows(face.domes, S, Yb.mul(STORM.bFlat), SD, YD.mul(STORM.bFlat), float(1.0).sub(smoothstep(STORM.nearR * 0.35, STORM.nearR * 0.6, ts)), nS)).toVar();
+        const B = (face.ground ? vec4(0.45, 0.0, 0.0, 0.45) : billows(domesT, S, Yb.mul(STORM.bFlat), SD, YD.mul(STORM.bFlat), float(1.0).sub(smoothstep(STORM.nearR * 0.35, STORM.nearR * 0.6, ts)), nS)).toVar();
         B.z.assign(B.z.mul(STORM.bFlat));
         // signed metres inside the top edge; the billows push it in and out
         const e = Ht.sub(Ye).add(B.w.sub(0.4).mul(STORM.bulge)).toVar();
@@ -484,11 +568,13 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
 
   function start({ scale } = {}) {
     if (scale) st.scale = scale;
+    bakeDomes(DOME.N);
     st.phase = 'approach'; st.t = 0; st.next = null; st.cleared = 0;
   }
   function skipTo(phase) {
     if (phase === 'none') { st.phase = 'none'; st.t = 0; st.ended = true; schedule(false); return; }
     if (!STORM.phases.includes(phase)) return;
+    bakeDomes(DOME.N);
     st.phase = phase; st.t = 0; st.next = null;
   }
 
@@ -496,6 +582,7 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
   function update(dt) {
     const ev = {};
     st.clock += dt;
+    if (!off) bakeDomes(DOME.rows);
     if (st.phase === 'none') {
       if (st.next !== null && st.clock >= st.next) start();
     } else if (!st.hold) {
@@ -705,15 +792,15 @@ export function createStormSand({ U, shade, scene, storm, reduced = false }) {
     return a.mul(D.z);
   })();
   const { uLamp, uLampCol } = shade;
-  mat.colorNode = Fn(() => {
+  mat.colorNode = varying(Fn(() => {
     // the dust's own light, brighter in the sand (it catches the light the dust scatters), and the
-    // lantern's light on the sand near it
+    // lantern's light on the sand near it (one colour a sprite: worked out in the vertex stage)
     // (some ribbons denser than the dust round them, so darker: sand, not light)
     const base = SU.medIn.mul(mix(float(SAND.dark), mix(float(SAND.bright[0]), float(SAND.bright[1]), sheet), smoothstep(0.45, 0.65, D.w)));
     const dv = uLamp.xyz.sub(P).toVar();
     const lamp = uLampCol.mul(uLamp.w).div(dot(dv, dv).add(0.3)).mul(mix(float(0.22), float(0.18), sheet));
     return finish(base.add(lamp).add(U.uAmbGround.mul(0.2)));
-  })();
+  })());
   const sprite = new THREE.Sprite(mat);
   sprite.count = N;
   sprite.frustumCulled = false;
