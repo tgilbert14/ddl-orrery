@@ -165,6 +165,8 @@ async function buildGraphics() {
   const trace = traceMod.createTrace(renderer, pour);
   const uCam = clip.createClipUniform();
   const values = { ...timeNow, uGroundY: ws.ground };
+  // the storm over the sky, drawn at half resolution (storm.js); ?skyfull=1 keeps it in the sky shader
+  const stormSky = stormMod && q.get('skyfull') !== '1' ? stormMod.createStormSky({ renderer, lamp: figShade ? { pos: figShade.uLamp, col: figShade.uLampCol } : null }) : null;
   const mats = createTslMaterials(values, {
     shadows: 'map', normal: 'analytic', ripples: true,
     walk: {
@@ -174,6 +176,7 @@ async function buildGraphics() {
       air: q.get('air') === '0' ? null : air.airHook,
       ...(groundFig ? { figure: groundFig.groundHook } : {}),
       ...(stormMod ? { storm: (a) => stormMod.stormApply(a.col, { ...a, lamp: figShade ? { pos: figShade.uLamp, col: figShade.uLampCol } : null }) } : {}),
+      ...(stormSky ? { stormSky: stormSky.hook } : {}),
     },
   }, rtA.texture);
 
@@ -197,7 +200,7 @@ async function buildGraphics() {
     if (isGPU) await renderer.backend.device.queue.onSubmittedWorkDone();
     else gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
   };
-  const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, pour, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod,
+  const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, pour, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod, stormSky,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
   if (pilMod) {
     const fog = stormMod ? stormMod.stormFog : null;
@@ -499,6 +502,7 @@ function crossFadeCut() {
   if (!prevPose.p) return;
   const p = cam.position.clone(), qn = cam.quaternion.clone();
   cam.position.copy(prevPose.p); cam.quaternion.copy(prevPose.q); cam.updateMatrixWorld(true);
+  G.stormSky?.render(cam);
   G.renderer.render(G.scene, cam);
   if (!fadeEl) {
     fadeEl = document.createElement('canvas');
@@ -588,6 +592,7 @@ function tick(dt) {
   G.traceMod.TRACE.healMul = storm && storm.active ? storm.erase : 1;
   const traceDid = G.trace.update(dt, tc[0], tc[1], !G.fig);
   G.mats.set('uTime', simTime);
+  G.stormSky?.render(G.camera);
   G.renderer.render(G.scene, G.camera);
   try {
     const wnd = walker.wind(simTime);
@@ -688,6 +693,7 @@ async function startGraphics() {
   G.trace.update(0, ws.x, ws.z, false, true);   // compiles the trace pass
   G.shadows.warm();                              // compiles the sliced bake
   G.pour?.warm();                                // compiles the pour (third person)
+  G.stormSky?.render(G.camera, true);            // compiles the storm's sky pass
   G.renderer.render(G.scene, G.camera);
   await G.drain();
   if (G.fig && !testMode) { hintEl.hidden = true; await figureWalk(); }
@@ -776,7 +782,7 @@ API.step = async (n = 1, { dt = 1 / 60, drain = true, every = 0 } = {}) => {
   return out;
 };
 // render the current state again (after a pose or a time change) and wait for the GPU
-API.render = async () => { placeCamera(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); G.renderer.render(G.scene, G.camera); await G.drain(); };
+API.render = async () => { placeCamera(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); G.stormSky?.render(G.camera); G.renderer.render(G.scene, G.camera); await G.drain(); };
 API.loseDevice = () => {
   if (!G) return false;
   if (G.isGPU) { const d = G.renderer.backend.device; onDeviceLost({ api: 'WebGPU', reason: 'test' }); try { d.destroy(); } catch { /* gone */ } }

@@ -42,7 +42,7 @@
 
 import * as THREE from 'three/webgpu';
 import { Fn, If, uniform, vec2, vec3, vec4, float, clamp, smoothstep, max, min, mix, abs, exp, pow, sqrt, atan, dot, length, normalize, select, step,
-  uv, floor, texture, varying, cameraPosition, instancedDynamicBufferAttribute } from 'three/tsl';
+  uv, floor, texture, varying, cameraPosition, instancedDynamicBufferAttribute, positionLocal, screenUV, fwidth } from 'three/tsl';
 import { G, DEG } from '../look-test/params.js';
 import { height } from '../look-test/height.js';
 
@@ -203,7 +203,10 @@ function billows(domes, S, Y, SD, YD, w3, nS) {
 // at dist. face: { vnoise, domes, px } for the ground and the sky (the face is shaded where the ray
 // enters it); without it the dust is coloured as from inside (the figure, sand sprites: always near).
 // lamp: { pos: vec4 (xyz, intensity), col: vec3 } for the lantern's glow in the dust.
-export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
+// trans (optional, a float var starting at 1): multiplied by what is left of `col` after each layer of
+// dust, so a caller that starts from black gets the storm as (added light, transmittance).
+export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans = null }) {
+  const blend = (c, a) => { if (trans) { const av = a.toVar(); col.assign(mix(col, c, av)); trans.mulAssign(float(1.0).sub(av)); } else col.assign(mix(col, c, a)); };
   If(SU.on.greaterThan(0.5), () => {
     const L0 = min(dist, 20000.0).toVar();
     const sig0 = SU.geo.z, DC0 = SU.geo.w, kc0 = SU.shape.w;
@@ -218,7 +221,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
     If(SU.mode.x.greaterThan(0.5), () => {
       const Lb = min(L0, DC0);
       const tau = L0.sub(Lb.sub(Lb.mul(Lb).div(DC0.mul(2.0)))).mul(sig0);
-      col.assign(mix(col, cIn, float(1.0).sub(exp(tau.negate()))));
+      blend(cIn, float(1.0).sub(exp(tau.negate())));
     }).ElseIf(abs(SU.mode.w).greaterThan(0.5), () => {
       // in one face's soft edge, the other face far off (the end of the arrival and the first second
       // inside: the leading edge, mode.w +1; the first half of the passing: the trailing edge, -1).
@@ -238,7 +241,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
       const Lb = min(Lm, DC0);
       const tau = max(I.sub(kc0.mul(Lb.sub(Lb.mul(Lb).div(DC0.mul(2.0))))), 0.0).mul(sig0);
       const aS = float(1.0).sub(exp(tau.negate())).mul(SU.geo.y).toVar();
-      col.assign(mix(col, cIn, aS));
+      blend(cIn, aS);
       // the dust blown out beyond that face, for a ray leaving through it (seen through the slab)
       If(sru.greaterThan(1e-4), () => {
         const tc = c.sub(u0).div(ru).toVar();
@@ -250,7 +253,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
         const g = select(abs(bl).lessThan(1e-3), len.mul(bl.mul(0.5).add(1.0)), exp(min(bl, 8.0)).sub(1.0).div(select(abs(b).lessThan(1e-9), float(1e-9), b)));
         const tauH = select(sg.greaterThan(0.0), SU.haze.x, SU.haze.z).mul(exp(e0)).mul(max(g, 0.0)).mul(float(1.0).sub(aS));
         const cH = SU.hazeCol.add(SU.sunIn1.mul(pow(max(dot(rd, SU.sun1), 0.0), 5.0).mul(1.5))).add(SU.sunIn2.mul(pow(max(dot(rd, SU.sun2), 0.0), 5.0).mul(1.5)));
-        col.assign(mix(col, cH, float(1.0).sub(exp(tauH.negate()))));
+        blend(cH, float(1.0).sub(exp(tauH.negate())));
       });
     }).Else(() => {
     const W = vec2(WX, WZ), Pp = vec2(-WZ, WX);
@@ -452,7 +455,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
     const Lb = min(Lm, DC);
     const tau = max(Il.add(It).sub(Lm).sub(kc.mul(Lb.sub(Lb.mul(Lb).div(DC.mul(2.0))))), 0.0).mul(sig).toVar();
     const aS = float(1.0).sub(exp(tau.negate())).mul(mix(edgeA, float(1.0), kc)).mul(SU.geo.y).toVar();
-    col.assign(mix(col, cS, aS));
+    blend(cS, aS);
 
     // the blown dust ahead of the leading face and behind the trailing one (exponential in distance
     // from the face and in height above the visitor's ground; closed-form along the ray)
@@ -483,7 +486,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null }) {
       tauH.addAssign(hz(SU.haze.z, SU.haze.w, trail, -1.0).mul(select(u0.lessThan(trail), float(1.0), float(1.0).sub(aS))));
     });
     const cH = SU.hazeCol.add(SU.sunIn1.mul(pow(max(dot(rd, SU.sun1), 0.0), 5.0).mul(1.5))).add(SU.sunIn2.mul(pow(max(dot(rd, SU.sun2), 0.0), 5.0).mul(1.5)));
-    col.assign(mix(col, cH, float(1.0).sub(exp(tauH.negate()))));
+    blend(cH, float(1.0).sub(exp(tauH.negate())));
     });
     const L = L0, sig = sig0, DC = DC0, kc = kc0;
 
@@ -653,8 +656,9 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     const nearL = st.lead - cu > STORM.El * 0.15 + 5, nearT = cu - st.trail > STORM.Et * 0.15 + 5;
     const farL = st.lead - cu > STORM.El + 30, farT = cu - st.trail > STORM.Et + 30;
     SU.mode.value.w = SU.mode.value.x ? 0 : nearL && farT ? 1 : nearT && farL ? -1 : 0;
-    SU.mode.value.y = st.lead < cu && cu - st.trail > 1000 ? 1 : 0;
-    SU.mode.value.z = st.trail > cu && st.lead - cu > 1000 ? 1 : 0;
+    // (also from inside the slab: a kilometre of it hides the dust blown out beyond the far face)
+    SU.mode.value.y = cu - st.trail > 1000 ? 1 : 0;
+    SU.mode.value.z = st.lead - cu > 1000 ? 1 : 0;
     SU.haze.value.set(STORM.hazeLead, STORM.lamLead, STORM.hazeTrail * (1 - st.after * 0.3), STORM.lamTrail);
     // colours, from the light that is around (the clear-air values of this time of day)
     const s1 = base.sun1Col, s2 = base.sun2Col, d1 = base.sun1Dir, d2 = base.sun2Dir;
@@ -927,4 +931,54 @@ export function stormFog(col, P, lamp = null) {
   const toP = P.sub(cameraPosition).toVar();
   const d = max(length(toP), 1e-3).toVar();
   return stormApply(col, { ro: cameraPosition, rd: toP.div(d), dist: d, lamp });
+}
+
+// ---------------------------------------------------------------- the sky's share, at half resolution
+// The sky is the one surface whose storm needs no depth (every ray runs to infinity), and facing a
+// near wall it was the dearest part of the storm (the billows, the relief, the top edge on every sky
+// pixel). So it is drawn first into a target half the canvas's size each way, as (added light,
+// transmittance) from black, and the sky shader takes one bilinear fetch of it at its own pixel:
+// col * transmittance + light. Dust has no detail finer than two pixels, and the ground, the figure and
+// the sand never read the target, so no edge of theirs can bleed.
+// hook: tsl-material.js opts.walk.stormSky({ col, face }); render(camera): before each scene render.
+export function createStormSky({ renderer, lamp = null }) {
+  const rt = new THREE.RenderTarget(4, 4, { depthBuffer: false, generateMipmaps: false, type: THREE.HalfFloatType });
+  const uEye = uniform(new THREE.Vector3()), uF = uniform(new THREE.Vector3()), uR = uniform(new THREE.Vector3()), uUp = uniform(new THREE.Vector3());
+  const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const size = new THREE.Vector2();
+  let quad = null;
+  function hook({ col, face }) {
+    if (!quad) {
+      const mat = new THREE.MeshBasicNodeMaterial({ depthWrite: false, depthTest: false });
+      mat.vertexNode = vec4(positionLocal.xy, 0.0, 1.0);
+      mat.fragmentNode = Fn(() => {
+        const ndc = uv().mul(2.0).sub(1.0);
+        const rd = normalize(uF.add(uR.mul(ndc.x)).add(uUp.mul(ndc.y))).toVar();
+        const c = vec3(0.0).toVar(), tr = float(1.0).toVar();
+        stormApply(c, { ro: uEye, rd, dist: float(1e9), face: { ...face, px: length(fwidth(rd)).toVar() }, lamp, trans: tr });
+        return vec4(c, tr);
+      })();
+      quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+      quad.frustumCulled = false;
+      scene.add(quad);
+    }
+    If(SU.on.greaterThan(0.5), () => {
+      const s = texture(rt.texture, screenUV);
+      col.assign(col.mul(s.a).add(s.rgb));
+    });
+  }
+  function render(camera, force = false) {
+    if (!quad || (SU.on.value < 0.5 && !force)) return;
+    renderer.getDrawingBufferSize(size);
+    const w = Math.max(2, Math.ceil(size.x / 2)), h = Math.max(2, Math.ceil(size.y / 2));
+    if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+    camera.updateMatrixWorld();
+    const e = camera.matrixWorld.elements, pe = camera.projectionMatrix.elements, tx = 1 / pe[0], ty = 1 / pe[5];
+    uEye.value.set(e[12], e[13], e[14]);
+    uF.value.set(-e[8], -e[9], -e[10]);
+    uR.value.set(e[0] * tx, e[1] * tx, e[2] * tx);
+    uUp.value.set(e[4] * ty, e[5] * ty, e[6] * ty);
+    renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
+  }
+  return { hook, render, rt };
 }

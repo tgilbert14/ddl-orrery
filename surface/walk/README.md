@@ -467,6 +467,33 @@ What is left is the closed-form dust on every pixel (about 0.5 ms) plus the spri
 going lower means drawing the storm at half resolution in a pass of its own. Calm frames are
 pixel-identical to the second round on both backends, and the console sweep stayed empty.
 
+**Fourth round, 13 Nov 2026 (cost, the sky at half resolution).** Switching parts off again, with the
+view directions named correctly this time (in the third round's table "back" was the view facing the
+wall and "upwind" the view away from it), showed what was left: the sand sprites cost only 0.1 to
+0.3 ms, the wall's shading on every sky pixel was the dearest part when facing a near wall, and the
+rest was spread thinly through the ground's closed-form dust. Two changes:
+
+- The sky's share of the storm is drawn first into a target half the canvas's size each way
+  (`createStormSky` in `storm.js`), as added light and transmittance from black; the sky shader takes
+  one fetch of it. The sky is the one surface that needs no depth, and the ground, the figure and the
+  sand never read the target, so nothing of theirs can bleed at an edge. `stormApply` takes an
+  optional `trans` for this. `?skyfull=1` keeps the old path in the sky shader, for comparison. The
+  wall shots match the old path at 52 to 67 dB on both backends.
+- From inside the slab with a kilometre or more of it to the far face, the dust blown out beyond
+  that face is skipped (it was hidden anyway; before, only an eye outside the slab skipped it).
+
+After (ms over calm, WebGPU / WebGL2, the worst of four views, then the best): approach 40 s 0.8 /
+0.8, 0.6 / 0.4; approach 68 s 0.8 / 1.0, 0.6 / 0.5; arrival 1.5 s 0.7 / 0.9, 0.3 / 0.5; arrival 5 s
+0.8 / 0.9, 0.4 / 0.5; inside 0.3 s 1.1 / 1.0, 0.6 / 0.8; deep inside 0.9 / 0.7, 0.7 / 0.5; passing 3 s
+1.1 / 1.1, 0.8 / 0.6; passing 12 s 1.4 / 1.3, 0.9 / 0.9; passing 18 s 0.7 / 0.9, 0.4 / 0.6. Repeats
+vary by 0.1 to 0.6 ms. So the worst is about 1.4 ms, looking across the wind for the two seconds or
+so in which the trailing edge crosses the eye; every other state and view is at about 1.0 ms or
+under. On the 600 m route at 2880x1800: 5.5 ms calm, 6.3 ms held inside the storm (WebGPU), 5.3 ms
+calm (WebGL2). Calm frames are pixel-identical to the third round on both backends, and the console
+sweep stayed empty on all six configurations. What is left is the ground's dust (several small
+terms, none dominant) and the sprites; lower still would need the ground's dust in a froxel volume,
+which is not worth its risk for this.
+
 Something happens in the Dust Sea besides your walk: every several minutes a wall of sand comes over
 the upwind horizon, swallows you, passes, and leaves the sand clean. `storm.js` owns it: a small state
 machine, the shaders' uniforms, the sand racing past (sprites), and one shading function that the
