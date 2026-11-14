@@ -204,7 +204,7 @@ async function buildGraphics() {
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
   if (pilMod) {
     const fog = stormMod ? stormMod.stormFog : null;
-    g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced, fog });
+    g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced, fog, eyes: q.has('eyes') ? Math.max(0, +q.get('eyes') || 0) : 0.22 });
     g.puffs = (await import('./puffs.js')).createPuffs({ U: mats.uniforms, shade: figShade, scene, fog });
     g.follow = (await import('./follow.js')).createFollow({ reduced });
     g.follow.setYaw(figYaw);

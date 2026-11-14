@@ -57,9 +57,9 @@ run, and a README section saying what was measured and what was not.
   analytic slab; the dunes are a formula). It keeps the frame near 5.5 ms at 2880x1800.
 - **A branch on a uniform for anything that is not always there**, so the calm frame is untouched.
   Check it: calm stills must be pixel-identical before and after a change.
-- **The figure has no face, no visible limbs or legs; no text in the canvas; no other people or
-  creatures.** (The owner has asked about glowing eyes in the hood; see the handover for the answer
-  once decided.)
+- **The figure has no face except two dim amber eyes in the hood, no visible limbs or legs; no text
+  in the canvas; no other people or creatures.** (The owner chose the dim eyes on 13 Nov 2026 from a
+  sheet of three; `?eyes=0` removes them.)
 - **Reduced motion** is a designed state: cuts with a short fade, nothing races, nothing shakes.
 - **No jump button.** A leap only happens where the ground throws you (a brink).
 - **Fixed world lattice for the ground mesh** (the clipmap), so vertices never slide over the ground.

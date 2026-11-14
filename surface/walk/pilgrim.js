@@ -77,7 +77,7 @@ function mergeC(geos) {
 }
 
 // parts: 0 cloak, 1 mantle, 2 hood, 3 right sleeve and hand, 4 left sleeve, 9 rigid
-function buildBody() {
+function buildBody(eyes = false) {
   const Z = [0, 0];
   const parts = [];
   const cloakSpec = (keys, yS, opts) => {
@@ -104,6 +104,10 @@ function buildBody() {
   parts.push(sleeve([V3(0.05, 1.37, 0.17), V3(0.13, 1.17, 0.26), V3(0.27, 1.17, 0.30)], 0.062, 0.085, 3));
   parts.push(tag(blob([0.35, 1.17, 0.315], [0.045, 0.05, 0.04], C.dark), 3, () => [0, 0, 1.2]));
   parts.push(sleeve([V3(0.03, 1.37, -0.17), V3(-0.04, 1.1, -0.24), V3(-0.1, 0.87, -0.25)], 0.06, 0.1, 4));
+  // the eyes: two small dim amber lights deep in the hood's hollow, carried with the hood (their
+  // colour is a marker the shader turns into light). Nothing else of a face. ?eyes=0 leaves them out,
+  // ?eyes=N sets their strength (0.22 by default: the lantern's colour, much quieter than it)
+  if (eyes) for (const sz of [-1, 1]) parts.push(tag(blob([0.101, 1.632, sz * 0.034], [0.005, 0.0075, 0.0115], [9, 9, 9], { nu: 12, nv: 8 }), 2, () => [0, 0, 0]));
   return mergeC(parts);
 }
 
@@ -145,7 +149,7 @@ function terrainLitFor(U) {
 
 // fog (optional, storm.js stormFog): the storm front's dust over the figure's pixels, applied before
 // the tone map; without it the shaders are as before
-export function createPilgrim({ U, shade, scene, reduced = false, fog = null }) {
+export function createPilgrim({ U, shade, scene, reduced = false, fog = null, eyes = 0 }) {
   const terrainLit = terrainLitFor(U);
   const aces = (x) => clamp(x.mul(x.mul(2.51).add(0.03)).div(x.mul(x.mul(2.43).add(0.59)).add(0.14)), 0.0, 1.0);
   const srgb = (c) => mix(c.mul(12.92), pow(c, vec3(1.0 / 2.4)).mul(1.055).sub(0.055), step(vec3(0.0031308), c));
@@ -355,6 +359,7 @@ export function createPilgrim({ U, shade, scene, reduced = false, fog = null }) 
     const d2 = dot(dv, dv).toVar();
     const l = dv.div(sqrt(d2));
     col.addAssign(alb.mul(uLampCol).mul(uLamp.w).mul(max(dot(n, l).add(0.25), 0.0).div(1.25)).div(d2.add(0.02)));
+    if (eyes) col.assign(mix(col, vec3(1.0, 0.7, 0.36).mul(eyes), step(5.0, attribute('fcol', 'vec3').x)));
     if (fog) fog(col, P, { pos: uLamp, col: uLampCol });
     return vec4(finish(col), 1.0);
   })();
@@ -388,7 +393,7 @@ export function createPilgrim({ U, shade, scene, reduced = false, fog = null }) 
     glowMat.opacityNode = float(1.0);
   }
 
-  const body = new THREE.Mesh(buildBody(), mat);
+  const body = new THREE.Mesh(buildBody(eyes > 0), mat);
   const staff = new THREE.Mesh(buildStaff(), rigid);
   const lant = buildLantern();
   const lampG = new THREE.Group();
