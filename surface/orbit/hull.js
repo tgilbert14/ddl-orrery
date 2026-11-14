@@ -11,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, positionLocal, normalLocal, abs, floor, fract, min, max, mix, smoothstep, select,
-  fwidth, mx_cell_noise_float, mx_fractal_noise_float, uv, length, exp, step, attribute, clamp, vertexStage,
+  fwidth, mx_cell_noise_float, mx_fractal_noise_float, uv, length, exp, step, attribute, clamp, vertexStage, uniform,
 } from 'three/tsl';
 import { rng } from './light.js';
 
@@ -575,6 +575,14 @@ function buildParts(seed) {
   }
   const chunks = [merge([parts[0]]), ...[...bins.keys()].sort((a, b) => a - b).map((k) => merge(bins.get(k)))];
   chunks.paint = merge(paint.map(([g, m]) => [g, m, null]));
+  // every part's world box (the loft aside): the flown page builds its collision field from these
+  const bb = new THREE.Box3(), boxes = new Float32Array((parts.length - 1) * 6);
+  parts.slice(1).forEach(([g, m], i) => {
+    if (!g.boundingBox) g.computeBoundingBox();
+    bb.copy(g.boundingBox); if (m) bb.applyMatrix4(m);
+    boxes.set([bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z], i * 6);
+  });
+  chunks.boxes = boxes;
   return chunks;
 }
 
@@ -690,13 +698,35 @@ export function createHull({ seed = 4417 } = {}) {
   group.add(glow);
   group.userData.window = win.position.clone();
 
-  // ---- eleven lamp housings along the keel, dark (one for each world not yet surveyed)
-  const lampMat = new THREE.MeshStandardNodeMaterial({ color: 0x1a1612, roughness: 0.3, metalness: 0.6 });
+  // ---- eleven lamp housings along the keel, dark (one for each world not yet surveyed). The flown
+  // page lights one in its world's colour when that world is surveyed: lamps[i].light([r, g, b])
   const lampGeo = new THREE.CylinderGeometry(6, 8, 12, 12);
+  const lamps = [];
   for (let i = 0; i < 11; i++) {
+    const lampMat = new THREE.MeshStandardNodeMaterial({ color: 0x1a1612, roughness: 0.3, metalness: 0.6 });
     const lamp = new THREE.Mesh(lampGeo, lampMat);
     lamp.position.set(-1450 + i * 170, -476, 0);
     group.add(lamp);
+    const lm = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const lcol = uniform(new THREE.Color(0, 0, 0));
+    const ld = length(uv().sub(0.5)).mul(2.0);
+    lm.colorNode = lcol.mul(exp(ld.mul(ld).mul(-7.0)).mul(1.2).add(exp(ld.mul(-4.0)).mul(0.3))).mul(float(1.0).sub(step(1.0, ld)));
+    lm.opacityNode = float(1.0);
+    const glow = new THREE.Sprite(lm);
+    glow.scale.set(90, 90, 1);
+    glow.position.set(-1450 + i * 170, -486, 0);
+    glow.visible = false;
+    group.add(glow);
+    lamps.push({
+      get lit() { return glow.visible; },
+      light(c) {
+        lampMat.emissive = new THREE.Color().setRGB(c[0] * 6, c[1] * 6, c[2] * 6);
+        lcol.value.setRGB(c[0], c[1], c[2]);
+        glow.visible = true;
+      },
+    });
   }
+  group.userData.lamps = lamps;
+  group.userData.boxes = chunks.boxes;
   return group;
 }

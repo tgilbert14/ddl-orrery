@@ -8,7 +8,7 @@ import {
   Fn, float, vec3, positionLocal, positionWorld, normalWorld, cameraPosition, normalize, dot, cross, exp, abs,
   clamp, smoothstep, mix, pow, max, min, sin, cos, atan, asin, acos, floor, fract, length, round, fwidth,
   mx_fractal_noise_float, mx_noise_float, mx_cell_noise_float, mx_worley_noise_float,
-  instancedBufferAttribute, uv,
+  instancedBufferAttribute, uv, uniform,
 } from 'three/tsl';
 import { SUN1, SUN2, lin, norm } from './light.js';
 
@@ -193,13 +193,13 @@ export const WORLDS = [
   { id: 'beacons', accent: [255, 122, 60], R: 450, atm: 0.7, H: 0.03 },
 ];
 
-function surfaceMaterial(w, centre) {
+function surfaceMaterial(w, uC) {
   const A = v3(lin(w.accent));
   const m = new THREE.MeshBasicNodeMaterial({ fog: false });
   m.colorNode = Fn(() => {
     const p = normalize(positionLocal);
     const pat = PATTERNS[w.id](p, A, w);
-    const N = normalize(positionWorld.sub(v3(centre)));
+    const N = normalize(positionWorld.sub(uC));
     const V = normalize(cameraPosition.sub(positionWorld));
     const d1 = dot(N, v3(SUN1.dir)), d2 = dot(N, v3(SUN2.dir));
     const lam1 = clamp(d1.mul(1.05).add(0.03), 0.0, 1.0);
@@ -223,14 +223,14 @@ function surfaceMaterial(w, centre) {
   return m;
 }
 
-function shellMaterial(w, centre) {
+function shellMaterial(w, uC, uR) {
   const A = v3(lin(w.accent));
   const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
-  const C = v3(centre);
+  const C = uC;
   const rd = normalize(positionWorld.sub(cameraPosition));
   const t = dot(C.sub(cameraPosition), rd);
   const P = cameraPosition.add(rd.mul(t));
-  const h = length(P.sub(C)).div(w.R).sub(1.0);
+  const h = length(P.sub(C)).div(uR).sub(1.0);
   const glow = exp(max(h, 0.0).div(w.H).negate()).mul(rs(0.12, 0.06, h));
   const n = normalize(P.sub(C));
   const lit = smoothstep(-0.32, 0.45, dot(n, v3(SUN1.dir)));
@@ -242,20 +242,30 @@ function shellMaterial(w, centre) {
   return m;
 }
 
-// worlds: [{ ...WORLDS[i], pos: [x, y, z], spin: [rx, ry, rz] }]
+// worlds: [{ ...WORLDS[i], pos: [x, y, z], spin: [rx, ry, rz] }]. The centre and radius are uniforms,
+// so a world can move along its orbit (and grow, in the orrery view): items[i].set(pos, R)
 export function createWorlds(placed) {
   const group = new THREE.Group();
   const sphere = new THREE.SphereGeometry(1, 192, 96);
+  const items = [];
   for (const w of placed) {
-    const surf = new THREE.Mesh(sphere, surfaceMaterial(w, w.pos));
+    const uC = uniform(new THREE.Vector3(...w.pos)), uR = uniform(w.R);
+    const surf = new THREE.Mesh(sphere, surfaceMaterial(w, uC));
     surf.position.set(...w.pos);
     surf.scale.setScalar(w.R);
     surf.rotation.set(...w.spin);
-    const shell = new THREE.Mesh(sphere, shellMaterial(w, w.pos));
+    const shell = new THREE.Mesh(sphere, shellMaterial(w, uC, uR));
     shell.position.set(...w.pos);
     shell.scale.setScalar(w.R * 1.14);
     group.add(surf, shell);
+    const set = (pos, R) => {
+      uC.value.set(pos[0], pos[1], pos[2]); uR.value = R;
+      surf.position.set(pos[0], pos[1], pos[2]); surf.scale.setScalar(R);
+      shell.position.set(pos[0], pos[1], pos[2]); shell.scale.setScalar(R * 1.14);
+    };
+    items.push({ w, surf, shell, set });
   }
+  group.userData.items = items;
   return group;
 }
 
@@ -294,9 +304,11 @@ export function createWorldPoints(placed) {
   return sprite;
 }
 
-// a thin orbit circle through each world, about the ship (orrery still only)
-export function createOrbitLines(placed) {
+// a thin orbit circle through each world, about the ship (the orrery). opts.radius(w) gives the
+// circle's radius (default: through the world); opts.fade is a uniform 0..1 the flown page eases.
+export function createOrbitLines(placed, opts = {}) {
   const group = new THREE.Group();
+  const fade = opts.fade || null;
   for (const w of placed) {
     const r = Math.hypot(...w.pos);
     const a = norm(w.pos), b = norm(w.orbitB);
@@ -308,9 +320,12 @@ export function createOrbitLines(placed) {
     const g = new THREE.BufferGeometry().setFromPoints(pts);
     const m = new THREE.LineBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
     const c = lin(w.accent);
-    m.colorNode = vec3(c[0] * 0.10 + 0.012, c[1] * 0.10 + 0.010, c[2] * 0.10 + 0.008);
+    const col = vec3(c[0] * 0.10 + 0.012, c[1] * 0.10 + 0.010, c[2] * 0.10 + 0.008);
+    m.colorNode = fade ? col.mul(fade) : col;
     m.opacityNode = float(1.0);
-    group.add(new THREE.Line(g, m));
+    const line = new THREE.Line(g, m);
+    line.userData.r0 = r;
+    group.add(line);
   }
   return group;
 }
