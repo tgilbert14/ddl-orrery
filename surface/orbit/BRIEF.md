@@ -69,6 +69,30 @@ it at real depth. You choose a world by flying to it.
 - The same two suns as the Dust Sea, so a landing reads as the same sky from below.
 - Look test first, on stills, before any flying is built (`look-test.html` in this folder).
 
+## Sound (the step after the flying slice)
+
+The owner, 14 Nov 2026: "dont forget we need to revamp the sounds as well like we did with the other
+one and what you think is best". So the orbit gets its own generated sound, made the way the Dust
+Sea's was (`surface/worlds/dust-sea/sound.js`: all WebAudio, nothing recorded, levels measured
+offline), built once the flight feel is settled so it can follow the motion:
+
+- **The ship's pulse.** The dead ship keeps time: one low heartbeat on a fixed beat, louder and
+  fuller the closer you are to the hull, with the slightly wrong 196 sagging to 185 tone the hub
+  gives the Artifact. Far out it is almost gone.
+- **The shuttle.** A soft engine tone that follows thrust and speed, with the bank heard as a pan.
+  Never a roar; boost opens a filter.
+- **Each world's voice.** The hub's score already has a voice per world (`src/07-audio.js`). As a
+  world becomes the nearest thing its voice fades up, in its own scale, and by the threshold it is
+  the main thing you hear. Flying between two worlds you hear one hand over to the other.
+- **Space between.** A quiet bed, not silence: slow filtered noise that thins with distance from
+  everything, so approaching anything is a change you can hear.
+- **Descent.** The world's voice and a rising rush of air swell under the flood and hand over to the
+  surface's wind, so the landing is one sound, not a cut.
+- **Pulled back.** All eleven voices sound together, quietly, placed left to right by where the
+  worlds are: the orrery heard whole.
+- Sound starts on the first gesture, has a mute button, is complete without it, and reduced motion
+  changes nothing about it.
+
 ## The look test: six stills to judge
 
 | Still | What it must show |
