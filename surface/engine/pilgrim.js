@@ -22,8 +22,7 @@ import * as THREE from 'three/webgpu';
 import { Fn, uniform, attribute, vec3, vec4, float, normalize, dot, max, min, mix, clamp, abs, smoothstep, length, pow, exp, step, sqrt, sin, cos, cross, sign,
   normalWorld, normalGeometry, positionWorld, positionGeometry, cameraPosition, modelWorldMatrix, negateOnBackSide, varying, Discard, If, mx_noise_float, uv } from 'three/tsl';
 import { lathe, tube, blob, cloak, hood, lantern, C, LAMP, NCAP } from './figure.js';
-import { height, heightD } from '../look-test/height.js';
-import { SH } from '../look-test/params.js';
+import { height, heightD, SH } from './world.js';
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };

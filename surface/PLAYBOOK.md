@@ -13,8 +13,12 @@ in the repo at `surface/PLAYBOOK.md`.
   Pages serves `main` from the root, no server build. Live: https://tgilbert14.github.io/ddl-orrery/
 - The hub is one file, `index.html`, built by `node build.js` from `src/` (CSS, the body, `05-core.js`,
   the planet and sphere forges, `06-worlds.js`, audio). Never edit `index.html` by hand.
-- `surface/look-test/`: the Dust Sea look test (the sand, sky and light shaders, the height field,
-  the parameters). `surface/walk/`: the walkable page built on it. `surface/vendor/`: three r186.
+- `surface/engine/`: the shared surface engine (since the refactor of 13 Nov 2026): `main.js`
+  exports `start(world)`; `world.js` holds the world contract and the live bindings the engine's
+  modules read. `surface/worlds/dust-sea/`: everything Dust Sea (`world.js` is its manifest).
+  `surface/walk/`: the Dust Sea page, a three-line `main.js` that boots the engine on that world.
+  `surface/look-test/`: the Dust Sea look test page (its shaders and numbers now live in the world
+  folder). `surface/vendor/`: three r186.
 - The eleven worlds, in hub order: dust-sea, velocity, grid, abyssal, arcadia, aurora, uncharted,
   archive, drillyard, stormwall, beacons. `PLAN.md` section VI has one card for each.
 - Test scripts (Playwright, headless Chrome): saved in `orrery-test-scripts/` in the shared notes
@@ -67,7 +71,7 @@ run, and a README section saying what was measured and what was not.
 
 ## Parts that carry over to every world as they are
 
-| File (in `surface/walk/`) | What it is | Reuse |
+| File (in `surface/engine/`) | What it is | Reuse |
 |---|---|---|
 | `clipmap.js` | nested square grids on a fixed lattice, morph bands, 11 levels to 6 km | as is; give it the world's height function |
 | `walker.js` | walking, running, climbing, sliding, the brink leap | as is; the slide and leap thresholds are per world |
@@ -75,18 +79,29 @@ run, and a README section saying what was measured and what was not.
 | `input.js` | keyboard, mouse, touch (left thumb walks, right looks) | as is |
 | `figure.js`, `pilgrim.js` | the Pilgrim: geometry in code, cloak, staff, lantern pendulum | as is; the wind and the ground contact are per world |
 | `shadows.js` | log-polar horizon shadow map, baked in slices | as is for any height-field world |
-| `times.js` | times of day and the fade between them | the values are per world |
-| `main.js` | boot, device loss, the frame loop, the governor, the test API (`window.__walk`) | split out what is Dust Sea only before the second world |
-| `index.html` | the page, the arrival overlay (`?from=orbit`), "Return to orbit" | as is |
+| `main.js` | `start(world)`: boot, device loss, the frame loop, the governor, the test API (`window.__walk`) | as is; it names no world |
+| `world.js` | the world contract (in its header) and the live bindings (`height`, `heightD`, `WIND`, `G`, `SH`, `CAM`, ...) | as is |
+| `walk/index.html` | the page, the arrival overlay (`?from=orbit`), "Return to orbit" | copy per world page |
 
-Per world, new: the height field and parameters (`look-test/height.js`, `params.js`), the ground and
-sky shading (`look-test/tsl-material.js`), the trace of the walker's passing (`trace.js`, `pour.js`,
-`puffs.js` are sand), the air (`air.js`), the event (`storm.js`), the sound (`sound.js`).
+Per world, in `surface/worlds/<slug>/`: `world.js` (the manifest: `name`, `slug`, `height`, `heightD`,
+`findCrest`, `WIND`, `params`, `times`, `starts()`, `graphics()`, `sound()`), the height field and
+parameters (`height.js`, `params.js`), the ground and sky shading (`tsl-material.js`), the times of
+day (`times.js`: the values are per world), the trace of the walker's passing (`trace.js`, `pour.js`,
+`puffs.js` are sand), the air (`air.js`), the event (`storm.js`), the sound (`sound.js`). The Dust
+Sea's folder is the worked example; `glsl-material.js` there is only for the look test's classic
+renderer.
 
-**Before the second world, do one refactor:** move the shared files into `surface/engine/` (or
-similar) and make each world a folder with its own height, materials, trace, event and sound. Today
-`main.js` imports Dust Sea modules by name. Do this as its own change with calm stills identical
-before and after.
+**The refactor before the second world is done (13 Nov 2026):** the engine imports no Dust Sea
+module by name; every held still (eleven calm states, eleven seeded storm states, the first-person
+and figure regression, the look test above its readout) was byte-identical before and after, the
+console sweep was empty on all six configurations, and the calm frame cost was unchanged within
+the run-to-run spread. To add a world: make `surface/worlds/<slug>/` with its own `world.js` and
+modules, copy `surface/walk/index.html` and its three-line `main.js` into the world's page folder
+(or give the world's page its own folder under `surface/`), and add the `SURFACES` entry in
+`src/05-core.js`. Parts of the engine still assume a figure that kicks up sand (`puffs`), an event
+with the storm's instance interface (`.active`, `.k`, `.wind`, `.gust`, `.boom`, `.erase`, `.tauAt`,
+`.STORM.lampBoost`, `.STORM.boom`) and the material hooks named `trace`, `air`, `figure`, `storm`,
+`stormSky` in `createMaterials` `opts.walk`; the second world will say which of those need to move.
 
 ## How a planet links to its surface
 
@@ -100,7 +115,9 @@ cache. On the surface page, with `?from=orbit` an overlay in the flood's colour 
 
 ## How it was tested (every round)
 
-- **Test API** on the page with `?test=1&mute=1`: `window.__walk` has `ready`, `error`, `backend`,
+- **Test API** on the page with `?test=1&mute=1`: `window.__walk` has `world` (the world module:
+  `W.world.findCrest()`, `W.world.params.CAM`, `W.world.WIND`; scripts used to import
+  `../look-test/height.js` from the page), `ready`, `error`, `backend`,
   `state()`, `setPose`, `setTime`, `hold`/`release` (input), `orbit`, `lookOverride`,
   `step(n, { drain })` (fixed 1/60 s steps, returns frame ms), `render()`, `loseDevice()`, and
   `storm.start/skipTo/hold/raw/state`.

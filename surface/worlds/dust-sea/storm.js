@@ -43,8 +43,8 @@
 import * as THREE from 'three/webgpu';
 import { Fn, If, uniform, vec2, vec3, vec4, float, clamp, smoothstep, max, min, mix, abs, exp, pow, sqrt, atan, dot, length, normalize, select, step,
   uv, floor, texture, varying, cameraPosition, instancedDynamicBufferAttribute, positionLocal, screenUV, fwidth } from 'three/tsl';
-import { G, DEG } from '../look-test/params.js';
-import { height } from '../look-test/height.js';
+import { G, DEG } from './params.js';
+import { height } from './height.js';
 
 const WX = Math.cos(G.windDeg * DEG), WZ = Math.sin(G.windDeg * DEG);
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);

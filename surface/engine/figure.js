@@ -23,7 +23,7 @@
 
 import * as THREE from 'three/webgpu';
 import { Fn, If, uniform, attribute, vec3, vec4, float, normalize, dot, max, mix, clamp, smoothstep, length, pow, exp, step, sqrt, uv, normalWorld, positionWorld, cameraPosition } from 'three/tsl';
-import { G, DEG } from '../look-test/params.js';
+import { G, DEG } from './world.js';
 
 export const NCAP = 10;
 export const FIGURES = { a: 'the Pilgrim', b: 'the Cartographer', c: 'the Kite' };

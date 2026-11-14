@@ -16,7 +16,7 @@
 import * as THREE from 'three/webgpu';
 import { Fn, vec2, vec3, float, max, mix, abs, clamp, smoothstep, length, pow, exp, step, dot, normalize, uv, floor, fract, hash, select,
   cameraPosition, instancedDynamicBufferAttribute, mx_noise_float } from 'three/tsl';
-import { height, heightD } from '../look-test/height.js';
+import { height, heightD } from './height.js';
 
 export const POOL = 384;
 const GRAINY = { kick: 1, clump: 1, spray: 1, dust: 0, haze: 0 };

@@ -14,7 +14,7 @@
 // storm the branch is not taken and the colour is as before.
 
 import { vec2, float, clamp, smoothstep, max, mix, dot, pow, If } from 'three/tsl';
-import { G, DEG } from '../look-test/params.js';
+import { G, DEG } from './params.js';
 import { SU } from './storm.js';
 
 export const AIR = {
