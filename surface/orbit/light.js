@@ -18,14 +18,14 @@ export const len = (a) => Math.hypot(a[0], a[1], a[2]);
 export const dirYP = (yaw, pitch) => [Math.cos(pitch * DEG) * Math.cos(yaw * DEG), Math.sin(pitch * DEG), Math.cos(pitch * DEG) * Math.sin(yaw * DEG)];
 
 export const SUN1 = {
-  dir: norm(dirYP(68, 29)),           // the pale sun: ahead and up-right of the arrival view, beyond the hull
+  dir: norm(dirYP(-62, 14)),          // the pale sun: low, ahead-left of the arrival view; rakes the port flank and deck
   col: [2.2, 1.5, 0.85],              // dusk pale sun, as on the Dust Sea
   disc: [9.0, 7.6, 5.6],              // the disc itself (HDR; tone-mapped to a warm white)
   radiusDeg: 1.25,
   halo: [0.035, 0.55, 20 * DEG, 3.0 * DEG],  // wide, tight strength; wide, tight width (exp falloff)
 };
 export const SUN2 = {
-  dir: norm(dirYP(-25, -11)),          // the red sun: low, left of the arrival view (fills the hull's shadow side)
+  dir: norm(dirYP(26, 1)),             // the red sun: low on the horizon, in the arrival view beside the Dust Sea
   col: [1.4, 0.32, 0.09],             // dusk red sun, as on the Dust Sea
   disc: [6.0, 1.1, 0.25],
   radiusDeg: 0.5,

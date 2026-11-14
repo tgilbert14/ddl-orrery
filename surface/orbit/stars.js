@@ -60,7 +60,7 @@ export function createSky() {
 }
 
 // N stars, seeded: more of them near the dust band, a power-law of brightness, slight colour
-export function createStars(n = 14000, seed = 7177) {
+export function createStars(n = 14000, seed = 7177, sizeScale = 1) {
   const R = rng(seed);
   const dirs = new Float32Array(n * 3), cols = new Float32Array(n * 3), sizes = new Float32Array(n);
   const u = norm(cross(BAND_N, [1, 0, 0])), w = cross(BAND_N, u);
@@ -81,7 +81,7 @@ export function createStars(n = 14000, seed = 7177) {
     const c = palette[Math.floor(R() * palette.length)];
     const b = 0.05 + m * 2.6;
     cols.set([c[0] * b, c[1] * b, c[2] * b], i * 3);
-    sizes[i] = 1.4 + m * 2.8;
+    sizes[i] = (1.4 + m * 2.8) * sizeScale;
   }
   const mat = new THREE.PointsNodeMaterial({ transparent: true, depthWrite: false, sizeAttenuation: false, blending: THREE.AdditiveBlending });
   mat.positionNode = instancedBufferAttribute(new THREE.InstancedBufferAttribute(dirs, 3));

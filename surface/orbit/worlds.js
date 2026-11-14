@@ -6,7 +6,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec3, positionLocal, positionWorld, normalWorld, cameraPosition, normalize, dot, cross, exp, abs,
-  clamp, smoothstep, mix, pow, max, min, sin, cos, atan, asin, acos, floor, fract, length, round,
+  clamp, smoothstep, mix, pow, max, min, sin, cos, atan, asin, acos, floor, fract, length, round, fwidth,
   mx_fractal_noise_float, mx_noise_float, mx_cell_noise_float, mx_worley_noise_float,
   instancedBufferAttribute, uv,
 } from 'three/tsl';
@@ -33,28 +33,48 @@ function latLonLines(p, n, m, width) {
 // The patterns. p: unit position on the sphere (object space). Each returns
 // { alb: day albedo (linear), night: light on the night side, glow: light everywhere }
 const PATTERNS = {
-  'dust-sea': (p) => {
-    const n = fbm(p.mul(2.6));
-    const warp = fbm(p.mul(7.0).add(3.1), 4);
-    const lat = p.y.add(n.mul(0.05)).add(warp.mul(0.012));
-    const bands = sin(lat.mul(34.0)).mul(0.5).add(0.5);
-    const bands2 = sin(lat.mul(97.0).add(n.mul(4.0))).mul(0.5).add(0.5);
-    // dune fields: fine ridges that only read close (the threshold still)
-    const dunes = sin(p.y.mul(170.0).add(fbm(p.mul(30.0), 4).mul(4.0)).add(p.x.mul(40.0))).mul(0.5).add(0.5);
-    const fine = fbm(p.mul(160.0), 3).mul(0.5).add(0.5);
-    // erg bands at the scale of a few hundred km, and dark wind streaks across them
-    const erg = sin(p.y.mul(210.0).add(fbm(p.mul(18.0), 4).mul(5.0))).mul(0.5).add(0.5);
-    const streak = smoothstep(0.15, 0.55, fbm(p.mul(vec3(60.0, 6.0, 60.0)).add(1.7), 3));
-    const dark = vec3(0.20, 0.095, 0.036), light = vec3(0.50, 0.31, 0.15);
-    const alb = mix(dark, light, bands.mul(0.7).add(bands2.mul(0.3))).toVar();
-    alb.mulAssign(dunes.mul(0.3).add(0.8).mul(fine.mul(0.2).add(0.9)).mul(erg.mul(0.3).add(0.78)).mul(float(1.0).sub(streak.mul(0.22))));
-    // the storm front: one long pale arc across the southern bands
-    const ax = v3(norm([0.35, -0.55, 0.76]));
-    const side = v3(norm([0.9, 0.1, -0.4]));
-    const d = dot(p, ax).sub(0.42).add(fbm(p.mul(9.0), 4).mul(0.05));
-    const arc = exp(d.div(0.05).pow(2.0).negate()).mul(smoothstep(-0.4, 0.3, dot(p, side)));
-    const tail = exp(d.add(0.05).div(0.09).pow(2.0).negate()).mul(smoothstep(-0.4, 0.3, dot(p, side))).mul(0.5);
-    alb.assign(mix(alb, vec3(0.86, 0.70, 0.52), clamp(arc.add(tail), 0.0, 1.0)));
+  'dust-sea': (p, A, w) => {
+    // a desert world: erg fields of parallel dune ridges that bend and break, a few pale basins,
+    // dark rock ranges, and one pale storm front arc with a soft leading edge
+    const terrain = fbm(p.mul(2.1), 5).add(fbm(p.mul(7.5).add(4.0), 3).mul(0.25));
+    const basin = rs(-0.28, -0.42, terrain);
+    const rangeN = float(1.0).sub(abs(fbm(p.mul(3.1).add(1.7), 5)));
+    const upland = smoothstep(0.8, 0.93, rangeN).mul(smoothstep(-0.05, 0.25, terrain)).add(smoothstep(0.45, 0.6, terrain)).min(1.0);
+    const sand = mix(vec3(0.44, 0.245, 0.10), vec3(0.55, 0.33, 0.145), fbm(p.mul(5.0), 3).mul(0.5).add(0.5));
+    const alb = sand.toVar();
+    // erg ridges in a direction that turns slowly over the globe: a coarse set that reads from
+    // orbit, a fine set that reads close; each fades to its mean once it is smaller than a pixel
+    const bend = fbm(p.mul(1.7).add(9.0), 3);
+    const base = p.y.mul(0.85).add(p.x.mul(0.42)).add(p.z.mul(0.2)).add(bend.mul(0.3));
+    const ridgeSet = (freq, sharp) => {
+      const ph = base.mul(freq).add(fbm(p.mul(freq * 0.05), 2).mul(0.6));
+      const tri = abs(fract(ph).sub(0.5)).mul(2.0);
+      const res = rs(0.12, 0.4, fwidth(ph).add(1e-4));
+      return mix(float(0.42), smoothstep(sharp, 1.0, tri), res);
+    };
+    const breakUp = smoothstep(-0.2, 0.25, fbm(p.mul(9.0).add(2.0), 3));
+    const ergK = smoothstep(-0.45, -0.3, terrain).mul(float(1.0).sub(upland));
+    const ridges = ridgeSet(45.0, 0.55).mul(0.6).add(ridgeSet(160.0, 0.7).mul(0.4)).mul(breakUp);
+    alb.mulAssign(ridges.sub(0.42).mul(ergK).mul(0.9).add(1.0));
+    alb.assign(mix(alb, vec3(0.62, 0.46, 0.29).mul(fbm(p.mul(20.0), 3).mul(0.12).add(1.0)), basin.mul(0.8)));
+    const rock = vec3(0.15, 0.09, 0.052).mul(fbm(p.mul(40.0), 3).mul(0.3).add(0.9));
+    alb.assign(mix(alb, rock, upland.mul(0.9)));
+    // the storm front: an arc about the given axis; dense pale dust behind a soft leading edge,
+    // and the shade it throws on the sand behind it
+    const ax = v3(w.stormAxis), side = v3(w.stormSide);
+    const d = dot(p, ax).sub(0.8).add(fbm(p.mul(14.0), 4).mul(0.01));
+    const sd = dot(p, side);
+    const along = smoothstep(-0.5, -0.25, sd).mul(rs(0.5, 0.25, sd)).mul(smoothstep(-0.05, 0.15, dot(p, cross(ax, side))));
+    const body = smoothstep(0.0, 0.008, d).mul(rs(0.05, 0.02, d));
+    const lead = smoothstep(-0.03, 0.0, d).mul(rs(0.006, 0.0, d));
+    const billow = fbm(p.mul(90.0), 3).mul(0.3).add(0.85);
+    const storm = clamp(body.mul(billow).add(lead.mul(0.6)), 0.0, 1.0).mul(along);
+    const shade = smoothstep(0.04, 0.06, d).mul(rs(0.11, 0.07, d)).mul(along);
+    // wind streaks off the ranges, across the ergs
+    const streak = smoothstep(0.1, 0.5, fbm(p.mul(vec3(70.0, 7.0, 70.0)).add(1.7), 3));
+    alb.mulAssign(float(1.0).sub(streak.mul(0.14)));
+    alb.mulAssign(float(1.0).sub(shade.mul(0.3)));
+    alb.assign(mix(alb, vec3(0.9, 0.78, 0.62), storm.mul(0.92)));
     return { alb, night: vec3(0.0), glow: vec3(0.0) };
   },
   velocity: (p, A) => {
@@ -178,16 +198,16 @@ function surfaceMaterial(w, centre) {
   const m = new THREE.MeshBasicNodeMaterial({ fog: false });
   m.colorNode = Fn(() => {
     const p = normalize(positionLocal);
-    const pat = PATTERNS[w.id](p, A);
+    const pat = PATTERNS[w.id](p, A, w);
     const N = normalize(positionWorld.sub(v3(centre)));
     const V = normalize(cameraPosition.sub(positionWorld));
     const d1 = dot(N, v3(SUN1.dir)), d2 = dot(N, v3(SUN2.dir));
     const lam1 = clamp(d1.mul(1.05).add(0.03), 0.0, 1.0);
-    const lam2 = clamp(d2.mul(1.05).add(0.03), 0.0, 1.0);
+    const lam2 = clamp(d2.add(0.6).div(1.6), 0.0, 1.0);
     // light grazing the terminator crosses more air: warmer, toward the accent
     const term = mix(vec3(1.0, 0.5, 0.25).mul(A.mul(0.6).add(0.4)), vec3(1.0), smoothstep(0.0, 0.35, d1));
     const night = rs(0.1, -0.18, d1);
-    const col = pat.alb.mul(v3(SUN1.col).mul(lam1).mul(term).add(v3(SUN2.col).mul(lam2).mul(0.55)).add(vec3(0.004, 0.005, 0.009))).toVar();
+    const col = pat.alb.mul(v3(SUN1.col).mul(lam1).mul(term).add(v3(SUN2.col).mul(lam2).mul(0.12)).add(vec3(0.004, 0.005, 0.009))).toVar();
     col.addAssign(pat.night.mul(night));
     col.addAssign(pat.glow);
     // the limb: atmosphere seen edge-on, lit on the day side and through the terminator

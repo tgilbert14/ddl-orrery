@@ -1,14 +1,17 @@
-// Orbit look test: the derelict. A dead ship about 4.4 km long built from code geometry: a lofted,
-// tapered main hull with structural ribs, a deck city of seeded blocks, a stepped bridge tower,
-// engine bells at the stern, a keel fin with eleven dark lamp housings, antenna masts, and plating
-// drawn in the shader (panel seams, plate tints, section lines, grime). Dark warm metal; the only
-// light it makes is one small amber window.
+// Orbit look test: the derelict. A dead ship about 4.4 km long built from code geometry.
+// Scale hierarchy, large to small: a lofted, tapered hull; a stepped bridge complex, a spire
+// cluster amidships and engine bells; a deck city laid out in plots along streets (terraces,
+// towers with spires, raised galleries, chamfered halls) either side of one long canyon lane;
+// gantries over the lane, trusses, pipe bundles, rails and flank strakes that run the ship's length;
+// roof clutter; and in the shader, panels of varied sizes, seams, soot, thousands of small dark
+// windows, worn edges. It is dead: a breach where the plating is gone and the ribs show, a fallen
+// mast, a torn sponson. The only light it makes is one small amber window.
 //
 // Ship frame: +x is the bow, +y is up, +z is starboard. Units are metres.
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, positionLocal, normalLocal, abs, floor, fract, min, max, mix, smoothstep, select,
-  fwidth, mx_cell_noise_float, mx_fractal_noise_float, uv, length, exp, step,
+  fwidth, mx_cell_noise_float, mx_fractal_noise_float, uv, length, exp, step, attribute, clamp, vertexStage,
 } from 'three/tsl';
 import { rng } from './light.js';
 
@@ -38,32 +41,40 @@ export function deckAt(x, z) {
   const c = Math.min(1, Math.pow(Math.min(1, Math.abs(z) / w), EX / 2));
   return deckY(x) * Math.pow(Math.sqrt(1 - c * c), 2 / (EX * 1.6));
 }
-// structural ribs: bands a few percent proud of the skin every 360 m
-const rib = (x) => { const k = ((x - SHIP.stern) % 360 + 360) % 360; return k > 300 && k < 324 ? 1.014 : 1.0; };
+// the breach: plating gone over the upper port side amidships, the ribs exposed
+export const BREACH = { x0: -930, x1: -540 };
+const LANE = { z0: -10, z1: 100, x0: -1120, x1: 1700 };
+const S_LOFT = 72;
+const crossPoint = (x, a, scale = 1) => {
+  const w = halfWidth(x) * scale, t = deckY(x) * scale, b = keelY(x) * scale;
+  const c = Math.cos(a), s = Math.sin(a);
+  return [x, (s > 0 ? t : -b) * Math.sign(s) * Math.pow(Math.abs(s), 2 / (s > 0 ? EX * 1.6 : EX)), w * Math.sign(c) * Math.pow(Math.abs(c), 2 / EX)];
+};
+// is the loft face at (x, angle) torn away?
+function inBreach(x, a) {
+  const j1 = 26 * Math.sin(a * 7.3) + 14 * Math.sin(a * 13.1 + 1.0);
+  const j2 = 30 * Math.sin(a * 5.9 + 2.0) + 12 * Math.sin(a * 17.0);
+  const aj = 0.12 * Math.sin(x * 0.05) + 0.07 * Math.sin(x * 0.131 + 0.5);
+  const aj2 = 0.10 * Math.sin(x * 0.043 + 1.3) + 0.06 * Math.sin(x * 0.17);
+  return x > BREACH.x0 + j1 && x < BREACH.x1 + j2 && a > 1.66 + aj && a < 2.98 + aj2;
+}
 
 function loftHull() {
   const stations = [];
-  for (let x = SHIP.stern; x <= SHIP.bow - 1; x += 10) stations.push(x);
+  for (let x = SHIP.stern; x <= SHIP.bow - 1; x += 20) stations.push(x);
   stations.push(SHIP.bow);
-  const S = 72, ex = EX;
+  const S = S_LOFT;
   const pos = [], idx = [];
   for (const x of stations) {
-    const w = halfWidth(x) * rib(x), t = deckY(x) * rib(x), b = keelY(x) * rib(x);
-    for (let j = 0; j < S; j++) {
-      const a = (j / S) * Math.PI * 2;
-      const c = Math.cos(a), s = Math.sin(a);
-      const z = w * Math.sign(c) * Math.pow(Math.abs(c), 2 / ex);
-      const y = (s > 0 ? t : -b) * Math.sign(s) * Math.pow(Math.abs(s), 2 / (s > 0 ? ex * 1.6 : ex));
-      pos.push(x, y, z);
-    }
+    for (let j = 0; j < S; j++) pos.push(...crossPoint(x, (j / S) * Math.PI * 2));
   }
   for (let i = 0; i < stations.length - 1; i++) {
     for (let j = 0; j < S; j++) {
+      if (inBreach(stations[i] + 10, ((j + 0.5) / S) * Math.PI * 2)) continue;
       const a = i * S + j, b = i * S + ((j + 1) % S), c = (i + 1) * S + j, d = (i + 1) * S + ((j + 1) % S);
       idx.push(a, c, b, b, c, d);
     }
   }
-  // stern plate: a fan
   const centre = pos.length / 3;
   pos.push(SHIP.stern, (deckY(SHIP.stern) + keelY(SHIP.stern)) * 0.5, 0);
   for (let j = 0; j < S; j++) idx.push(centre, j, (j + 1) % S);
@@ -71,31 +82,40 @@ function loftHull() {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
   const ng = g.toNonIndexed();
-  ng.computeVertexNormals(); // flat facets: the hull reads as plated sections, not a smooth tube
+  ng.computeVertexNormals(); // flat facets
   return ng;
 }
 
-// merge non-indexed geometries (position + normal) after applying each one's matrix
+// merge non-indexed geometries after applying each one's matrix. A part may carry its box size
+// (metres): the shader then knows where its edges are (worn edges, a dark foot where it meets the deck).
 function merge(list) {
   let n = 0;
-  const parts = list.map(([geo, m]) => {
-    let g = geo.index ? geo.toNonIndexed() : geo;
-    g = g.clone();
+  const parts = list.map(([geo, m, size]) => {
+    let g = geo.index ? geo.toNonIndexed() : geo.clone();
+    const local = g.attributes.position.array.slice();
     if (m) g.applyMatrix4(m);
-    if (!g.attributes.normal) g.computeVertexNormals();
     n += g.attributes.position.count;
-    return g;
+    return { g, local, size };
   });
-  const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
+  const P = new Float32Array(n * 3), N = new Float32Array(n * 3), EP = new Float32Array(n * 3), EH = new Float32Array(n * 3);
   let o = 0;
-  for (const g of parts) {
+  for (const { g, local, size } of parts) {
+    const c = g.attributes.position.count;
     P.set(g.attributes.position.array, o * 3);
     N.set(g.attributes.normal.array, o * 3);
-    o += g.attributes.position.count;
+    for (let i = 0; i < c; i++) {
+      for (let k = 0; k < 3; k++) {
+        EP[(o + i) * 3 + k] = size ? local[i * 3 + k] * size[k] : 0;
+        EH[(o + i) * 3 + k] = size ? size[k] / 2 : 1e4;
+      }
+    }
+    o += c;
   }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.BufferAttribute(P, 3));
   out.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  out.setAttribute('aEP', new THREE.BufferAttribute(EP, 3));
+  out.setAttribute('aEH', new THREE.BufferAttribute(EH, 3));
   return out;
 }
 
@@ -104,80 +124,308 @@ const M = (x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => {
   m.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
   return m;
 };
+const flat = (g) => { const n = g.toNonIndexed(); n.computeVertexNormals(); return n; };
 const box = new THREE.BoxGeometry(1, 1, 1);
+// unit prisms: footprint 1 x 1 at the base, height 1, centred; taper = top size / base size
+const prismCache = new Map();
+function prism(sides, taper) {
+  const key = `${sides}:${taper}`;
+  if (!prismCache.has(key)) {
+    const r = sides === 4 ? Math.SQRT1_2 : 0.5 / Math.cos(Math.PI / 8);
+    const g = new THREE.CylinderGeometry(r * taper, r, 1, sides, 1).rotateY(Math.PI / sides);
+    prismCache.set(key, flat(g));
+  }
+  return prismCache.get(key);
+}
+const cone6 = flat(new THREE.ConeGeometry(0.5, 1, 6));
+const cyl8 = new THREE.CylinderGeometry(1, 1, 1, 8, 1);
+
+// a box from point a to point b: length along a-b, d tall (toward up), w wide
+function beam(a, b, w, d, up = [0, 1, 0]) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+  const dir = B.clone().sub(A); const len = dir.length(); dir.normalize();
+  let side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(...up));
+  if (side.lengthSq() < 1e-6) side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(1, 0, 0));
+  side.normalize();
+  const u = new THREE.Vector3().crossVectors(side, dir);
+  const m = new THREE.Matrix4().makeBasis(dir, u, side).scale(new THREE.Vector3(len, d, w));
+  m.setPosition(A.add(B).multiplyScalar(0.5));
+  return [box, m, [len, d, w]];
+}
 
 function buildParts(seed) {
   const R = rng(seed);
-  const parts = [[loftHull(), null]];
+  const parts = [[loftHull(), null, null]];
+  const add = (geo, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) => parts.push([geo, M(x, y, z, sx, sy, sz, rx, ry, rz), [sx, sy, sz]]);
+  const roofClutter = (x0, x1, z0, z1, y, k) => {
+    for (let i = 0; i < k; i++) {
+      const sx = 2 + R() * 9, sz = 2 + R() * 7, sy = 1 + Math.pow(R(), 2) * 7;
+      const x = x0 + sx / 2 + R() * Math.max(0, x1 - x0 - sx), z = z0 + sz / 2 + R() * Math.max(0, z1 - z0 - sz);
+      if (R() < 0.25) parts.push([cyl8, M(x, y + sy / 2, z, sx * 0.3, sy, sx * 0.3), null]);
+      else add(box, x, y + sy / 2, z, sx, sy, sz);
+    }
+  };
+  const antennas = (x, y, z, n, hMax) => {
+    for (let i = 0; i < n; i++) {
+      const h = hMax * (0.25 + R() * 0.75), r = 0.6 + R() * 1.4;
+      const ox = (R() - 0.5) * 14, oz = (R() - 0.5) * 14;
+      parts.push([cyl8, M(x + ox, y + h / 2, z + oz, r, h, r), null]);
+      if (R() < 0.5) add(box, x + ox, y + h * (0.5 + R() * 0.4), z + oz, 1, 1, 6 + R() * 20);
+    }
+  };
 
-  // ---- deck city: seeded blocks along the spine, many small, a few large, thinning toward the bow
-  for (let i = 0; i < 2600; i++) {
-    const x = SHIP.stern + 120 + R() * (L * 0.8);
-    const w = halfWidth(x);
-    let z = (R() * 2 - 1) * w * 0.7;
-    // keep a flight lane open down the starboard side of the spine (the canyon the hull still flies)
-    if (z > -12 && z < 95 && x > -1250) z = z < 40 ? -12 - R() * 30 : 95 + R() * 30;
-    const r = R();
-    const big = r < 0.04, mid = r < 0.3;
-    const sx = big ? 70 + R() * 130 : mid ? 18 + R() * 50 : 3 + R() * 16;
-    const sz = big ? 40 + R() * 80 : mid ? 12 + R() * 34 : 3 + R() * 12;
-    const sy = big ? 24 + R() * 60 : mid ? 6 + Math.pow(R(), 2) * 34 : 2 + R() * 7;
-    const yBase = deckAt(x, z) - 3;
-    parts.push([box, M(x, yBase + sy / 2, z, sx, sy, sz)]);
-  }
-  // pipes running along the deck
-  const pipe = new THREE.CylinderGeometry(1, 1, 1, 8, 1);
-  for (let i = 0; i < 40; i++) {
-    const x0 = SHIP.stern + 150 + R() * L * 0.6, len = 200 + R() * 600;
-    const z = (R() * 2 - 1) * halfWidth(x0) * 0.55;
-    const r = 2 + R() * 4;
-    parts.push([pipe, M(x0 + len / 2, deckAt(x0, z) + r + 1, z, r, len, r, 0, 0, Math.PI / 2)]);
-  }
-  // long trench walls on the deck: the lines that give the hull its length
-  for (const zf of [-0.42, 0.42]) {
-    for (let x = SHIP.stern + 150; x < 1200; x += 210) {
-      const zz = zf * halfWidth(x);
-      parts.push([box, M(x + 95, deckY(x) - 2 + 9, zz, 200, 18, 10)]);
+  // vertical fins along a face at z = zf (facing sgn), every 'step' metres, and a ledge on top
+  const pilasters = (x0, x1, zf, sgn, y0, h, stepM) => {
+    for (let x = x0 + stepM / 2; x < x1 - 2; x += stepM) add(box, x, y0 + h / 2, zf + sgn * 1.0, 2.2, h, 2.0);
+    add(box, (x0 + x1) / 2, y0 + h - 1, zf + sgn * 1.4, x1 - x0, 2, 2.8);
+  };
+  const pilastersX = (z0, z1, xf, sgn, y0, h, stepM) => {
+    for (let z = Math.min(z0, z1) + stepM / 2; z < Math.max(z0, z1) - 2; z += stepM) add(box, xf + sgn * 1.0, y0 + h / 2, z, 2.0, h, 2.2);
+  };
+  // ---- the building types
+  // zIn is the face toward the lane (or the inner edge of a band), sgn the side (+1 starboard)
+  const terrace = (x0, x1, zIn, zOut, base, H, sgn) => {
+    const n = 2 + Math.floor(R() * 3);
+    let y = base;
+    for (let i = 0; i < n; i++) {
+      const len = (x1 - x0) * (1 - i * (0.06 + R() * 0.08));
+      const xc = (x0 + x1) / 2 + (R() - 0.5) * (x1 - x0 - len);
+      const wid = Math.abs(zOut - zIn) * (1 - 0.2 * i - R() * 0.08);
+      const h = (H / n) * (1.15 - 0.15 * i) * (0.8 + R() * 0.4);
+      const zc = zIn + sgn * wid / 2;
+      add(prism(4, 0.97), xc, y + h / 2, zc, len, h, wid);
+      if (R() < 0.85) pilasters(xc - len / 2, xc + len / 2, zIn, -sgn, y, h * 0.97, 9 + R() * 14);
+      // a ledge or parapet along the lane face on some levels: a long line
+      if (R() < 0.5) add(box, xc, y + h + 1.2, zIn + sgn * 1.5, len, 2.4, 3);
+      y += h;
+      if (i === n - 1) {
+        roofClutter(xc - len / 2, xc + len / 2, Math.min(zIn, zc + sgn * wid / 2), Math.max(zIn, zc + sgn * wid / 2), y, 4 + Math.floor(R() * 7));
+        if (R() < 0.3) antennas(xc, y, zc, 1 + Math.floor(R() * 3), 40);
+      }
+    }
+  };
+  const tower = (x0, x1, zIn, zOut, base, H, sgn) => {
+    const fx = x1 - x0, fz = Math.abs(zOut - zIn);
+    const zc = (zIn + zOut) / 2;
+    // podium
+    const ph = 10 + R() * 16;
+    add(prism(4, 0.95), (x0 + x1) / 2, base + ph / 2, zc, fx, ph, fz);
+    const s = Math.min(fx, fz) * (0.55 + R() * 0.3);
+    const th = H * (1.4 + R() * 1.2);
+    const xc = (x0 + x1) / 2 + (R() - 0.5) * (fx - s) * 0.6;
+    add(prism(8, 0.78 + R() * 0.12), xc, base + ph + th / 2, zc, s, th, s * (0.8 + R() * 0.3));
+    let top = base + ph + th;
+    if (R() < 0.7) { const h2 = th * (0.15 + R() * 0.2); add(prism(8, 0.65), xc, top + h2 / 2, zc, s * 0.5, h2, s * 0.45); top += h2; }
+    if (R() < 0.6) { const sh = 25 + R() * 90; parts.push([cone6, M(xc, top + sh / 2, zc, s * 0.18, sh, s * 0.18), null]); }
+    else antennas(xc, top, zc, 2 + Math.floor(R() * 3), 90);
+  };
+  const gallery = (x0, x1, zIn, zOut, base, H, sgn) => {
+    // a long deck raised on columns: you see under it, a long line in the light
+    const wid = Math.min(Math.abs(zOut - zIn), 14 + R() * 12);
+    const zc = zIn + sgn * (wid / 2 + 2);
+    const hy = 14 + R() * 26, sh = 6 + R() * 10;
+    add(box, (x0 + x1) / 2, base + hy + sh / 2, zc, x1 - x0, sh, wid);
+    add(box, (x0 + x1) / 2, base + hy + sh + 1.5, zc - sgn * (wid / 2 - 1), x1 - x0, 3, 1.5);
+    for (let x = x0 + 4; x < x1 - 2; x += 14 + R() * 6) add(box, x, base + hy / 2, zc, 2.5, hy, 2.5);
+    roofClutter(x0, x1, zc - wid / 2, zc + wid / 2, base + hy + sh, 3 + Math.floor(R() * 4));
+  };
+  const hall = (x0, x1, zIn, zOut, base, H) => {
+    const h = 8 + H * 0.35 * R();
+    add(prism(8, 0.9), (x0 + x1) / 2, base + h / 2, (zIn + zOut) / 2, x1 - x0, h, Math.abs(zOut - zIn));
+    add(prism(4, 0.4), (x0 + x1) / 2, base + h + 3, (zIn + zOut) / 2, (x1 - x0) * 0.9, 6, Math.abs(zOut - zIn) * 0.4);
+    roofClutter(x0 + 4, x1 - 4, Math.min(zIn, zOut) + 2, Math.max(zIn, zOut) - 2, base + h, 3);
+  };
+
+  // ---- the deck city, both sides of the lane: plots along streets, bands across them
+  const skip = (x, sgn) => (sgn < 0 && x > BREACH.x0 - 60 && x < BREACH.x1 + 40) || (x > -1590 && x < -1150)
+    || (sgn < 0 && x > -330 && x < -60) || (sgn > 0 && x > -340 && x < -170);
+  for (const sgn of [-1, 1]) {
+    let x = LANE.x0 - (sgn < 0 ? 0 : 30);
+    const stern0 = SHIP.stern + 130;
+    // behind the bridge too (no lane there)
+    for (let xs = stern0; xs < -1600;) {
+      const len = 40 + R() * 70;
+      if (!skip(xs + len / 2, sgn)) {
+        const edge = halfWidth(xs) * 0.78;
+        const zIn = sgn < 0 ? -20 : 20;
+        if (edge > 60) hall(xs, xs + len, zIn, sgn * edge, Math.min(deckAt(xs, zIn), deckAt(xs, edge)) - 2, 30);
+      }
+      xs += len + 8 + R() * 10;
+    }
+    while (x < 1650) {
+      const len = 45 + R() * 120;
+      const street = R() < 0.2 ? 24 + R() * 18 : 6 + R() * 12;
+      const xc = x + len / 2;
+      if (!skip(xc, sgn) && !skip(x, sgn) && !skip(x + len, sgn)) {
+        const zLane = sgn < 0 ? LANE.z0 : LANE.z1;
+        const edge = halfWidth(xc) * 0.8;
+        const W = edge - Math.abs(zLane) * (sgn < 0 ? 1 : 1);
+        if (W > 18) {
+          const bowK = Math.min(1, Math.max(0.22, (1500 - xc) / 1000));
+          const nb = W > 120 ? 2 + Math.floor(R() * 2) : W > 50 ? 1 + Math.floor(R() * 2) : 1;
+          let z0 = zLane;
+          for (let k = 0; k < nb; k++) {
+            const bw = k === nb - 1 ? (edge - Math.abs(z0)) : (W / nb) * (0.7 + R() * 0.6);
+            if (bw < 10) break;
+            const z1 = z0 + sgn * bw;
+            const base = Math.min(deckAt(xc, z0), deckAt(xc, z1), deckAt(x, z1), deckAt(x + len, z1)) - 2;
+            const H = (k === 0 ? 50 + R() * 100 : 12 + R() * 50 * (1 - k * 0.25)) * bowK;
+            const r = R();
+            const x0 = x, x1 = x + len;
+            if (k === 0) {
+              if (r < 0.55) terrace(x0, x1, z0, z1, base, H, sgn);
+              else if (r < 0.8) tower(x0, x1, z0, z1, base, H, sgn);
+              else gallery(x0, x1, z0, z1, base, H, sgn);
+            } else if (r < 0.35) hall(x0, x1, z0, z1, base, H);
+            else if (r < 0.7) terrace(x0, x1, z0, z1, base, H * 0.8, sgn);
+            else if (r < 0.85) tower(x0, x1, z0, z1, base, H * 0.8, sgn);
+            else gallery(x0, x1, z0, z1, base, H, sgn);
+            z0 = z1 + sgn * (4 + R() * 8);
+          }
+        }
+      }
+      x += len + street;
     }
   }
-  // side sponsons: long boxes along each flank, broken into sections
-  for (const side of [-1, 1]) {
-    for (let x = SHIP.stern + 200; x < 900; x += 240) {
+
+  // ---- the lane floor: rails and a pipe bundle the whole length, clutter at the wall feet
+  for (let x = LANE.x0; x < LANE.x1; x += 60) {
+    const x1 = Math.min(LANE.x1, x + 60);
+    for (const z of [38, 58]) parts.push(beam([x, deckAt(x, z) + 0.6, z], [x1, deckAt(x1, z) + 0.6, z], 1.4, 1.2));
+    for (const [z, r] of [[-4, 1.8], [0.5, 2.4], [5, 1.6]]) {
+      const yA = deckAt(x, z) + r + 0.5, yB = deckAt(x1, z) + r + 0.5;
+      const g = beam([x, yA, z], [x1, yB, z], 2 * r, 2 * r); g[0] = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1).rotateZ(-Math.PI / 2); g[2] = null; parts.push(g);
+    }
+    if (R() < 0.7) { const sx = 3 + R() * 10; add(box, x + R() * 50, deckAt(x, 92) + 2, 92 - R() * 6, sx, 3 + R() * 5, 3 + R() * 5); }
+  }
+  // ---- gantries over the lane: a truss bridge from wall to wall
+  for (const gx of [-1000, -760, -520, 60, 600, 980, 1260, 1520]) {
+    const yTop = deckAt(gx, 45) + 46 + R() * 34;
+    const za = LANE.z0 - 8, zb = LANE.z1 + 8;
+    for (const dx of [-4, 4]) {
+      parts.push(beam([gx + dx, yTop, za], [gx + dx, yTop, zb], 2.2, 2.2));
+      parts.push(beam([gx + dx, yTop - 9, za], [gx + dx, yTop - 9, zb], 1.8, 1.8));
+      for (let z = za, i = 0; z < zb - 1; z += 11, i++) {
+        const z2 = Math.min(zb, z + 11);
+        parts.push(beam([gx + dx, i % 2 ? yTop : yTop - 9, z], [gx + dx, i % 2 ? yTop - 9 : yTop, z2], 1.0, 1.0, [1, 0, 0]));
+      }
+    }
+    for (let z = za; z <= zb; z += 22) parts.push(beam([gx - 4, yTop, z], [gx + 4, yTop, z], 1.2, 1.2));
+    // a hanging cable bundle under some
+    if (R() < 0.5) parts.push([cyl8, M(gx, yTop - 9 - 5, 30 + R() * 30, 0.6, 10, 0.6), null]);
+  }
+  // ---- a long truss along the port deck edge, a pipe bundle along the starboard edge
+  for (let x = SHIP.stern + 160; x < 1500; x += 30) {
+    const zA = -halfWidth(x) * 0.86, zB = -halfWidth(x + 30) * 0.86;
+    const yA = deckAt(x, zA), yB = deckAt(x + 30, zB);
+    parts.push(beam([x, yA + 26, zA], [x + 30, yB + 26, zB], 1.6, 1.6));
+    parts.push(beam([x, yA + 3, zA], [x + 30, yB + 3, zB], 1.6, 1.6));
+    parts.push(beam([x, yA + 3, zA], [x + 30, yB + 26, zB], 0.9, 0.9, [0, 0, 1]));
+    parts.push(beam([x, yA, zA], [x, yA + 26, zA], 1.0, 1.0, [1, 0, 0]));
+    for (const [dz, r] of [[0, 2.6], [5, 1.8], [-5, 3.2]]) {
+      const zs = halfWidth(x) * 0.84 + dz, zs2 = halfWidth(x + 30) * 0.84 + dz;
+      const g = beam([x, deckAt(x, zs) + r + 1, zs], [x + 30, deckAt(x + 30, zs2) + r + 1, zs2], 2 * r, 2 * r);
+      g[0] = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1).rotateZ(-Math.PI / 2); g[2] = null; parts.push(g);
+    }
+  }
+  // ---- flank strakes: long lines down both sides at three heights, and a deck-edge rail
+  const sideZ = (x, yk) => crossPoint(x, yk, 1.0);
+  for (const sgn of [-1, 1]) {
+    for (const ak of [0.42, 0.12, -0.3, -0.75]) {
+      const a = sgn > 0 ? ak : Math.PI - ak;
+      for (let x = SHIP.stern + 30; x < SHIP.bow - 260; x += 40) {
+        if (sgn < 0 && ak > 0.1 && inBreach(x + 20, a)) continue;
+        const pA = sideZ(x, a), pB = sideZ(x + 40, a);
+        pA[2] += sgn * 1.5; pB[2] += sgn * 1.5;
+        parts.push(beam(pA, pB, 3.5, ak === 0.12 ? 5 : 2.5));
+      }
+    }
+    // sponsons, low on the flank, one torn away
+    for (let x = SHIP.stern + 220; x < 900; x += 250) {
       const w = halfWidth(x + 110);
-      parts.push([box, M(x + 110, -20, side * (w + 14), 220, 46, 34)]);
-      parts.push([box, M(x + 110, 34, side * (w + 4), 210, 12, 18)]);
+      const torn = sgn < 0 && x > 100 && x < 400;
+      if (torn) {
+        add(box, x + 50, -26, sgn * (w + 15), 100, 44, 32);
+        add(box, x + 170, -62, sgn * (w + 34), 110, 40, 30, 0.22, 0.12, -0.28);
+        parts.push(beam([x + 100, -10, sgn * (w + 6)], [x + 150, -50, sgn * (w + 30)], 2, 2));
+      } else {
+        add(prism(8, 0.92), x + 110, -24, sgn * (w + 16), 220, 46, 34);
+      }
+      add(box, x + 110, 30, sgn * (w + 4), 210, 10, 14);
     }
-    // small side greebles
-    for (let i = 0; i < 700; i++) {
-      const x = SHIP.stern + 80 + R() * L * 0.82;
-      const w = halfWidth(x);
-      const y = keelY(x) * 0.5 + R() * (deckY(x) * 0.9 - keelY(x) * 0.5);
-      const sx = 6 + R() * 40, sy = 4 + R() * 20, sz = 3 + R() * 8;
-      parts.push([box, M(x, y, side * (w * 0.97 + sz / 2), sx, sy, sz)]);
+    // small flank greebles
+    for (let i = 0; i < 500; i++) {
+      const x = SHIP.stern + 80 + R() * L * 0.8;
+      const a = (sgn > 0 ? 0 : Math.PI) + sgn * (R() * 1.2 - 0.7);
+      if (inBreach(x, a)) continue;
+      const p = crossPoint(x, a);
+      const sx = 4 + R() * 30, sy = 2 + R() * 10, sz = 2 + R() * 4;
+      add(box, p[0], p[1], p[2] + sgn * sz / 2, sx, sy, sz);
     }
   }
-  // ---- the bridge: a stepped tower toward the stern, with wings
+  // ---- the breach: ribs every 30 m, stringers, two torn inner decks
+  for (let x = BREACH.x0 - 20; x <= BREACH.x1 + 20; x += 30) {
+    for (let j = -2; j < S_LOFT / 2 + 3; j++) {
+      const a0 = (j / S_LOFT) * Math.PI * 2, a1 = ((j + 1) / S_LOFT) * Math.PI * 2;
+      const pA = crossPoint(x, a0, 0.975), pB = crossPoint(x, a1, 0.975);
+      parts.push(beam(pA, pB, 4, 9, [1, 0, 0]));
+    }
+  }
+  for (const a of [1.85, 2.25, 2.6, 2.9]) {
+    for (let x = BREACH.x0 - 20; x < BREACH.x1 + 20; x += 30) parts.push(beam(crossPoint(x, a, 0.965), crossPoint(x + 30, a, 0.965), 3, 3));
+  }
+  {
+    const xm = (BREACH.x0 + BREACH.x1) / 2, w = halfWidth(xm);
+    add(box, xm - 40, 70, 0, BREACH.x1 - BREACH.x0 - 80, 3, w * 1.5);
+    add(box, xm + 20, 5, 0, BREACH.x1 - BREACH.x0, 3, w * 1.7);
+    for (let x = BREACH.x0 + 20; x < BREACH.x1; x += 70) add(box, x, 38, -w * 0.3, 3, 64, w * 0.9);
+    // debris hanging over the edge
+    parts.push(beam([BREACH.x0 + 60, deckY(-800) - 2, -120], [BREACH.x0 + 110, 60, -230], 10, 2));
+    parts.push(beam([BREACH.x0 + 180, deckY(-700) - 4, -60], [BREACH.x0 + 150, 40, -170], 14, 2));
+  }
+
+  // ---- the bridge complex: stepped, tapered terraces, a crown, masts (one broken and fallen)
   const bx = -1380, by = deckY(bx);
-  parts.push([box, M(bx, by + 55, 0, 380, 110, 260)]);
-  parts.push([box, M(bx + 20, by + 150, 0, 280, 80, 190)]);
-  parts.push([box, M(bx + 40, by + 215, 0, 190, 50, 130)]);
-  parts.push([box, M(bx + 70, by + 250, 0, 120, 18, 320)]);   // wings
-  parts.push([box, M(bx + 50, by + 275, 0, 70, 34, 70)]);
-  // a second, lower tower amidships
-  parts.push([box, M(-200, deckY(-200) + 60, -90, 180, 120, 120)]);
-  parts.push([box, M(-190, deckY(-200) + 150, -90, 110, 70, 80)]);
-  // ---- antenna masts
-  const cyl = new THREE.CylinderGeometry(1, 1, 1, 8, 1);
-  parts.push([cyl, M(bx + 50, by + 290 + 210, 0, 4, 420, 4)]);
-  parts.push([cyl, M(bx + 30, by + 290 + 140, 30, 3, 280, 3)]);
-  parts.push([box, M(bx + 50, by + 640, 0, 6, 4, 140)]);
-  parts.push([box, M(bx + 50, by + 520, 0, 4, 4, 90)]);
-  parts.push([cyl, M(-190, deckY(-200) + 185 + 150, -90, 3, 300, 3)]);
-  // a broken mast, leaning
-  parts.push([cyl, M(1100, deckY(1100) + 110, -150, 4, 260, 4, 0.0, 0, -0.55)]);
-  // the bow spar
-  parts.push([cyl, M(SHIP.bow + 220, 10, 0, 6, 520, 6, 0, 0, Math.PI / 2)]);
-  // ---- keel fin
+  add(prism(4, 0.9), bx, by + 50, 0, 400, 100, 300);
+  add(prism(4, 0.88), bx + 20, by + 100 + 40, 0, 300, 80, 220);
+  for (const sg of [-1, 1]) {
+    pilasters(bx - 190, bx + 190, sg * 141, sg, by, 96, 16);
+    pilasters(bx - 120, bx + 160, sg * 104, sg, by + 100, 78, 12);
+    // galleries cantilevered off the terraces
+    add(box, bx + 10, by + 70, sg * 158, 340, 6, 22);
+    add(box, bx + 30, by + 150, sg * 118, 260, 5, 18);
+    for (let x = bx - 160; x < bx + 180; x += 24) add(box, x, by + 76, sg * 168, 1.6, 10, 1.6);
+  }
+  pilastersX(-140, 140, bx - 190, -1, by, 96, 16);
+  pilastersX(-100, 100, bx - 128, -1, by + 100, 78, 12);
+  add(prism(8, 0.8), bx + 40, by + 180 + 30, 0, 200, 60, 150);
+  add(box, bx + 70, by + 246, 0, 110, 14, 330);           // wings
+  add(prism(8, 0.7), bx + 50, by + 253 + 25, 0, 80, 50, 70);
+  for (const [dz, len] of [[-150, 330], [150, 330]]) add(box, bx + 70, by + 238, dz, 30, 8, 30);
+  roofClutter(bx - 180, bx + 180, -130, 130, by + 100, 20);
+  roofClutter(bx - 120, bx + 140, -90, 90, by + 180, 12);
+  parts.push([cyl8, M(bx + 50, by + 303 + 210, 0, 4, 420, 4), null]);
+  add(box, bx + 50, by + 640, 0, 6, 4, 150); add(box, bx + 50, by + 520, 0, 4, 4, 100);
+  parts.push([cyl8, M(bx + 30, by + 303 + 70, -20, 3, 140, 3), null]);       // broken stump
+  parts.push(beam([bx + 30, by + 443, -20], [bx + 250, by + 110, -150], 5, 5)); // the fallen top, across the terraces
+  antennas(bx + 60, by + 303, -20, 5, 160);
+  // ---- the spire cluster amidships, port side
+  for (const [dx, dz, s, h] of [[-200, -150, 70, 300], [-130, -110, 50, 220], [-250, -95, 44, 180], [-160, -190, 36, 140]]) {
+    const base = deckAt(dx, dz) - 2;
+    add(prism(4, 0.95), dx, base + 9, dz, s * 1.6, 18, s * 1.6);
+    add(prism(8, 0.72), dx, base + 18 + h / 2, dz, s, h, s);
+    add(prism(8, 0.6), dx, base + 18 + h + h * 0.08, dz, s * 0.5, h * 0.16, s * 0.5);
+    parts.push([cone6, M(dx, base + 18 + h * 1.16 + 50, dz, s * 0.14, 100, s * 0.14), null]);
+  }
+  // ---- the tower that keeps the window: on the lane's starboard wall
+  {
+    const base = deckAt(-255, 140) - 2;
+    add(prism(4, 0.96), -255, base + 85, 142, 150, 170, 84);
+    add(prism(8, 0.8), -255, base + 170 + 40, 150, 70, 80, 60);
+    antennas(-255, base + 250, 150, 3, 120);
+  }
+  // ---- the bow spar, the keel fin, the engines
+  parts.push([cyl8, M(SHIP.bow + 220, 10, 0, 6, 520, 6, 0, 0, Math.PI / 2), null]);
   const fin = new THREE.Shape();
   const fx0 = -1750, fx1 = 650;
   fin.moveTo(fx0, keelY(fx0) + 30);
@@ -185,94 +433,117 @@ function buildParts(seed) {
   fin.lineTo(fx1 - 260, -470);
   fin.lineTo(fx0 + 140, -470);
   fin.lineTo(fx0, keelY(fx0) + 30);
-  const finG = new THREE.ExtrudeGeometry(fin, { depth: 36, bevelEnabled: false });
-  parts.push([finG, M(0, 0, -18)]);
-  // ---- engines: a housing block and three bells
-  parts.push([box, M(SHIP.stern - 40, -30, 0, 100, 260, 520)]);
+  parts.push([new THREE.ExtrudeGeometry(fin, { depth: 36, bevelEnabled: false }), M(0, 0, -18), null]);
+  add(prism(8, 0.9), SHIP.stern - 40, -30, 0, 100, 260, 520, 0, 0, Math.PI / 2);
   const bell = new THREE.LatheGeometry(
     [[0.42, 0], [0.5, -0.18], [0.66, -0.5], [0.84, -0.8], [1.0, -1.0], [0.96, -1.0], [0.8, -0.78], [0.62, -0.48], [0.46, -0.18], [0.38, 0]].map(([r, y]) => new THREE.Vector2(r, y)),
     28);
   for (const [z, y, r] of [[0, -20, 170], [-215, -70, 115], [215, -70, 115]]) {
-    parts.push([bell, M(SHIP.stern - 80, y, z, r, 300 * (r / 170), r, 0, 0, -Math.PI / 2)]);
+    parts.push([bell, M(SHIP.stern - 80, y, z, r, 300 * (r / 170), r, 0, 0, -Math.PI / 2), null]);
   }
-  return merge(parts);
+  // merged in chunks along the ship (the loft on its own), so the renderer can draw near chunks
+  // first and the depth test rejects what they hide before it is shaded
+  const bins = new Map();
+  for (const part of parts.slice(1)) {
+    const x = part[1] ? part[1].elements[12] : 0;
+    const k = Math.floor((x - SHIP.stern) / 360);
+    if (!bins.has(k)) bins.set(k, []);
+    bins.get(k).push(part);
+  }
+  return [merge([parts[0]]), ...[...bins.keys()].sort((a, b) => a - b).map((k) => merge(bins.get(k)))];
 }
 
-// ---- plating, in the shader: projected plates with seams, tints, section lines and grime
+// ---- the metal, in the shader: gunmetal and oxidised bronze in sections; panels of varied sizes,
+// fine seams, soot, small dark windows in rows, worn edges, a dark foot where a block meets the deck.
+// Detail smaller than a pixel or two fades to its average (no tiling, no moire at distance).
 function hullMaterial() {
-  const m = new THREE.MeshStandardNodeMaterial();
+  const m = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide });
   const p = positionLocal, n = normalLocal;
   const an = abs(n);
   const useY = an.y.greaterThan(max(an.x, an.z));
   const useZ = an.z.greaterThan(an.x);
   const pc = select(useY, vec2(p.x, p.z), select(useZ, vec2(p.x, p.y), vec2(p.z, p.y)));
   const axisId = select(useY, float(1.0), select(useZ, float(2.0), float(3.0)));
-  const size = vec2(9.0, 6.0);
-  const q0 = pc.div(size);
-  const row = floor(q0.y);
-  const q = vec2(q0.x.add(mx_cell_noise_float(vec3(floor(row.div(4.0)), axisId, 3.0)).mul(0.5)), q0.y);
-  const cell = floor(q);
-  const f = fract(q);
-  const fw = fwidth(q).mul(1.2).add(0.004);
-  const edge = min(min(f.x, float(1.0).sub(f.x)).div(fw.x), min(f.y, float(1.0).sub(f.y)).div(fw.y));
-  // plates smaller than a few pixels fade to their average (no moire, no tiled look at distance)
-  const near = float(1.0).sub(smoothstep(0.08, 0.3, max(fw.x, fw.y)));
-  const seam = mix(float(0.8), smoothstep(0.0, 1.0, edge.mul(0.5)), near); // 0 on a seam, 1 on a plate
-  const h = mix(float(0.5), mx_cell_noise_float(vec3(cell, axisId)), near);
-  const h2 = mx_cell_noise_float(vec3(cell.add(vec2(17.0, 5.0)), axisId));
-  // larger sections: a stronger line every 120 m along the ship and a bigger tint
-  const secQ = pc.div(vec2(54.0, 30.0));
-  const secF = fract(secQ);
-  const secFw = fwidth(secQ).mul(2.0).add(0.002);
-  const secNear = float(1.0).sub(smoothstep(0.05, 0.2, max(secFw.x, secFw.y)));
-  const secLine = mix(float(0.85), smoothstep(0.0, 1.0, min(min(secF.x, float(1.0).sub(secF.x)).div(secFw.x), min(secF.y, float(1.0).sub(secF.y)).div(secFw.y)).mul(0.5)), secNear);
-  const secH = mx_cell_noise_float(vec3(floor(secQ), axisId.add(7.0)));
-  // grime: streaks drawn out along the hull
-  const grime = mx_fractal_noise_float(p.mul(vec3(0.0016, 0.012, 0.012)), 4, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
-  // dead windows: rows of small dark ports on upright faces of some sections (they give the scale
-  // of a city block), and dark hatches on some deck plates
-  const wq = pc.div(vec2(3.6, 4.4));
+  const upright = select(useY, float(0.0), float(1.0));
+  const fwm = length(fwidth(pc)).add(1e-4);                 // metres per pixel here
+  const fade = (metres) => float(1.0).sub(smoothstep(metres * 0.25, metres * 0.6, fwm)); // 1 while a feature of this size is resolved
+  // sections, 48 x 24 m, each split into its own number of panels
+  const sq = pc.div(vec2(48.0, 24.0));
+  const sc = floor(sq), sf = fract(sq);
+  const sh = mx_cell_noise_float(vec3(sc, axisId)), sh2 = mx_cell_noise_float(vec3(sc, axisId.add(5.0)));
+  const nx = floor(sh.mul(4.0)).add(2.0), ny = floor(sh2.mul(3.0)).add(2.0);
+  const pf = sf.mul(vec2(nx, ny));
+  const pcell = floor(pf), pfr = fract(pf);
+  const pid = mx_cell_noise_float(vec3(sc.mul(7.0).add(pcell), axisId.add(2.0)));
+  const pid2 = mx_cell_noise_float(vec3(sc.mul(7.0).add(pcell), axisId.add(9.0)));
+  const panelM = vec2(48.0, 24.0).div(vec2(nx, ny));
+  const dPanel = min(min(pfr.x, float(1.0).sub(pfr.x)).mul(panelM.x), min(pfr.y, float(1.0).sub(pfr.y)).mul(panelM.y));
+  const dSec = min(min(sf.x, float(1.0).sub(sf.x)).mul(48.0), min(sf.y, float(1.0).sub(sf.y)).mul(24.0));
+  const seamP = float(1.0).sub(smoothstep(0.12, fwm.add(0.12), dPanel)).mul(fade(3.0));
+  const seamS = float(1.0).sub(smoothstep(0.3, fwm.add(0.3), dSec)).mul(fade(4.0));
+  const pv = mix(float(0.5), pid, fade(6.0));
+  // small plates inside the panels (fine structure up close)
+  const fq = pc.div(vec2(2.4, 1.6));
+  const ff = fract(fq);
+  const dFine = min(min(ff.x, float(1.0).sub(ff.x)).mul(2.4), min(ff.y, float(1.0).sub(ff.y)).mul(1.6));
+  const seamF = float(1.0).sub(smoothstep(0.05, fwm.add(0.05), dFine)).mul(fade(0.9)).mul(step(0.2, pid2));
+  // gunmetal or oxidised bronze, by large region
+  // the region noise varies over kilometres: computed per vertex
+  const region = vertexStage(mx_fractal_noise_float(p.mul(0.0014), 2, 2.0, 0.5, 1.0)).add(sh.sub(0.5).mul(0.35));
+  const bronzeK = smoothstep(0.05, 0.3, region);
+  // soot streaks down the upright faces, and grime across the decks
+  const soot = smoothstep(0.0, 0.55, mx_fractal_noise_float(vec3(pc.x.mul(0.07), pc.y.mul(0.005), axisId), 2, 2.0, 0.5, 1.0)).mul(upright);
+  const grime = mx_fractal_noise_float(p.mul(vec3(0.004, 0.02, 0.01)), 2, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
+  // windows: 0.8 x 1.3 m, 1.8 m apart, floors 3.4 m, in some sections and some floors
+  const wq = pc.div(vec2(1.5, 3.0));
   const wf = fract(wq);
-  const wfw = fwidth(wq).add(0.02);
-  const wx = smoothstep(0.22, float(0.22).add(wfw.x), wf.x).mul(float(1.0).sub(smoothstep(float(0.62).sub(wfw.x), 0.62, wf.x)));
-  const wy = smoothstep(0.38, float(0.38).add(wfw.y), wf.y).mul(float(1.0).sub(smoothstep(float(0.72).sub(wfw.y), 0.72, wf.y)));
-  const wNear = float(1.0).sub(smoothstep(0.12, 0.4, max(wfw.x, wfw.y)));
-  const upright = float(1.0).sub(select(useY, float(1.0), float(0.0)));
-  const winMask = wx.mul(wy).mul(upright).mul(smoothstep(0.45, 0.55, secH)).mul(step(0.25, mx_cell_noise_float(vec3(floor(wq.div(vec2(6.0, 1.0))), axisId.add(11.0)))));
-  const winDark = mix(winMask.mul(0.18), winMask, wNear); // far away, a row reads as a slightly darker band
-  const hatch = select(useY, smoothstep(0.93, 0.95, h2), float(0.0)).mul(near);
-  const base = vec3(0.10, 0.092, 0.084);
-  const light = vec3(0.17, 0.155, 0.135);
-  const rust = vec3(0.11, 0.06, 0.035);
+  const wfw = fwidth(wq).add(0.01);
+  const wx = smoothstep(0.33, float(0.33).add(wfw.x), wf.x).mul(float(1.0).sub(smoothstep(float(0.67).sub(wfw.x), 0.67, wf.x)));
+  const wy = smoothstep(0.34, float(0.34).add(wfw.y), wf.y).mul(float(1.0).sub(smoothstep(float(0.72).sub(wfw.y), 0.72, wf.y)));
+  const floorOn = step(0.5, mx_cell_noise_float(vec3(floor(wq.y), sc.x, axisId.add(13.0))));
+  const winZone = upright.mul(step(0.45, sh2)).mul(floorOn);
+  const winMask = mix(float(0.42).mul(floorOn), wx.mul(wy), fade(2.2)).mul(winZone);
+  const winVar = mx_cell_noise_float(vec3(floor(wq), axisId.add(17.0)));
+  // worn edges and a dark foot, from the part's own box (aEP: position in the part, aEH: half size)
+  const eP = attribute('aEP', 'vec3'), eH = attribute('aEH', 'vec3');
+  const e = eH.sub(abs(eP));
+  const eMin = min(min(e.x, e.y), e.z), eMax = max(max(e.x, e.y), e.z);
+  const e2 = e.x.add(e.y).add(e.z).sub(eMin).sub(eMax);   // distance to the nearest edge on this face
+  const wear = float(1.0).sub(smoothstep(0.0, fwm.mul(1.5).add(0.6), e2));
+  const foot = mix(float(0.45), float(1.0), smoothstep(0.0, 7.0, eP.y.add(eH.y))).mul(upright).add(float(1.0).sub(upright));
+  const gun = vec3(0.052, 0.054, 0.059), bronze = vec3(0.088, 0.060, 0.036);
   m.colorNode = Fn(() => {
-    const col = mix(base, light, h.mul(0.22).add(secH.mul(0.35))).toVar();
-    col.assign(mix(col, rust, smoothstep(0.9, 0.99, h2).mul(0.4).mul(near)));
-    col.mulAssign(secH.mul(0.2).add(0.9));
-    col.mulAssign(grime.mul(0.6).add(0.55));
-    col.mulAssign(seam.mul(select(useY, float(0.22), float(0.4))).add(select(useY, float(0.78), float(0.6))));
-    col.mulAssign(secLine.mul(0.45).add(0.55));
-    col.mulAssign(float(1.0).sub(winDark.mul(0.8)));
-    col.mulAssign(float(1.0).sub(hatch.mul(0.7)));
+    const col = mix(gun, bronze, bronzeK).toVar();
+    col.mulAssign(pv.mul(0.2).add(0.9));
+    col.mulAssign(sh.mul(0.14).add(0.93));
+    col.mulAssign(grime.mul(0.4).add(0.72));
+    col.mulAssign(float(1.0).sub(soot.mul(0.45)));
+    col.mulAssign(float(1.0).sub(seamP.mul(0.38)).mul(float(1.0).sub(seamS.mul(0.5))).mul(float(1.0).sub(seamF.mul(0.18))));
+    col.assign(mix(col, vec3(0.012, 0.011, 0.011).add(vec3(0.03, 0.026, 0.02).mul(step(0.92, winVar))), winMask.mul(0.92)));
+    col.assign(mix(col, mix(vec3(0.17, 0.165, 0.16), vec3(0.22, 0.16, 0.10), bronzeK), wear.mul(0.6)));
+    col.mulAssign(foot);
     return col;
   })();
-  m.roughnessNode = h2.mul(0.08).add(0.62).add(float(1.0).sub(seam).mul(0.1));
-  m.metalnessNode = float(0.35);
+  m.roughnessNode = clamp(pv.mul(0.08).add(0.55).add(seamP.mul(0.15)).sub(wear.mul(0.25)).add(soot.mul(0.12)), 0.18, 0.95);
+  m.metalnessNode = mix(float(0.55), float(0.45), bronzeK);
   return m;
 }
 
 export function createHull({ seed = 4417 } = {}) {
   const group = new THREE.Group();
-  const geo = buildParts(seed);
-  const mesh = new THREE.Mesh(geo, hullMaterial());
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  group.add(mesh);
+  const mat = hullMaterial();
+  for (const geo of buildParts(seed)) {
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    group.add(mesh);
+  }
 
-  // ---- the one window still breathing: a small amber pane on the amidships tower's forward face
-  const win = new THREE.Mesh(new THREE.BoxGeometry(7, 4.5, 1), new THREE.MeshBasicNodeMaterial({ color: 0xffffff }));
-  win.material.colorNode = vec3(9.0, 4.2, 1.1);
-  const tx = -200, ty = deckY(tx);
-  win.rotation.y = Math.PI / 2;
-  win.position.set(tx + 90.4, ty + 84, -118);
+  // ---- the one window still breathing: a small amber pane in the lane's starboard wall
+  const win = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.0, 0.6), new THREE.MeshBasicNodeMaterial({ color: 0xffffff }));
+  win.material.colorNode = vec3(14.0, 6.4, 1.6);
+  const wy = deckAt(-255, 140) - 2 + 112;
+  win.position.set(-262, wy, 100.9);
   group.add(win);
   // its glow: a billboard, additive, a few times the pane's size
   const gm = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -280,8 +551,8 @@ export function createHull({ seed = 4417 } = {}) {
   gm.colorNode = vec3(1.0, 0.5, 0.14).mul(exp(d.mul(d).mul(-9.0)).mul(1.4).add(exp(d.mul(-5.0)).mul(0.35))).mul(float(1.0).sub(step(1.0, d)));
   gm.opacityNode = float(1.0);
   const glow = new THREE.Sprite(gm);
-  glow.scale.set(70, 70, 1);
-  glow.position.set(tx + 96, ty + 84, -118);
+  glow.scale.set(30, 30, 1);
+  glow.position.set(-262, wy, 98.5);
   group.add(glow);
   group.userData.window = win.position.clone();
 

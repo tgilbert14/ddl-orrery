@@ -12,7 +12,7 @@ import { createShuttle } from './shuttle.js';
 
 const SHOTS = ['arrival', 'hull', 'approach', 'threshold', 'orrery'];
 // exposure per still (the worlds up close are far brighter than the dark metal)
-const P_EXPOSURE = { threshold: 1.0, approach: 1.3 };
+const P_EXPOSURE = { threshold: 1.0, approach: 1.3, hull: 1.25 };
 const q = new URLSearchParams(location.search);
 const readoutEl = document.getElementById('readout');
 const state = (window.__orbitLook = { ready: false, error: null, backend: null, shot: null });
@@ -33,8 +33,8 @@ function poster(msg, err) {
 // its forward direction, distance from its camera), so the first frame is composed; every other
 // shot is posed around the same arrangement.
 const ARR = {
-  shuttle: [-2620, 260, -640],
-  yaw: 6, pitch: -2.5,             // the shuttle's heading
+  shuttle: [-2350, 560, -950],
+  yaw: 12, pitch: -8,             // the shuttle's heading
   back: 190, up: 40,             // the camera boom
 };
 ARR.fwd = dirYP(ARR.yaw, ARR.pitch);
@@ -42,15 +42,15 @@ ARR.cam = add(sub(ARR.shuttle, mul(ARR.fwd, ARR.back)), [0, ARR.up, 0]);
 
 // [id, yaw, pitch (deg, relative to the arrival heading), distance from the arrival camera, orbit tilt (deg)]
 const PLACE = {
-  'dust-sea': [-22, 14, 9000, 18],
-  arcadia: [22, 15, 15500, -26],
+  'dust-sea': [22, 15, 9000, 18],
+  arcadia: [-21, 4, 15500, -26],
   velocity: [-5, 18, 23000, 40],
-  archive: [-34, -9, 33000, 9],
+  archive: [-17, -15, 33000, 9],
   stormwall: [7, -0.5, 38000, -12],
-  aurora: [31, 21, 68000, 58],
+  aurora: [36, 1, 68000, 58],
   beacons: [-15, 23, 84000, -33],
   // out of the first frame
-  abyssal: [-196, 3.5, 15500, 24],
+  abyssal: [-196, 14, 15500, 24],
   grid: [128, 12, 21000, 22],
   uncharted: [72, -38, 27000, 70],
   drillyard: [-96, 31, 39000, -20],
@@ -66,8 +66,16 @@ function arrange() {
     const t = tilt * DEG;
     const n = add(mul(n0, Math.cos(t)), mul(cross(a, n0), Math.sin(t)));
     const orbitB = cross(n, a);
-    const spin = [((i * 0.73) % 1) * 0.8 - 0.4, (i * 2.39) % (Math.PI * 2), ((i * 0.41) % 1) * 0.6 - 0.3];
-    return { ...w, pos, orbitB, spin };
+    let spin = [((i * 0.73) % 1) * 0.8 - 0.4, (i * 2.39) % (Math.PI * 2), ((i * 0.41) % 1) * 0.6 - 0.3];
+    const extra = {};
+    if (w.id === 'dust-sea') {
+      // unrotated, so the storm front can be placed in world terms: on the lit side, toward the arrival view
+      spin = [0, 0, 0];
+      const toCam = norm(sub(ARR.cam, pos));
+      extra.stormAxis = norm(add(mul(SUN1.dir, 0.7), toCam));
+      extra.stormSide = norm(cross(extra.stormAxis, [0, 1, 0]));
+    }
+    return { ...w, pos, orbitB, spin, ...extra };
   });
 }
 
@@ -76,17 +84,17 @@ function arrange() {
 function shotPose(name, placed) {
   const W = Object.fromEntries(placed.map((w) => [w.id, w]));
   if (name === 'arrival') {
-    return { cam: ARR.cam, look: add(ARR.cam, ARR.fwd), vfov: 52, vfovPortrait: 84, portraitYaw: -3, portraitPitch: 6,
+    return { cam: ARR.cam, look: add(ARR.cam, ARR.fwd), vfov: 52, vfovPortrait: 84, portraitYaw: 4, portraitPitch: 2,
       shuttle: { pos: ARR.shuttle, dir: ARR.fwd } };
   }
   if (name === 'hull') {
     // skimming the deck toward the stern down the open lane, the sun behind the right shoulder,
     // the amidships tower (and its one window) ahead on the right, a world beyond the stern
-    const sx = 560, sz = 42;
-    const sp = [sx, deckAt(sx, sz) + 32, sz];
-    const fwd = norm(dirYP(180, -1.5));
-    const cam = add(sub(sp, mul(fwd, 170)), [0, 70, 8]);
-    return { cam, look: add(cam, norm(dirYP(181, -10))), vfov: 50, vfovPortrait: 78, shuttle: { pos: sp, dir: fwd } };
+    const sx = 230, sz = 46;
+    const sp = [sx, deckAt(sx, sz) + 30, sz];
+    const fwd = norm(dirYP(180, -1));
+    const cam = add(sub(sp, mul(fwd, 210)), [0, 62, 2]);
+    return { cam, look: add(cam, norm(dirYP(181, -8))), vfov: 52, vfovPortrait: 78, shuttle: { pos: sp, dir: fwd } };
   }
   if (name === 'approach') {
     const D = W['dust-sea'];
@@ -94,7 +102,7 @@ function shotPose(name, placed) {
     // pick the side to come from: the Dust Sea a little more than half lit, the ship beside it
     let best = null;
     const p0 = norm(cross(s, [0, 1, 0])), p1 = cross(s, p0);
-    const beta = 50 * DEG, d = 9200;
+    const beta = 52 * DEG, d = 9200;
     for (let k = 0; k < 360; k += 2) {
       const p = add(mul(p0, Math.cos(k * DEG)), mul(p1, Math.sin(k * DEG)));
       const u = add(mul(s, -Math.cos(beta)), mul(p, Math.sin(beta)));
@@ -103,7 +111,7 @@ function shotPose(name, placed) {
     }
     const cam = add(D.pos, mul(best.u, d));
     const toD = norm(sub(D.pos, cam)), toO = norm(sub([0, 0, 0], cam));
-    const look = add(cam, norm(add(mul(toD, 0.72), mul(toO, 0.28))));
+    const look = add(cam, norm(add(mul(toD, 0.6), mul(toO, 0.4))));
     const sp = add(cam, add(mul(toD, 330), [0, -14, 0]));
     return { cam, look, vfov: 50, vfovPortrait: 78, shuttle: { pos: sp, dir: toD }, Ld };
   }
@@ -125,8 +133,8 @@ function shotPose(name, placed) {
     return { cam, look, up, vfov: 56, vfovPortrait: 84, shuttle: { pos: sp, dir: norm(add(t, mul(n0, -0.08))) } };
   }
   if (name === 'orrery') {
-    const cam = mul(norm([-0.55, 1.0, -0.75]), 150000);
-    return { cam, look: [6000, 0, 4000], vfov: 58, vfovPortrait: 90, shuttle: { pos: [-2400, 300, -400], dir: [1, 0, 0] } };
+    const cam = mul(norm([-0.5, 1.0, -0.8]), 60000);
+    return { cam, look: [0, 4500, 0], vfov: 50, vfovPortrait: 86, shuttle: { pos: [-2400, 300, -400], dir: [1, 0, 0] } };
   }
   return null;
 }
@@ -141,7 +149,7 @@ async function run() {
 
   let renderer, backend;
   try {
-    renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: rName === 'webgl2', logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+    renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: rName === 'webgl2', reversedDepthBuffer: rName !== 'webgl2', powerPreference: 'high-performance' });
     await renderer.init();
     const isGPU = renderer.backend.isWebGPUBackend === true;
     backend = isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)';
@@ -166,8 +174,19 @@ async function run() {
 
   // ---- scene
   const scene = new THREE.Scene();
-  const placed = arrange();
-  const sky = createSky(), stars = createStars();
+  let placed = arrange();
+  if (shot === 'orrery') {
+    // the orrery is the arrangement seen whole: radii compressed (a power law) so the inner and outer
+    // orbits share the frame, and the worlds drawn larger so each reads as a sphere with colour
+    placed = placed.map((w) => {
+      const r = len(w.pos), r2 = 7000 * Math.pow(r / 7000, 0.6);
+      const pos = mul(norm(w.pos), r2);
+      const ex = w.stormAxis ? { stormAxis: w.stormAxis, stormSide: w.stormSide } : {};
+      return { ...w, ...ex, pos, R: w.R * 1.7 };
+    });
+  }
+  // stars are sized in CSS pixels; at DPR 2 they would read twice as large, so they shrink a little
+  const sky = createSky(), stars = createStars(14000, 7177, 1 / Math.sqrt(Math.min(window.devicePixelRatio || 1, 2)));
   const hull = createHull();
   const worlds = createWorlds(placed);
   const points = createWorldPoints(placed);
@@ -176,7 +195,7 @@ async function run() {
   if (shot === 'orrery') scene.add(createOrbitLines(placed));
   // a thin dust between the ship and the camera (metal only: the worlds and sky opt out), so the
   // derelict's far end recedes; off for the orrery, where the ship is far away by design
-  if (shot !== 'orrery') scene.fogNode = fog(vec3(0.011, 0.0075, 0.0052), densityFogFactor(0.00007));
+  if (shot !== 'orrery') scene.fogNode = fog(vec3(0.05, 0.032, 0.018), densityFogFactor(shot === 'approach' ? 0.00005 : 0.00016));
 
   // the suns as lights on the metal (the worlds and sky shade themselves from the same directions)
   const sun1 = new THREE.DirectionalLight(new THREE.Color().setRGB(...SUN1.col), 1.0);
@@ -190,15 +209,23 @@ async function run() {
   sun1.shadow.normalBias = 1.5;
   const sun2 = new THREE.DirectionalLight(new THREE.Color().setRGB(...SUN2.col), 0.9);
   sun2.position.set(...mul(SUN2.dir, 9000));
-  sun2.intensity = 0.2;
-  const amb = new THREE.HemisphereLight(new THREE.Color().setRGB(0.020, 0.028, 0.050), new THREE.Color().setRGB(0.016, 0.010, 0.006), 1.0);
+  sun2.intensity = 0.45;
+  // bounce: light the lit metal throws back across the lanes and onto the shadow side (no shadows)
+  const bounce = new THREE.DirectionalLight(new THREE.Color().setRGB(0.55, 0.36, 0.2), 0.32);
+  bounce.position.set(-SUN1.dir[0] * 9000, 0.35 * 9000, -SUN1.dir[2] * 9000);
+  scene.add(bounce);
+  const amb = new THREE.HemisphereLight(new THREE.Color().setRGB(0.15, 0.135, 0.15), new THREE.Color().setRGB(0.05, 0.032, 0.018), 1.0);
   scene.add(sun1, sun1.target, sun2, amb);
 
   // ---- camera
   const P = shotPose(shot, placed);
   const aspect = window.innerWidth / window.innerHeight;
   const portrait = aspect < 1;
-  const camera = new THREE.PerspectiveCamera(portrait ? P.vfovPortrait : P.vfov, aspect, 0.5, 420000);
+    // near plane 5 m: nothing in any still comes closer than ~50 m. WebGPU uses a reversed (float)
+  // depth buffer; WebGL2 a standard one, which at this near plane still resolves 1 m at 5 km.
+  // (Reversed depth on the WebGL2 backend broke the shadow map's comparison in r186; a
+  // logarithmic depth buffer worked but cost 13 ms a frame, because it disables early depth test.)
+  const camera = new THREE.PerspectiveCamera(portrait ? P.vfovPortrait : P.vfov, aspect, 5, 420000);
   camera.position.set(...P.cam);
   if (P.up) camera.up.set(...P.up);
   let look = P.look;
@@ -213,7 +240,7 @@ async function run() {
   stars.position.copy(camera.position);
   shuttle.position.set(...P.shuttle.pos);
   shuttle.lookAt(...add(P.shuttle.pos, P.shuttle.dir));
-  if (shot === 'orrery') shuttle.visible = false;
+  if (shot === 'orrery') { shuttle.visible = false; hull.scale.setScalar(2.2); } // drawn larger, like the worlds
   const pxPerRad = (window.innerHeight * dpr) / (2 * Math.tan((camera.fov * DEG) / 2));
   points.userData.update(camera, pxPerRad);
 
