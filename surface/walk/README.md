@@ -628,6 +628,16 @@ has not been heard by a person; the storm's cost on a slower GPU. The contact sh
 `frames/sheet-storm.jpg` (second round: approach late, arrival, arrival looking along the face, inside
 at dusk, inside at day, the passing).
 
+## The eyes, 13 Nov 2026
+
+The owner asked for glowing eyes in the hood ("keep black with just eyes") and chose the dim amber
+version from a sheet of three (none, dim, bright). Two small ellipsoids sit a centimetre in front of
+the hood's hollow and move with the hood; the body shader turns their marker colour into light, the
+lantern's hue at 0.22 strength, before the storm's dust is applied. From the front and close they
+give the hood life; at 9 m they are a pixel or two; from behind, where the camera sits, they are
+hidden. The bright version blew out to white and competed with the lantern. `?eyes=0` removes them,
+`?eyes=N` sets the strength. The rule is now: no face except the two eyes.
+
 ## Not built yet
 
 Brink plumes, the hub landing and leaving, the shuttle, the colossus and the score. There
