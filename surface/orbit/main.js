@@ -1,7 +1,7 @@
 // The orbit, flown: the first flyable slice (see BRIEF.md, "How it plays"). You arrive in the
 // arrival still's composition with the shuttle drifting; you fly (flight.js) with a chase camera
 // (chase.js); a click, a tap or the world list sets an autopilot course; the nearest world names
-// itself; crossing a world's atmosphere is the descent (a flood in its colour, then its page); Space
+// itself; crossing a world's atmosphere is the descent (a flood in its colour, then its page); M
 // pulls back to the whole orrery. The scene is the look test's (hull.js, worlds.js, stars.js,
 // shuttle.js, layout.js), lit by the real shared suns.
 //
@@ -84,7 +84,23 @@ const hideHint = () => { if (!hintGone) { hintGone = true; hintEl.classList.add(
 const controls = createControls(stage, {
   onFirstInput: hideHint,
   onPullBack: (on, how) => { if (how === 'toggle') pullBack(!pull.want); else pullBack(on); },
+  pullState: () => pull.want,
 });
+
+// ---------------------------------------------------------------- sound (another module; optional)
+// loaded lazily, started on the first gesture, every call guarded: the page is complete without it
+let soundMod = null, sound = null, muted = q.get('mute') === '1';
+const muteBtn = $('mute');
+import('./sound.js').then((m) => { soundMod = m; }).catch(() => { soundMod = false; muteBtn.disabled = true; muteBtn.textContent = 'No sound'; });
+function onGesture() {
+  if (sound || !soundMod || typeof soundMod.createSound !== 'function') return;
+  try { sound = soundMod.createSound({ muted }); sound.start().then((ok) => { API.sound = ok ? 'on' : 'refused'; }).catch(() => {}); } catch { sound = null; }
+}
+function setMuteLabel() { muteBtn.textContent = muted ? 'Sound off' : 'Sound on'; muteBtn.setAttribute('aria-pressed', String(muted)); }
+setMuteLabel();
+muteBtn.addEventListener('click', () => { muted = !muted; setMuteLabel(); onGesture(); try { sound?.setMuted(muted); } catch { /* no sound */ } });
+addEventListener('pointerdown', onGesture, { capture: true });
+addEventListener('keydown', onGesture, { capture: true });
 
 // ---------------------------------------------------------------- pull back to the whole orrery
 const pull = { want: false, t: 0, k: 0 };
@@ -333,7 +349,25 @@ function tick(dt) {
   if (!G) return { work: performance.now() - t0 };
   place(dt, intent, near);
   G.renderer.render(G.scene, G.camera);
+  lastSound = soundState(dt, intent);
+  if (sound) { try { sound.update(lastSound); } catch { /* the loop never throws for sound */ } }
   return { work: performance.now() - t0 };
+}
+
+// what the sound hears this frame (it only reads; nothing here changes the flight)
+let lastSound = null;
+function soundState(dt, intent) {
+  try {
+    const cam = G.camera, e = cam.matrixWorld.elements, right = [e[0], e[1], e[2]];
+    const cp = [cam.position.x, cam.position.y, cam.position.z];
+    const worlds = live.map((w) => {
+      const v = sub(w.show, cp), d = len(v);
+      return { slug: w.slug, x: Math.max(0, d - w.showR) / w.showR, surf: d - w.showR, pan: dot(v, right) / Math.max(d, 1e-6) };
+    });
+    const f = flight.state;
+    return { dt, hullDist: field.sample(cp).d, speed: f.speed, cap: f.cap, thrust: intent.thrust || (intent.touchCruise ? 0.7 : 0) || (autopilot ? 1 : 0),
+      boost: !!intent.boost, bank: f.bank, worlds, pull: pull.k, descent: descent ? { slug: descent.slug, t: descent.t } : null, focus: reduced ? rView : null };
+  } catch { return null; }
 }
 
 // the camera, the lights, the worlds' meshes, for this frame
@@ -515,7 +549,7 @@ API.state = () => {
     nearest: { slug: live[near.i].slug, dist: r3(near.centreDist), surfaceDist: r3(near.surfaceDist) },
     autopilot, phase, hullDist: field ? r3(field.sample(f.pos).d) : null, pushed: r3(f.pushed),
     cam: G ? { pos: [G.camera.position.x, G.camera.position.y, G.camera.position.z].map(r3), boom: r3(chase.state.L), near: r3(G.camera.near), fov: G.camera.fov } : null,
-    frame: frameStats(), dpr, surveyed: [...surveyed], pull: r3(pull.k), plate: plateSlug, worldClock: r3(worldClock), exposure: G ? r3(G.exposure) : null, reducedView: rView, lampsLit: G ? G.hull.userData.lamps.filter((l) => l.lit).length : null,
+    frame: frameStats(), dpr, surveyed: [...surveyed], boost: !!(lastIntent && lastIntent.boost), capNow: r3(flight.state.cap * (lastIntent && lastIntent.boost ? 2 : 1)), sound: sound ? { ...sound.stats(), muted } : null, pull: r3(pull.k), plate: plateSlug, worldClock: r3(worldClock), exposure: G ? r3(G.exposure) : null, reducedView: rView, lampsLit: G ? G.hull.userData.lamps.filter((l) => l.lit).length : null,
   };
 };
 API.setPose = (p) => {
@@ -527,6 +561,7 @@ API.setPose = (p) => {
 API.hold = (intent) => { controls.hold(intent); hideHint(); if (phase === 'arrival') phase = 'flight'; };
 API.release = () => controls.release();
 API.flyTo = (slug) => flyTo(slug);
+API.soundState = () => lastSound;
 API.worlds = () => live.map((w) => ({ slug: w.slug, pos: w.pos.map(r3), R: w.R }));
 // clear a finished descent as a return from the world's page would (tests)
 API.resetDescent = () => { if (descent) dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); API.wouldNavigate = null; };

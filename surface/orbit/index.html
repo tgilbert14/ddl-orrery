@@ -92,14 +92,15 @@
 </head>
 <body>
 <div id="poster" hidden><p><span class="why"></span> A dead ship the size of a city, and eleven worlds around it. Choose a world from the list.</p></div>
-<div id="stage" aria-label="The Orrery: a small golden shuttle beside a dead ship the size of a city, with eleven worlds around it. Fly with W A S D or the arrow keys; click or tap a world to fly there."></div>
+<div id="stage" aria-label="The Orrery: a small golden shuttle beside a dead ship the size of a city, with eleven worlds around it. Fly with W A S D or the arrow keys, Space to boost; click or tap a world to fly there; M for the whole orrery."></div>
 <p id="title" aria-hidden="true"><b>The Orrery</b><span>Eleven worlds, one dead ship.</span></p>
-<p id="hint"><span class="desk-only">W A S D or arrows to fly, Shift to boost. Click a world to fly there; click empty space to steer with the mouse. Hold Space for the whole orrery.</span><span class="touch-only">Left thumb steers, right thumb looks. Tap a world to fly there; pinch out for the whole orrery.</span></p>
+<p id="hint"><span class="desk-only">W A S D or arrows to fly, Space or Shift to boost. Click a world to fly there; click empty space to steer with the mouse. Hold M for the whole orrery.</span><span class="touch-only">Left thumb steers, right thumb looks. Tap a world to fly there; pinch out for the whole orrery.</span></p>
 <div id="plate" aria-live="polite"><b></b><span></span></div>
 <div id="dot"></div>
 <div id="stick"><i></i></div>
 <nav class="ui" id="home" aria-label="Leave the orbit"><a href="../../">Classic hub</a></nav>
 <div class="ui" id="bar">
+  <button type="button" id="mute" aria-pressed="false">Sound on</button>
   <button type="button" id="whole" aria-pressed="false">Whole orrery</button>
   <button type="button" id="logBtn">Ship's log</button>
   <button type="button" id="worldsBtn" aria-expanded="false" aria-controls="worlds">Worlds</button>

@@ -1,9 +1,10 @@
 // The orbit, flown: controls. read() gives the frame's intent for flight.js and chase.js.
-// Desktop: W / S or up / down thrust and brake, A / D or left / right yaw (with a bank), Shift boosts.
+// Desktop: W / S or up / down thrust and brake, A / D or left / right yaw (with a bank), Space or Shift
+// boosts (held).
 // A click on a world flies there; a click elsewhere captures the mouse, and then the pointer steers
 // (yaw and pitch; Esc releases); without the capture, dragging with the left button steers. Dragging
-// with the right button orbits the view (it eases back behind after a few seconds). Holding Space
-// pulls back to the whole orrery.
+// with the right button orbits the view (it eases back behind after a few seconds). M pulls back to the
+// whole orrery: hold it to look, or tap it to stay pulled back (tap again to return).
 // Touch (the same division as surface/engine/input.js): the left half is a thumb stick that appears
 // where the thumb lands (push to steer; the shuttle cruises while it is held; push and hold twice
 // quickly to boost), the right half looks around, a quick tap on a world flies there, and two
@@ -16,26 +17,26 @@ const STEER_DRAG = 0.0024;
 const LOOK = 0.004;
 const STICK_R = 60, TAP_MS = 300, TAP_PX = 9, DOUBLE_MS = 320;
 
-export function createControls(el, { onFirstInput, onPullBack, onGesture } = {}) {
+export function createControls(el, { onFirstInput, onPullBack, onGesture, pullState } = {}) {
   const keys = new Set();
   let steerX = 0, steerY = 0, lookX = 0, lookY = 0, pick = null, steered = false;
   let locked = false, lockRefused = false;
   let stick = null, lookTouch = null, lastStickEnd = 0, pinch = null;
-  let first = false, scripted = null, spaceHeld = false;
+  let first = false, scripted = null;
   const pointers = new Map();
   const firstInput = () => { if (!first) { first = true; onFirstInput?.(); } };
 
   const typing = (e) => e.target && e.target.closest && e.target.closest('button, a, input, dialog, [role="dialog"]');
+  let mDown = 0, mWasOn = false;
   const onKeyDown = (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.code === 'Space') {
-      if (typing(e)) return;
-      e.preventDefault();
-      if (!e.repeat && !spaceHeld) { spaceHeld = true; onPullBack?.(true, 'hold'); }
-      firstInput();
+    // Space or Enter on a focused button or link activates it, never the shuttle
+    if ((e.code === 'Space' || e.code === 'Enter') && typing(e)) return;
+    if (e.code === 'KeyM') {
+      if (!e.repeat) { mDown = performance.now(); mWasOn = !!pullState?.(); onPullBack?.(!mWasOn, 'hold'); firstInput(); }
       return;
     }
-    if (typing(e) && (e.code === 'Enter')) return;
+    if (e.code === 'Space') { e.preventDefault(); keys.add('Space'); firstInput(); onGesture?.(); return; }
     if (e.code in KEYS || e.code.startsWith('Shift')) {
       keys.add(e.code);
       if (e.code in KEYS) { steered = true; firstInput(); }
@@ -45,9 +46,10 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture } = {})
   };
   const onKeyUp = (e) => {
     keys.delete(e.code);
-    if (e.code === 'Space' && spaceHeld) { spaceHeld = false; onPullBack?.(false, 'hold'); }
+    // M held longer than a tap: letting go drops back; a tap leaves it pulled back (or returned)
+    if (e.code === 'KeyM' && mDown) { if (performance.now() - mDown > 300 && !mWasOn) onPullBack?.(false, 'hold'); mDown = 0; }
   };
-  const onBlur = () => { keys.clear(); stick = null; lookTouch = null; pinch = null; pointers.clear(); if (spaceHeld) { spaceHeld = false; onPullBack?.(false, 'hold'); } };
+  const onBlur = () => { keys.clear(); stick = null; lookTouch = null; pinch = null; pointers.clear(); mDown = 0; };
 
   const lockSupported = typeof el.requestPointerLock === 'function';
   const onLockChange = () => { locked = document.pointerLockElement === el; document.body.classList.toggle('locked', locked); };
@@ -140,7 +142,7 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture } = {})
     if (keys.has('KeyS') || keys.has('ArrowDown')) thrust -= 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) yaw -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) yaw += 1;
-    let boost = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    let boost = keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('Space');
     let touchCruise = false;
     if (stick) {
       const mx = stick.dx / STICK_R, my = stick.dy / STICK_R, m = Math.hypot(mx, my);
