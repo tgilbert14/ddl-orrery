@@ -86,7 +86,15 @@ A hint line fades out after your first movement.
 
 ## What is in it
 
-- `walker.js`: plain JavaScript on `../look-test/height.js`, so the walker and the GPU ground use
+Since the engine refactor of 13 Nov 2026 (its own section below) the files are in three places:
+the shared engine in `../engine/` (`main.js`, `world.js`, `walker.js`, `clipmap.js`, `shadows.js`,
+`figure.js`, `pilgrim.js`, `follow.js`, `input.js`), everything Dust Sea in `../worlds/dust-sea/`
+(`world.js`, `height.js`, `params.js`, `tsl-material.js`, `times.js`, `trace.js`, `pour.js`,
+`puffs.js`, `air.js`, `storm.js`, `sound.js`), and this folder, which is the page: `index.html`, a
+three-line `main.js` that boots the engine on the Dust Sea, the poster and this record. The notes
+below name the files as they were, by bare name.
+
+- `walker.js`: plain JavaScript on the world's `height.js`, so the walker and the GPU ground use
   the same formula. Eye 1.7 m above the mean ground under a 0.3 m footprint, minus the sink (2 cm,
   up to 6.5 cm on a slip face), plus a head bob of up to 1.8 cm walking and 3 cm running. Walk
   1.6 m/s, run 4.5 m/s, slower uphill, a little faster downhill. Above 28 degrees you cannot walk
@@ -637,6 +645,33 @@ lantern's hue at 0.22 strength, before the storm's dust is applied. From the fro
 give the hood life; at 9 m they are a pixel or two; from behind, where the camera sits, they are
 hidden. The bright version blew out to white and competed with the lantern. `?eyes=0` removes them,
 `?eyes=N` sets the strength. The rule is now: no face except the two eyes.
+
+## The engine refactor, 13 Nov 2026
+
+The playbook (`../PLAYBOOK.md`) asked for one change before a second world: the shared files out of
+this folder and each world in a folder of its own, with calm stills identical before and after.
+
+- `../engine/`: `main.js` now exports `start(world)` (the whole page in one function; it imports no
+  world module by name), `world.js` holds the world contract in its header and live bindings that
+  `walker.js`, `follow.js`, `pilgrim.js` and `figure.js` import in place of `../look-test/height.js`
+  and `params.js`, plus `clipmap.js`, `shadows.js`, `input.js` unchanged.
+- `../worlds/dust-sea/`: `world.js` is the manifest (`name`, `slug`, `height`, `heightD`,
+  `findCrest`, `WIND`, `params`, `times`, `starts()` with the three start poses that used to be
+  constants in `main.js`, `graphics()` loading the graphics-bound modules, `sound()`). `height.js`,
+  `params.js`, `tsl-material.js` and `glsl-material.js` moved here from `../look-test/` (the look
+  test page stays there and imports them). `trace.js` gained `TRACE_THIRD`, the third-person numbers
+  `main.js` used to write over `TRACE`. The storm is reached as the world's `event`
+  (`create`, `apply`, `createSky`, `createParticles`, `fog`); its instance is unchanged.
+- This folder: `index.html` as it was (the URL the hub and the portfolio link to), `main.js` is
+  three lines. `window.__walk.world` is the world module, for scripts.
+
+Checked (headless Chrome, M5 Pro, a worktree of `main` and this tree served side by side; every
+still held, compared byte for byte): eleven calm states (third person at day, dusk and ember, first
+person, WebGL2 in both views, reduced motion, an orbit, two walked states, `storm=off`), eleven storm
+states with `seed=7` (identical across a repeat of `main` too), the first-person and `figure=a`
+regression, and the look test on all three renderers above its readout: all identical. Console
+sweep (a full storm at 8x while walking, six configurations): empty. Calm frame at 1440x900 and
+DPR 2, four directions: within the run-to-run spread of `main`.
 
 ## Not built yet
 

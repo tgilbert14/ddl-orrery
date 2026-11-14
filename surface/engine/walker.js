@@ -13,8 +13,7 @@
 // Units: metres, seconds, radians. Heading is the look test's convention: x toward z, forward is
 // (cos h, sin h), right is (-sin h, cos h).
 
-import { height, heightD, WIND } from '../look-test/height.js';
-import { DEG } from '../look-test/params.js';
+import { height, heightD, WIND, DEG } from './world.js';
 
 export const WALK = {
   eye: 1.7,             // eye above the ground under the feet (before sink and bob)

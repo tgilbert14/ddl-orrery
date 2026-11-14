@@ -15,9 +15,9 @@
 //   aa=0 (round three, cost only): no MSAA, to see what antialiasing costs each renderer
 //   grid=N, shmap=WxH, heading=deg, stand=x,z,r, sun1/sun2=relAz,elev: tuning overrides
 
-import { CAM, GRID, SKY, SHMAP, TIMES, WEATHERS, VIEWS, DEG, lookUniforms } from './params.js';
-import { height, heightLow, heightD, findCrest, WIND } from './height.js';
-import { createGlslMaterials } from './glsl-material.js';
+import { CAM, GRID, SKY, SHMAP, TIMES, WEATHERS, VIEWS, DEG, lookUniforms } from '../worlds/dust-sea/params.js';
+import { height, heightLow, heightD, findCrest, WIND } from '../worlds/dust-sea/height.js';
+import { createGlslMaterials } from '../worlds/dust-sea/glsl-material.js';
 
 const RENDERERS = ['webgpu', 'webgl2', 'classic'];
 const q = new URLSearchParams(location.search);
@@ -178,7 +178,7 @@ async function run() {
       backend = 'WebGL2 (classic WebGLRenderer, GLSL)';
     } else {
       THREE = await import('three/webgpu');
-      const { createTslMaterials } = await import('./tsl-material.js');
+      const { createTslMaterials } = await import('../worlds/dust-sea/tsl-material.js');
       renderer = new THREE.WebGPURenderer({ antialias: q.get('aa') !== '0', forceWebGL: rName === 'webgl2', powerPreference: 'high-performance' });
       await renderer.init();
       if (opts.shadows === 'map') shadowRT = makeShadowRT(THREE.RenderTarget);

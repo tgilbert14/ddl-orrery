@@ -18,7 +18,7 @@
 // and held. The player's orbit still turns it (as an offset), and the tilt is limited in every mode;
 // sliding, the view looks down no further than slidePitchMin, so the horizon or the dune's foot stays.
 
-import { height } from '../look-test/height.js';
+import { height } from './world.js';
 
 export const FOLLOW = {
   boom: 8.2, wide: 12.2, close: 6.8,

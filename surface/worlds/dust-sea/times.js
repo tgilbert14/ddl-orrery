@@ -12,7 +12,7 @@
 //         sun at bearing 58, 1.6 deg up.
 // The sun's light, sky, haze and exposure come from params.js TIMES unchanged.
 
-import { TIMES, VIEWS, lookUniforms, UNIFORM_TYPES, SH, DEG } from '../look-test/params.js';
+import { TIMES, VIEWS, lookUniforms, UNIFORM_TYPES, SH, DEG } from './params.js';
 
 export const TIME_NAMES = ['day', 'dusk', 'ember'];
 const HEADINGS = { day: 214, dusk: 48, ember: 48 };

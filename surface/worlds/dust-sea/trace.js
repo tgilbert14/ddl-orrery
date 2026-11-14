@@ -42,6 +42,11 @@ export const TRACE = {
                       // so prints fill in within seconds inside it (1: as before)
 };
 
+// Third person: the trail must read about 40 m back, so the window is larger (same texel) and heals
+// more slowly, and trodden sand is toned; the engine applies these over TRACE when the walk starts in
+// third person. First person keeps the numbers above.
+export const TRACE_THIRD = { N: 1536, size: 72, tau: 50, rateCrest: 0.9, blur: 0.12, farTone: 0.22, scarTone: 0.15, scarShade: 0.35, carve: true };
+
 export function createTrace(renderer, pour = null) {
   const { N, size } = TRACE;
   const texel = size / N;
