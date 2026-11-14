@@ -1,70 +1,80 @@
 // sound.js: the orbit's sound. Plain Web Audio, every sample generated here: no files, no network,
-// no ScriptProcessor and no AudioWorklet (oscillators, buffers of seeded noise, filters, gains).
+// no ScriptProcessor and no AudioWorklet (oscillators, seeded noise buffers, filters, gains).
 //
-// Contract (main.js loads this with a dynamic import, the way surface/engine loads the Dust Sea's):
-//   createSound(opts?) -> { start(), update(state), setMuted(bool), dispose(), stats() }
-//   Nothing is created until start(), which must run inside a user gesture: it creates and resumes
-//   the context synchronously and resolves true (playing) or false (refused or unavailable: every
-//   later call is a silent no-op). Never rejects, never throws.
-//   update(state) once per frame:
-//     { dt, hullDist, speed, cap, thrust, boost, bank,
-//       worlds: [{ slug, x (surface distance in radii), pan (-1..1) }],
-//       pull (0..1), descent: { slug, t } | null, focus: slug | null (reduced-motion approach view) }
-//   Test hook: createSound({ context, seed }) builds the same graph on a context you pass in (an
-//   OfflineAudioContext), and renderScene() below drives one from a scripted sequence of states.
+// Round two, after the owner listened: "mysterious and almost horror esk, like alien or the dead
+// space game, bioshock". Dread through restraint: mostly near-silence and deep space, with rare,
+// specific, physical events. No tune, no engine drone, nothing that keeps playing at you.
+//   - The derelict (by the camera's distance to the hull, richest in the canyon): a sub bed felt
+//     more than heard (two detuned sines beating), a dark room of noise, the ship breathing (one
+//     slow swell every 7 to 10 s), metal under stress (groans, creaks, ticks of cooling metal, a far
+//     clank), panned to a side, deep in a long cavernous reverb. The heartbeat is rare (about one
+//     beat in six on the hub's 2.4 s grid), and the Artifact's 196 -> 185 reply is an event, once
+//     in 25 to 45 s near the ship, from far inside.
+//   - Space between: almost nothing; a faint low cluster that shifts over tens of seconds, a faint
+//     metallic shimmer, and once in 30 to 60 s something far off (a ping, a dead radio's carrier, a
+//     breath that is almost a voice).
+//   - The worlds: each a presence, not a melody: a drone on its hub root and one or two of its scale
+//     tones, slow filter movement, and one sparse signature texture.
+//   - The shuttle: breath under thrust, a whoosh when boost opens, a tiny servo tick in hard turns.
+//   - A world becoming the nearest thing swells slowly (3 s); the descent bends its drone apart into
+//     a dissonant cluster under a rising rush of air; pulled back, all eleven drones sound quietly
+//     as one glassy chord over the sub bed.
+// Every pitch is the hub score's (src/07-audio.js): the ship on the hub's A (220 Hz), each world on
+// its arrangement's root and scale.
 //
-// The music is the hub's (src/07-audio.js), so the orbit and the old hub are one piece:
-//   - the ship keeps the hub's 2.4 s pulse (its 600 ms step, 'H...' every fourth): the same sub
-//     heartbeat (60 sagging to 46 Hz) and the Artifact's slightly wrong reply, 196 sagging to 185;
-//   - each world sings in its hub arrangement's root, scale, step and lead wave, over a pad on its
-//     padIv chord, lowpassed at its 'bright', with its own delay and reverb sends.
-//
-// Graph:  pulse ─┐
-//        engine ─┤
-//  11 world voices (pad + generative lead, each: lowpass -> level -> pan) ─┤-> mix -> fade -> mute
-//         bed ───┤                                              -> compressor -> soft clip -> out
-//         rush ──┘   (shared sends: a feedback delay and a generated reverb)
+// Contract (unchanged): createSound(opts?) -> { start(), update(state), setMuted(bool), dispose(), stats() }
+//   start() inside a user gesture; resolves true (playing) or false; never throws.
+//   update({ dt, hullDist, speed, cap, thrust, boost, bank, yawRate, worlds: [{ slug, x, surf, pan }],
+//            pull, descent: { slug, t } | null, plate: slug | null, focus: slug | null })
+//   stats() -> { persistentNodes, state, events: [{ t, type, src, pan }] } (the last 400 events)
+//   renderScene(statesFn, { seconds, events }) renders offline (tests) and returns the event log too.
 
 const TAU = Math.PI * 2;
 
-// The mix, as named levels (linear gains into the mix bus). Measured offline, see the report in
-// the commit that adds this file. Nobody has listened to it yet.
+// The mix, as named levels (linear gains). Measured offline (see the report); nobody has listened.
 export const ORBIT_MIX = {
-  master: 0.42,      // into the compressor
-  pulse: 0.5,        // the ship's heartbeat and its 196 -> 185 reply, at the hull
-  pulseFar: 0.02,    // ... share left 20 km out
-  engine: 0.05,      // the shuttle under thrust with boost (cruise is about half, drifting under a tenth)
-  air: 0.016,        // boost's breath
-  voice: 0.32,       // a world's voice at its threshold
-  voicePad: 0.5,     // the pad's share of a voice (the rest is the lead)
-  orrery: 0.32,      // each voice's level when pulled back (of `voice`)
-  bed: 0.035,        // space between: filtered noise near things
-  bedFar: 0.3,       // ... share left far from everything
-  shimmer: 0.012,
-  rush: 0.22,        // the descent's rush of air at the flood's peak
-  duck: 0.8,         // flight layers duck by this share when pulled back
+  master: 0.62,       // into the compressor
+  sub: 0.015,         // the derelict's sub bed at the hull
+  room: 0.05,         // its dark room of noise
+  breath: 0.05,       // the ship breathing (close only)
+  metal: 0.2,         // groans, creaks, ticks, clanks (each event, near the hull)
+  heart: 0.22,        // a rare heartbeat (very close)
+  reply: 0.05,        // the 196 -> 185 answer from inside (mostly reverb)
+  cluster: 0.02,      // space between: the low cluster
+  shimmer: 0.013,     // ... the metallic shimmer
+  far: 0.05,          // ... a far event (ping, carrier, breath)
+  drone: 0.07,        // a world's drone at its threshold
+  texture: 0.11,      // ... its signature events at the threshold
+  swell: 0.06,        // the nearest-world swell
+  orrery: 0.15,       // each drone's share when pulled back
+  thrust: 0.02,       // the shuttle's breath under thrust
+  whoosh: 0.05, servo: 0.025,
+  rush: 0.15,         // the descent's air at the flood's peak
+  cave: 0.75,         // the long reverb's return
 };
 
-// the hub's arrangements (src/07-audio.js ARR): root Hz, scale, step ms, bright Hz, pad chord, lead
+// the hub's arrangements (src/07-audio.js ARR): root Hz, scale; the drone's tones are scale degrees
 export const VOICES = {
-  'dust-sea': { root: 98.0, scale: [0, 1, 4, 5, 7, 8, 10], step: 700, bright: 460, padIv: [0, 7, 12], wave: 'sawtooth', dly: 0.15, wet: 0.2, oct: 1 },
-  velocity: { root: 174.6, scale: [0, 2, 3, 5, 7, 8, 10], step: 220, bright: 1800, padIv: [0, 3, 7], wave: 'square', dly: 0.22, wet: 0.05, oct: 0 },
-  grid: { root: 164.8, scale: [0, 2, 3, 7, 10], step: 340, bright: 2400, padIv: [0, 7, 14], wave: 'triangle', dly: 0.55, wet: 0.1, oct: 1 },
-  abyssal: { root: 130.8, scale: [0, 2, 4, 6, 8, 10], step: 850, bright: 460, padIv: [0, 4, 8], wave: 'sine', dly: 0.2, wet: 0.4, oct: 0 },
-  arcadia: { root: 261.6, scale: [0, 2, 4, 7, 9], step: 170, bright: 2600, padIv: [0, 4, 7], wave: 'square', dly: 0.05, wet: 0.05, oct: 1 },
-  aurora: { root: 196.0, scale: [0, 2, 4, 5, 7, 9, 10], step: 480, bright: 2000, padIv: [0, 7, 12], wave: 'triangle', dly: 0.3, wet: 0.3, oct: 1 },
-  uncharted: { root: 220.0, scale: [0, 2, 5, 7, 10], step: 900, bright: 1100, padIv: [0, 5, 12], wave: 'sine', dly: 0.25, wet: 0.3, oct: 0 },
-  archive: { root: 155.6, scale: [0, 2, 4, 6, 7, 9, 11], step: 520, bright: 2200, padIv: [0, 7, 11], wave: 'triangle', dly: 0.42, wet: 0.32, oct: 1 },
-  drillyard: { root: 146.8, scale: [0, 2, 3, 5, 7, 9, 10], step: 260, bright: 1500, padIv: [0, 5, 10], wave: 'triangle', dly: 0.3, wet: 0.22, oct: 0 },
-  stormwall: { root: 110.0, scale: [0, 2, 3, 5, 7, 8, 10], step: 520, bright: 700, padIv: [0, 5, 10], wave: 'triangle', dly: 0.3, wet: 0.35, oct: 1 },
-  beacons: { root: 110.0, scale: [0, 2, 4, 7, 9], step: 640, bright: 700, padIv: [0, 7, 12], wave: 'sawtooth', dly: 0.28, wet: 0.4, oct: 1 },
+  'dust-sea': { root: 98.0, scale: [0, 1, 4, 5, 7, 8, 10], tones: [0, 1], lp: 380 },
+  velocity: { root: 174.6, scale: [0, 2, 3, 5, 7, 8, 10], tones: [0, 6], lp: 900 },
+  grid: { root: 164.8, scale: [0, 2, 3, 7, 10], tones: [0, 3], lp: 1100 },
+  abyssal: { root: 130.8, scale: [0, 2, 4, 6, 8, 10], tones: [0, 3], lp: 420 },
+  arcadia: { root: 261.6, scale: [0, 2, 4, 7, 9], tones: [0, 2], lp: 900 },
+  aurora: { root: 196.0, scale: [0, 2, 4, 5, 7, 9, 10], tones: [0, 4], lp: 1600 },
+  uncharted: { root: 220.0, scale: [0, 2, 5, 7, 10], tones: [0, 2], lp: 600 },
+  archive: { root: 155.6, scale: [0, 2, 4, 6, 7, 9, 11], tones: [0, 3], lp: 700 },
+  drillyard: { root: 146.8, scale: [0, 2, 3, 5, 7, 9, 10], tones: [0, 3], lp: 500 },
+  stormwall: { root: 110.0, scale: [0, 2, 3, 5, 7, 8, 10], tones: [0, 3], lp: 420 },
+  beacons: { root: 110.0, scale: [0, 2, 4, 7, 9], tones: [0, 3], lp: 600 },
 };
 const SLUGS = Object.keys(VOICES);
-const PULSE = 2.4;   // seconds: the hub's 600 ms step, a heartbeat every fourth
+const A = 55;          // the ship's A (the hub's 220, two octaves down)
+const PULSE = 2.4;     // the hub's 600 ms step, a heartbeat every fourth
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const semi = (f, s) => f * Math.pow(2, s / 12);
 function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
@@ -75,14 +85,14 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
 function noise(ctx, rnd, seconds, kind, rate = ctx.sampleRate) {
   const fade = Math.floor(rate * 0.25), n = Math.floor(rate * seconds) + fade;
   const buf = ctx.createBuffer(1, n, rate), d = buf.getChannelData(0);
-  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, s = 0;
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, y = 0, s = 0;
   for (let i = 0; i < n; i++) {
     const w = (rnd() * 2 - 1) * 1.732;
     if (kind === 'white') d[i] = w;
+    else if (kind === 'brown') { y = (y + 0.02 * w) * 0.998; d[i] = y; }
     else {
       b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852;
       b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898;
@@ -95,20 +105,22 @@ function noise(ctx, rnd, seconds, kind, rate = ctx.sampleRate) {
   for (let i = 0; i < fade; i++) { const t = i / fade; d[i] = d[i] * Math.sqrt(t) + d[n - fade + i] * Math.sqrt(1 - t); }
   return { buf, loopEnd: (n - fade) / rate };
 }
-// a room: decaying stereo noise, a little darker as it fades
-function impulse(ctx, rnd, seconds) {
+// a long cavernous space: 7 s of decaying noise, darker as it fades, with some air left in it
+function cave(ctx, rnd, seconds) {
   const sr = ctx.sampleRate, n = Math.floor(sr * seconds), buf = ctx.createBuffer(2, n, sr);
   for (let c = 0; c < 2; c++) {
     const d = buf.getChannelData(c); let y = 0;
     for (let i = 0; i < n; i++) {
-      const t = i / n, a = Math.pow(1 - t, 3.2) * Math.exp(-t * 2);
-      const w = rnd() * 2 - 1; y += (w - y) * (0.9 - 0.75 * t);
-      d[i] = y * a * 0.5;
+      const t = i / n, a = Math.exp(-t * 6.5) * Math.min(1, i / (sr * 0.03));
+      const w = rnd() * 2 - 1; y += (w - y) * (0.85 - 0.6 * t);
+      d[i] = (y * 0.88 + w * 0.12 * (1 - t)) * a;
     }
+    // energy-normalised: the cave returns about half the level sent into it, spread over seconds
+    let e = 0; for (let i = 0; i < n; i++) e += d[i] * d[i];
+    const k = 0.5 / Math.sqrt(e || 1); for (let i = 0; i < n; i++) d[i] *= k;
   }
   return buf;
 }
-// soft clip: linear to 0.5, then a tanh knee that never passes 0.70 (-3.1 dBFS)
 function softClip() {
   const n = 4097, c = new Float32Array(n);
   for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1, ax = Math.abs(x); c[i] = Math.sign(x) * (ax <= 0.5 ? ax : 0.5 + 0.2 * Math.tanh((ax - 0.5) / 0.2)); }
@@ -118,218 +130,394 @@ function softClip() {
 export function createSound(opts = {}) {
   const external = opts.context || null;
   const seed = opts.seed != null ? opts.seed >>> 0 : 20261114;
-  const rnd = mulberry32(seed), rndNote = mulberry32(seed ^ 0x51ed270b);
+  const rnd = mulberry32(seed), ev = mulberry32(seed ^ 0x51ed270b);
   let ctx = null, g = null, dead = false, muted = !!opts.muted, disposed = false, hidden = false, visHandler = null;
   let ready = Promise.resolve(false);
-  const st = { nextBeat: 0, voices: {}, rushOn: false, descentSlug: null, nodes: 0 };
+  const st = { nodes: 0, log: [], nextBeat: 0, nextMetal: 0, lastMetal: '', nextReply: 0, nextBreath: 0, nextFar: 0, lastFar: '',
+    world: {}, plate: null, boostWas: false, nextServo: 0, descentSlug: null, near: 0 };
 
   const now = () => ctx.currentTime;
   const set = (p, v, tau) => { p.setTargetAtTime(v, now(), tau); };
-  const count = (n) => { st.nodes += n; };
+  const log = (type, src, pan) => { st.log.push({ t: +now().toFixed(2), type, src, pan: +pan.toFixed(2) }); if (st.log.length > 400) st.log.shift(); };
+  const pick = (arr) => arr[Math.floor(ev() * arr.length)];
 
   function build() {
-    const out = ctx.destination;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.01; comp.release.value = 0.35;
+    comp.threshold.value = -24; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.02; comp.release.value = 0.5;
     const clip = ctx.createWaveShaper(); clip.curve = softClip(); clip.oversample = 'none';
     const mute = ctx.createGain(); mute.gain.value = muted ? 0 : 1;
     const fade = ctx.createGain(); fade.gain.value = 0;
     const mix = ctx.createGain(); mix.gain.value = ORBIT_MIX.master;
-    mix.connect(fade); fade.connect(mute); mute.connect(comp); comp.connect(clip); clip.connect(out);
-    // shared sends: a feedback delay (the hub's) and a generated room
-    const verb = ctx.createConvolver(); verb.buffer = impulse(ctx, rnd, 3.2); verb.normalize = false;
-    const verbOut = ctx.createGain(); verbOut.gain.value = 0.9; verb.connect(verbOut); verbOut.connect(mix);
-    const dly = ctx.createDelay(1.5); dly.delayTime.value = 0.43;
-    const dlyLp = ctx.createBiquadFilter(); dlyLp.type = 'lowpass'; dlyLp.frequency.value = 1800;
-    const dlyFb = ctx.createGain(); dlyFb.gain.value = 0.38;
-    dly.connect(dlyLp); dlyLp.connect(dlyFb); dlyFb.connect(dly); dlyLp.connect(mix);
-    count(12);
-
-    // ---- the ship's pulse: its own bus, filtered and levelled by the distance to the hull
-    const pulseLp = ctx.createBiquadFilter(); pulseLp.type = 'lowpass'; pulseLp.frequency.value = 400; pulseLp.Q.value = 0.5;
-    const pulseG = ctx.createGain(); pulseG.gain.value = 0;
-    pulseLp.connect(pulseG); pulseG.connect(mix);
-    const pulseVerb = ctx.createGain(); pulseVerb.gain.value = 0.5; pulseG.connect(pulseVerb); pulseVerb.connect(verb);
-
-    // ---- the shuttle: two detuned saws and a triangle an octave up, through a lowpass; boost's air
-    const eng = [ctx.createOscillator(), ctx.createOscillator(), ctx.createOscillator()];
-    eng[0].type = 'sawtooth'; eng[1].type = 'sawtooth'; eng[2].type = 'triangle';
-    eng[0].frequency.value = 49; eng[1].frequency.value = 49; eng[1].detune.value = 9; eng[2].frequency.value = 98;
-    const engLp = ctx.createBiquadFilter(); engLp.type = 'lowpass'; engLp.frequency.value = 180; engLp.Q.value = 0.7;
-    const engHp = ctx.createBiquadFilter(); engHp.type = 'highpass'; engHp.frequency.value = 38;
-    const engG = ctx.createGain(); engG.gain.value = 0;
-    const engPan = ctx.createStereoPanner();
-    for (const o of eng) { o.connect(engLp); o.start(); }
-    engLp.connect(engHp); engHp.connect(engG); engG.connect(engPan); engPan.connect(mix);
-    const white = noise(ctx, rnd, 9.7, 'white'), pink = noise(ctx, rnd, 11.3, 'pink', 24000), pink2 = noise(ctx, rnd, 13.1, 'pink', 24000);
+    mix.connect(fade); fade.connect(mute); mute.connect(comp); comp.connect(clip); clip.connect(ctx.destination);
+    const verb = ctx.createConvolver(); verb.normalize = false; verb.buffer = cave(ctx, rnd, 7.0);
+    const verbOut = ctx.createGain(); verbOut.gain.value = ORBIT_MIX.cave; verb.connect(verbOut); verbOut.connect(mix);
+    const white = noise(ctx, rnd, 9.7, 'white'), pink = noise(ctx, rnd, 11.3, 'pink', 24000), brown = noise(ctx, rnd, 12.7, 'brown', 12000);
     const loop = (e, off) => { const s = ctx.createBufferSource(); s.buffer = e.buf; s.loop = true; s.loopEnd = e.loopEnd; s.start(now(), e.loopEnd * off); return s; };
-    const airSrc = loop(white, rnd());
-    const airBp = ctx.createBiquadFilter(); airBp.type = 'bandpass'; airBp.frequency.value = 2600; airBp.Q.value = 0.7;
-    const airG = ctx.createGain(); airG.gain.value = 0;
-    airSrc.connect(airBp); airBp.connect(airG); airG.connect(engPan);
+    const sources = [];
+    count(10);
+
+    // ---- the derelict: sub bed (55 Hz against 55.35 and the fifth below, beating), dark room
+    const subG = ctx.createGain(); subG.gain.value = 0; subG.connect(mix);
+    for (const [f, a] of [[A, 0.5], [A + 0.35, 0.45], [A * 0.75, 0.35]]) {
+      const o = ctx.createOscillator(); o.frequency.value = f; const og = ctx.createGain(); og.gain.value = a;
+      o.connect(og); og.connect(subG); o.start(); sources.push(o); count(2);
+    }
+    const roomSrc = loop(brown, rnd()); sources.push(roomSrc);
+    const roomLp = ctx.createBiquadFilter(); roomLp.type = 'lowpass'; roomLp.frequency.value = 160; roomLp.Q.value = 0.4;
+    const roomG = ctx.createGain(); roomG.gain.value = 0;
+    roomSrc.connect(roomLp); roomLp.connect(roomG); roomG.connect(mix);
+    const roomS = ctx.createGain(); roomS.gain.value = 0.4; roomG.connect(roomS); roomS.connect(verb);
+    // the breath: band-passed pink noise; its level is shaped by scheduled swells
+    const brSrc = loop(pink, rnd()); sources.push(brSrc);
+    const brBp = ctx.createBiquadFilter(); brBp.type = 'bandpass'; brBp.frequency.value = 380; brBp.Q.value = 1.4;
+    const brEnv = ctx.createGain(); brEnv.gain.value = 0;
+    const brG = ctx.createGain(); brG.gain.value = 0;
+    brSrc.connect(brBp); brBp.connect(brEnv); brEnv.connect(brG); brG.connect(mix);
+    const brS = ctx.createGain(); brS.gain.value = 0.6; brG.connect(brS); brS.connect(verb);
     count(11);
 
-    // ---- space between: a slow dark bed and a faint high shimmer
-    const bedSrc = loop(pink, rnd());
-    const bedLp = ctx.createBiquadFilter(); bedLp.type = 'lowpass'; bedLp.frequency.value = 520; bedLp.Q.value = 0.5;
-    const bedHp = ctx.createBiquadFilter(); bedHp.type = 'highpass'; bedHp.frequency.value = 70;
-    const bedG = ctx.createGain(); bedG.gain.value = 0;
-    bedSrc.connect(bedHp); bedHp.connect(bedLp); bedLp.connect(bedG); bedG.connect(mix);
-    const shSrc = loop(white, rnd());
-    const shBp = ctx.createBiquadFilter(); shBp.type = 'bandpass'; shBp.frequency.value = 7200; shBp.Q.value = 4;
-    const shG = ctx.createGain(); shG.gain.value = 0;
-    // a slow swell on the shimmer: a 0.07 Hz sine into its gain
-    const shLfo = ctx.createOscillator(); shLfo.frequency.value = 0.07; const shDepth = ctx.createGain(); shDepth.gain.value = 0;
-    shLfo.connect(shDepth); shDepth.connect(shG.gain); shLfo.start();
-    shSrc.connect(shBp); shBp.connect(shG); shG.connect(mix);
-    count(12);
+    // ---- space between: a low cluster (A, B flat, E: the hub's minor-second rub) that shifts
+    const clG = ctx.createGain(); clG.gain.value = 0; clG.connect(mix);
+    const clLp = ctx.createBiquadFilter(); clLp.type = 'lowpass'; clLp.frequency.value = 500; clLp.connect(clG);
+    const clS = ctx.createGain(); clS.gain.value = 0.5; clG.connect(clS); clS.connect(verb);
+    for (const f of [110, semi(110, 1), semi(110, 7) / 2, semi(220, 3)]) {
+      const o = ctx.createOscillator(); o.frequency.value = f; o.detune.value = (rnd() - 0.5) * 10;
+      const og = ctx.createGain(); og.gain.value = 0.15;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.012 + rnd() * 0.03; const ld = ctx.createGain(); ld.gain.value = 0.14;
+      lfo.connect(ld); ld.connect(og.gain); o.connect(og); og.connect(clLp); o.start(); lfo.start(); sources.push(o, lfo); count(4);
+    }
+    // a faint metallic shimmer: inharmonic high partials drifting in and out, mostly in the cave
+    const shG = ctx.createGain(); shG.gain.value = 0; shG.connect(mix);
+    const shS = ctx.createGain(); shS.gain.value = 1.5; shG.connect(shS); shS.connect(verb);
+    for (const f of [3117, 4729, 6311, 8893]) {
+      const o = ctx.createOscillator(); o.frequency.value = f; const og = ctx.createGain(); og.gain.value = 0;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.03 + rnd() * 0.05; const ld = ctx.createGain(); ld.gain.value = 0.25;
+      lfo.connect(ld); ld.connect(og.gain); o.connect(og); og.connect(shG); o.start(); lfo.start(); sources.push(o, lfo); count(4);
+    }
+    count(5);
 
-    // ---- the descent's rush: pink noise through a lowpass that opens as it swells
-    const rushSrc = loop(pink2, rnd());
-    const rushLp = ctx.createBiquadFilter(); rushLp.type = 'lowpass'; rushLp.frequency.value = 200; rushLp.Q.value = 0.6;
-    const rushHp = ctx.createBiquadFilter(); rushHp.type = 'highpass'; rushHp.frequency.value = 45;
-    const rushG = ctx.createGain(); rushG.gain.value = 0;
-    rushSrc.connect(rushHp); rushHp.connect(rushLp); rushLp.connect(rushG); rushG.connect(mix);
-    count(4);
+    // ---- the shuttle: breath under thrust (no tone)
+    const thSrc = loop(pink, rnd()); sources.push(thSrc);
+    const thBp = ctx.createBiquadFilter(); thBp.type = 'bandpass'; thBp.frequency.value = 420; thBp.Q.value = 0.8;
+    const thG = ctx.createGain(); thG.gain.value = 0;
+    const thPan = ctx.createStereoPanner();
+    thSrc.connect(thBp); thBp.connect(thG); thG.connect(thPan); thPan.connect(mix);
+    // the descent's air
+    const ruSrc = loop(pink, rnd()); sources.push(ruSrc);
+    const ruLp = ctx.createBiquadFilter(); ruLp.type = 'lowpass'; ruLp.frequency.value = 200;
+    const ruG = ctx.createGain(); ruG.gain.value = 0;
+    ruSrc.connect(ruLp); ruLp.connect(ruG); ruG.connect(mix);
+    count(8);
 
-    // ---- the eleven voices: a pad on each world's chord, lowpassed at its brightness, plus a lead
-    // bus the generative phrase plays into; each voice: level -> pan -> mix (and sends)
-    const voices = {};
+    // ---- the worlds: a drone on the root (an octave down) and one or two scale tones, a lowpass that
+    // moves slowly; level -> pan -> mix and the cave
+    const worlds = {};
     for (const slug of SLUGS) {
       const v = VOICES[slug];
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.min(v.bright * 1.5, 3500); lp.Q.value = 0.6;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = v.lp; lp.Q.value = 2.5;
+      const flfo = ctx.createOscillator(); flfo.frequency.value = 0.02 + rnd() * 0.04; const fld = ctx.createGain(); fld.gain.value = v.lp * 0.45;
+      flfo.connect(fld); fld.connect(lp.frequency); flfo.start(); sources.push(flfo);
       const level = ctx.createGain(); level.gain.value = 0;
       const pan = ctx.createStereoPanner();
       lp.connect(level); level.connect(pan); pan.connect(mix);
-      const sd = ctx.createGain(); sd.gain.value = v.dly; pan.connect(sd); sd.connect(dly);
-      const sv = ctx.createGain(); sv.gain.value = v.wet * 0.8 + 0.1; pan.connect(sv); sv.connect(verb);
-      const padG = ctx.createGain(); padG.gain.value = ORBIT_MIX.voicePad; padG.connect(lp);
-      const padLp = ctx.createBiquadFilter(); padLp.type = 'lowpass'; padLp.frequency.value = Math.min(v.bright, 900); padLp.connect(padG);
-      const oscs = v.padIv.map((iv, i) => {
-        const o = ctx.createOscillator(); o.type = i === 0 ? 'triangle' : 'sine';
-        o.frequency.value = v.root * Math.pow(2, iv / 12) * (i === 0 ? 0.5 : 1);
-        o.detune.value = (rnd() - 0.5) * 8;
-        const og = ctx.createGain(); og.gain.value = [0.5, 0.32, 0.22][i] || 0.2;
-        o.connect(og); og.connect(padLp); o.start();
-        return o;
+      const sv = ctx.createGain(); sv.gain.value = 0.7; pan.connect(sv); sv.connect(verb);
+      const oscs = [];
+      v.tones.forEach((deg, i) => {
+        const f = semi(v.root, v.scale[deg]) * (i === 0 ? 0.5 : 1);
+        for (const dt of [-4, 4]) {
+          const o = ctx.createOscillator(); o.type = i === 0 ? 'triangle' : 'sine'; o.frequency.value = f; o.detune.value = dt + (rnd() - 0.5) * 3;
+          const og = ctx.createGain(); og.gain.value = i === 0 ? 0.35 : 0.18;
+          o.connect(og); og.connect(lp); o.start(); oscs.push(o); sources.push(o);
+        }
       });
-      // the pad breathes: a slow sine on its level, each world at its own rate
-      const br = ctx.createOscillator(); br.frequency.value = 0.05 + rnd() * 0.05; const brD = ctx.createGain(); brD.gain.value = 0.18 * ORBIT_MIX.voicePad;
-      br.connect(brD); brD.connect(padG.gain); br.start();
-      const leadBus = ctx.createGain(); leadBus.gain.value = 1 - ORBIT_MIX.voicePad; leadBus.connect(lp);
-      voices[slug] = { v, lp, level, pan, leadBus, oscs, br, next: 0, deg: 0, oct: v.oct, lvl: 0 };
-      count(10 + oscs.length * 2);
+      // glass for the orrery chord: a quiet partial two octaves and a fifth up, heard only pulled back
+      const gl = ctx.createOscillator(); gl.frequency.value = semi(v.root, 7) * 2 * (1 + (rnd() - 0.5) * 0.006);
+      const glG = ctx.createGain(); glG.gain.value = 0; gl.connect(glG); glG.connect(pan); gl.start(); sources.push(gl);
+      // the texture bus (signature events), its own level so the drone and the events balance
+      const tex = ctx.createGain(); tex.gain.value = 0; tex.connect(pan);
+      const texW = ctx.createGain(); texW.gain.value = 0; texW.connect(verb);
+      worlds[slug] = { v, lp, level, pan, oscs, glG, tex, texW, bus: { dry: tex, wet: texW }, lvl: 0, next: 0, steady: null };
+      count(9 + oscs.length * 2);
     }
-    g = { mix, fade, mute, comp, clip, verb, dly, pulseLp, pulseG, eng, engLp, engG, engPan, airG, airBp, bedG, bedLp, shG, shDepth, rushG, rushLp, voices,
-      sources: [airSrc, bedSrc, shSrc, rushSrc, ...eng, shLfo, ...Object.values(voices).flatMap((x) => [...x.oscs, x.br])] };
+    // dust sea's wind hiss and velocity's hum: continuous textures, under their world's texture bus
+    {
+      const ds = worlds['dust-sea'];
+      const s = loop(white, rnd()); sources.push(s);
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500;
+      const gg = ctx.createGain(); gg.gain.value = 0.045;
+      const gust = ctx.createOscillator(); gust.frequency.value = 0.09; const gd = ctx.createGain(); gd.gain.value = 0.03;
+      gust.connect(gd); gd.connect(gg.gain); gust.start(); sources.push(gust);
+      s.connect(hp); hp.connect(lp); lp.connect(gg); gg.connect(ds.tex);
+      const ve = worlds.velocity;
+      const hum = ctx.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = VOICES.velocity.root / 2;
+      const hbp = ctx.createBiquadFilter(); hbp.type = 'bandpass'; hbp.frequency.value = 350; hbp.Q.value = 3;
+      const hg = ctx.createGain(); hg.gain.value = 0.1;
+      hum.connect(hbp); hbp.connect(hg); hg.connect(ve.tex); hum.start(); sources.push(hum);
+      ve.steady = hg;
+      count(12);
+    }
+    g = { mix, fade, mute, comp, clip, verb, white, pink, brown, subG, roomG, roomLp, brEnv, brG, clG, shG, thG, thBp, thPan, ruG, ruLp, worlds, sources };
+  }
+  function count(n) { st.nodes += n; }
+
+  // ---------------------------------------------------------------- one-shot building blocks
+  // an output for an event: panned, dry and into the cave
+  function outlet(pan, dry, wet, dest) {
+    const p = ctx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1);
+    const d = ctx.createGain(); d.gain.value = dry; const w = ctx.createGain(); w.gain.value = wet;
+    p.connect(d); d.connect(dest ? dest.dry : g.mix); p.connect(w); w.connect(dest ? dest.wet : g.verb);
+    return { input: p, nodes: [p, d, w] };
+  }
+  function release(nodes, at) {
+    const id = setTimeout(() => { for (const n of nodes) { try { n.disconnect(); } catch { /* gone */ } } }, Math.max(0, (at - now()) * 1000 + 200));
+    if (external) clearTimeout(id);
+  }
+  // noise through a filter whose frequency bends, under an envelope
+  function noiseEv(when, { buf = g.white, type = 'bandpass', f0, f1 = f0, q = 1, a = 0.01, hold = 0, d = 0.5, peak = 0.1, pan = 0, dry = 0.6, wet = 0.6, dest = null }) {
+    const s = ctx.createBufferSource(); s.buffer = buf.buf; s.loop = true; s.loopEnd = buf.loopEnd;
+    const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(f0, when); f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), when + a + hold + d);
+    const e = ctx.createGain(); e.gain.setValueAtTime(0, when); e.gain.linearRampToValueAtTime(peak, when + a);
+    if (hold) e.gain.setValueAtTime(peak, when + a + hold);
+    e.gain.setTargetAtTime(0, when + a + hold, d / 4);
+    const o = outlet(pan, dry, wet, dest);
+    s.connect(f); f.connect(e); e.connect(o.input);
+    const end = when + a + hold + d * 1.6;
+    s.start(when, ev() * buf.loopEnd); s.stop(end);
+    release([s, f, e, ...o.nodes], end);
+  }
+  // a tone that may bend, under an envelope
+  function toneEv(when, { type = 'sine', f0, f1 = f0, a = 0.01, d = 1, peak = 0.05, pan = 0, dry = 0.6, wet = 0.6, detune = 0, bendT = null, dest = null }) {
+    const o = ctx.createOscillator(); o.type = type; o.detune.value = detune;
+    o.frequency.setValueAtTime(f0, when);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, when + (bendT ?? a + d));
+    const e = ctx.createGain(); e.gain.setValueAtTime(0, when); e.gain.linearRampToValueAtTime(peak, when + a); e.gain.setTargetAtTime(0, when + a, d / 4);
+    const out = outlet(pan, dry, wet, dest);
+    o.connect(e); e.connect(out.input);
+    const end = when + a + d * 1.6;
+    o.start(when); o.stop(end);
+    release([o, e, ...out.nodes], end);
   }
 
-  // ---- scheduled sounds (transient nodes, self-stopping)
+  // ---------------------------------------------------------------- the derelict's events
+  function metal(when, near) {
+    const kinds = ['groan', 'creak', 'ticks', 'clank'].filter((k) => k !== st.lastMetal);
+    const k = pick(kinds); st.lastMetal = k;
+    const pan = (ev() < 0.5 ? -1 : 1) * (0.4 + ev() * 0.5), L = ORBIT_MIX.metal * (0.25 + 0.75 * near);
+    if (k === 'groan') {
+      const f = semi(A * 2, [0, 1, 3, 7][Math.floor(ev() * 4)]) * (1 + ev() * 0.5), dur = 1.5 + ev() * 2.5;
+      noiseEv(when, { f0: f, f1: f * 0.62, q: 14, a: 0.4, hold: dur * 0.4, d: dur, peak: L * 1.3, pan, dry: 0.35, wet: 1 });
+      toneEv(when + 0.1, { type: 'triangle', f0: f * 0.5, f1: f * 0.29, a: 0.6, d: dur, peak: L * 0.25, pan, dry: 0.3, wet: 1 });
+    } else if (k === 'creak') {
+      const n = 4 + Math.floor(ev() * 6), f = 900 + ev() * 900;
+      for (let i = 0; i < n; i++) noiseEv(when + i * (0.045 + ev() * 0.05), { f0: f * (1 + ev() * 0.2), q: 9, a: 0.004, d: 0.06, peak: L * 0.45, pan, dry: 0.5, wet: 0.8 });
+    } else if (k === 'ticks') {
+      const n = 3 + Math.floor(ev() * 5);
+      let t = when;
+      for (let i = 0; i < n; i++) { toneEv(t, { f0: 2400 + ev() * 3000, a: 0.002, d: 0.05, peak: L * 0.22, pan: pan + (ev() - 0.5) * 0.3, dry: 0.4, wet: 1 }); t += 0.12 + ev() * 0.6; }
+    } else {
+      // a distant heavy clank: a dull hit and inharmonic partials with a long tail
+      noiseEv(when, { buf: g.brown, type: 'lowpass', f0: 260, f1: 90, q: 0.7, a: 0.006, d: 0.5, peak: L * 2.2, pan, dry: 0.3, wet: 1 });
+      for (const [r, a] of [[1, 0.5], [2.29, 0.3], [4.07, 0.18], [5.81, 0.1]]) toneEv(when, { f0: 112 * r, a: 0.004, d: 2.2 / r + 0.6, peak: L * a * 0.6, pan, dry: 0.15, wet: 1 });
+    }
+    log(k, 'ship', pan);
+  }
+  function breath(when, near) {
+    const up = 2.2 + ev() * 1.2, down = 3 + ev() * 1.5, pk = 0.6 + ev() * 0.4;
+    const e = g.brEnv.gain;
+    e.setTargetAtTime(pk, when, up / 3); e.setTargetAtTime(0, when + up, down / 3);
+    log('breath', 'ship', 0);
+  }
   function heart(when, amp) {
-    const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(60, when); o.frequency.exponentialRampToValueAtTime(46, when + 0.22);
-    const gg = ctx.createGain();
-    gg.gain.setValueAtTime(0, when); gg.gain.linearRampToValueAtTime(0.42 * amp, when + 0.035); gg.gain.exponentialRampToValueAtTime(0.0001, when + 0.55);
-    o.connect(gg); gg.connect(g.pulseLp); o.start(when); o.stop(when + 0.6);
-    o.onended = () => gg.disconnect();
+    for (const [dt, a] of [[0, 1], [0.28, 0.65]]) toneEv(when + dt, { f0: 58, f1: 41, bendT: 0.25, a: 0.03, d: 0.45, peak: ORBIT_MIX.heart * amp * a, pan: 0, dry: 0.8, wet: 0.35 });
+    log('heart', 'ship', 0);
   }
   function reply(when, amp) {
-    // the Artifact's slightly wrong reply: 196 sagging to 185, with a faint fifth above
-    const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(196, when); o.frequency.linearRampToValueAtTime(185, when + 1.2);
-    const gg = ctx.createGain();
-    gg.gain.setValueAtTime(0, when); gg.gain.linearRampToValueAtTime(0.13 * amp, when + 0.25); gg.gain.setTargetAtTime(0.0001, when + 1.2, 0.45);
-    o.connect(gg); gg.connect(g.pulseLp); o.start(when); o.stop(when + 3.6);
-    o.onended = () => gg.disconnect();
+    const o = ctx.createOscillator(); o.frequency.setValueAtTime(196, when); o.frequency.linearRampToValueAtTime(185, when + 1.6);
+    const e = ctx.createGain(); e.gain.setValueAtTime(0, when); e.gain.linearRampToValueAtTime(ORBIT_MIX.reply * amp, when + 0.6); e.gain.setTargetAtTime(0, when + 1.6, 0.6);
+    const out = outlet((ev() - 0.5) * 0.6, 0.12, 1);
+    o.connect(e); e.connect(out.input); o.start(when); o.stop(when + 5);
+    release([o, e, ...out.nodes], when + 5);
+    log('reply', 'ship', 0);
   }
-  function note(vo, freq, when, vel, dur) {
-    const w = vo.v.wave;
-    const o = ctx.createOscillator(), o2 = ctx.createOscillator();
-    o.type = w; o2.type = w === 'square' ? 'square' : 'triangle'; o2.detune.value = 6;
-    o.frequency.value = freq; o2.frequency.value = freq;
-    const k = w === 'square' ? 0.5 : w === 'sawtooth' ? 0.6 : 1;
-    const gg = ctx.createGain();
-    gg.gain.setValueAtTime(0, when); gg.gain.linearRampToValueAtTime(vel * k, when + 0.06); gg.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-    o.connect(gg); o2.connect(gg); gg.connect(vo.leadBus);
-    o.start(when); o2.start(when); o.stop(when + dur + 0.05); o2.stop(when + dur + 0.05);
-    o.onended = () => gg.disconnect();
-  }
-  // a slow generative phrase in the world's scale: a walk by small steps, with rests and long notes,
-  // drawn fresh every time (so it never repeats as a loop); only while the voice can be heard
-  function phrase(vo, horizon) {
-    const v = vo.v, step = (v.step / 1000) * 1.7;
-    if (vo.next < now()) vo.next = now() + 0.05;
-    while (vo.next < horizon) {
-      const r = rndNote();
-      if (r < 0.42) { vo.next += step * (1 + Math.floor(rndNote() * 3)); continue; }   // rest
-      const mv = [-2, -1, -1, 0, 1, 1, 2][Math.floor(rndNote() * 7)];
-      vo.deg = clamp(vo.deg + mv, -2, v.scale.length + 2);
-      if (rndNote() < 0.12) vo.deg = 0;                                                  // home
-      const d = Math.round(vo.deg), n = v.scale.length;
-      const semis = v.scale[((d % n) + n) % n] + 12 * (vo.oct + Math.floor(d / n));
-      const len = 1 + Math.floor(rndNote() * 3);
-      const dur = len * step * 0.95 + 0.3;
-      if (vo.lvl > 0.002) note(vo, v.root * Math.pow(2, semis / 12), vo.next, 0.16 + rndNote() * 0.08, dur);
-      vo.next += len * step;
+  // ---- something far off
+  function farEvent(when) {
+    const k = pick(['ping', 'carrier', 'voice'].filter((x) => x !== st.lastFar)); st.lastFar = k;
+    const pan = (ev() - 0.5) * 1.6, L = ORBIT_MIX.far;
+    if (k === 'ping') {
+      toneEv(when, { f0: semi(880, [0, 3, 7][Math.floor(ev() * 3)]), a: 0.005, d: 3.5, peak: L * 0.35, pan, dry: 0.15, wet: 1 });
+    } else if (k === 'carrier') {
+      // a dead radio: a carrier that wavers and breaks up in noise
+      const dur = 0.5 + ev() * 0.6;
+      toneEv(when, { type: 'square', f0: 1400 + ev() * 300, f1: 1380, a: 0.02, d: dur, peak: L * 0.05, pan, dry: 0.3, wet: 0.9 });
+      noiseEv(when, { f0: 2500, q: 2, a: 0.02, hold: dur * 0.4, d: dur, peak: L * 0.25, pan, dry: 0.3, wet: 0.9 });
+    } else {
+      // almost a voice: noise through two formants sliding (no words)
+      const dur = 2 + ev() * 1.2;
+      noiseEv(when, { buf: g.pink, f0: 320, f1: 680, q: 9, a: 0.8, hold: 0.3, d: dur, peak: L * 0.9, pan, dry: 0.2, wet: 1 });
+      noiseEv(when, { buf: g.pink, f0: 950, f1: 1250, q: 11, a: 0.8, hold: 0.3, d: dur, peak: L * 0.55, pan, dry: 0.2, wet: 1 });
     }
+    log(k, 'far', pan);
   }
 
-  // ---- per frame
+  // ---------------------------------------------------------------- the worlds' signatures
+  function signature(slug, when, lvl, pan) {
+    const v = VOICES[slug], W = g.worlds[slug], L = ORBIT_MIX.texture;   // the world's bus carries the closeness
+    const nE = (w, o) => noiseEv(w, { ...o, dest: W.bus }), tE = (w, o) => toneEv(w, { ...o, dest: W.bus });
+    const P = (x) => clamp(pan + x, -1, 1);
+    let next = 4 + ev() * 6, type = slug;
+    switch (slug) {
+      case 'dust-sea':   // sand ticking, scattered
+        for (let i = 0; i < 6; i++) nE(when + ev() * 1.6, { f0: 3500 + ev() * 3000, q: 4, a: 0.002, d: 0.03, peak: L * 0.18, pan: P((ev() - 0.5) * 0.6), dry: 0.6, wet: 0.4 });
+        type = 'sand-ticks'; next = 2.5 + ev() * 4; break;
+      case 'velocity': { // the hum flickers and drops out
+        const h = W.steady.gain, t0 = when, n = 2 + Math.floor(ev() * 4);
+        for (let i = 0; i < n; i++) { const t = t0 + i * (0.06 + ev() * 0.12); h.setTargetAtTime(0, t, 0.006); h.setTargetAtTime(0.1, t + 0.04 + ev() * 0.08, 0.01); }
+        if (ev() < 0.4) { h.setTargetAtTime(0, t0 + 0.8, 0.02); h.setTargetAtTime(0.1, t0 + 1.4 + ev() * 0.8, 0.05); }
+        type = 'hum-flicker'; next = 3 + ev() * 6; break;
+      }
+      case 'grid': {     // soft digital ticks, like rain on glass
+        const n = 5 + Math.floor(ev() * 10);
+        for (let i = 0; i < n; i++) tE(when + ev() * 2.5, { type: 'square', f0: semi(v.root * 16, v.scale[Math.floor(ev() * v.scale.length)]), a: 0.002, d: 0.04, peak: L * 0.05, pan: P((ev() - 0.5) * 1.2), dry: 0.5, wet: 0.7 });
+        type = 'glass-rain'; next = 3 + ev() * 4; break;
+      }
+      case 'abyssal':    // a slow downward glide, whale-like; or a deep ping
+        if (ev() < 0.65) tE(when, { f0: semi(v.root * 3, v.scale[Math.floor(ev() * 4)]), f1: v.root * 1.4, a: 1.0, d: 4, peak: L * 0.35, pan: P(0), dry: 0.3, wet: 1 }), type = 'glide';
+        else tE(when, { f0: v.root * 4, a: 0.004, d: 4, peak: L * 0.3, pan: P(0), dry: 0.2, wet: 1 }), type = 'deep-ping';
+        next = 12 + ev() * 14; break;
+      case 'arcadia': {  // a half-broken music box: two or three notes, out of tune, slowing
+        const n = 2 + Math.floor(ev() * 2); let t = when, gap = 0.35;
+        for (let i = 0; i < n; i++) {
+          const f = semi(v.root * 2, v.scale[Math.floor(ev() * v.scale.length)]) * (1 + (ev() - 0.5) * 0.03);
+          tE(t, { f0: f, f1: f * 0.985, a: 0.003, d: 1.6, peak: L * 0.28, pan: P(0.1), dry: 0.4, wet: 0.9 });
+          tE(t, { f0: f * 2.76, a: 0.002, d: 0.5, peak: L * 0.07, pan: P(0.1), dry: 0.4, wet: 0.8 });
+          t += gap; gap *= 1.6;
+        }
+        type = 'music-box'; next = 22 + ev() * 26; break;
+      }
+      case 'aurora': {   // glassy bowed harmonics
+        const f = semi(v.root * 4, v.scale[[0, 2, 4][Math.floor(ev() * 3)]]);
+        tE(when, { f0: f, a: 2.2, d: 5, peak: L * 0.12, pan: P(-0.2), dry: 0.3, wet: 1, detune: -5 });
+        tE(when + 0.3, { f0: f * 1.5, a: 2.5, d: 5, peak: L * 0.07, pan: P(0.2), dry: 0.3, wet: 1, detune: 7 });
+        type = 'bowed-glass'; next = 9 + ev() * 10; break;
+      }
+      case 'uncharted':  // a hollow breath with no clear pitch
+        nE(when, { buf: g.pink, f0: 500 + ev() * 300, f1: 420, q: 1.2, a: 1.8, hold: 0.5, d: 3, peak: L * 0.6, pan: P(0), dry: 0.4, wet: 1 });
+        type = 'hollow-breath'; next = 7 + ev() * 8; break;
+      case 'archive':    // a dry rustle
+        for (let i = 0; i < 4; i++) nE(when + ev() * 0.7, { type: 'highpass', f0: 3200, q: 0.7, a: 0.01, d: 0.12 + ev() * 0.15, peak: L * 0.18, pan: P((ev() - 0.5) * 0.5), dry: 0.8, wet: 0.3 });
+        type = 'rustle'; next = 5 + ev() * 8; break;
+      case 'drillyard':  // a distant slow machine thud, uneven
+        nE(when, { buf: g.brown, type: 'lowpass', f0: 180, f1: 70, q: 0.8, a: 0.01, d: 0.6, peak: L * 1.2, pan: P(0), dry: 0.4, wet: 1 });
+        tE(when, { f0: v.root / 2, f1: v.root / 3, a: 0.01, d: 0.6, peak: L * 0.35, pan: P(0), dry: 0.4, wet: 0.8 });
+        type = 'machine-thud'; next = 2.4 + ev() * 2.6; break;
+      case 'stormwall':  // far thunder rolling under the held fourth
+        nE(when, { buf: g.brown, type: 'lowpass', f0: 300, f1: 90, q: 0.5, a: 0.4 + ev() * 0.6, hold: 0.8, d: 3 + ev() * 3, peak: L * 1.5, pan: P((ev() - 0.5) * 0.8), dry: 0.4, wet: 1 });
+        type = 'thunder'; next = 11 + ev() * 14; break;
+      case 'beacons':    // a crackle, and now and then one far horn-like fifth
+        if (ev() < 0.3) {
+          for (const [r, a] of [[1, 1], [1.5, 0.7]]) tE(when, { type: 'sawtooth', f0: v.root * r, a: 1.2, d: 3, peak: L * 0.05 * a, pan: P(0), dry: 0.2, wet: 1 });
+          type = 'horn-fifth';
+        } else {
+          for (let i = 0; i < 8; i++) nE(when + ev() * 1.2, { f0: 1800 + ev() * 2500, q: 2, a: 0.002, d: 0.02, peak: L * 0.25, pan: P((ev() - 0.5) * 0.5), dry: 0.7, wet: 0.4 });
+          type = 'crackle';
+        }
+        next = 5 + ev() * 9; break;
+      default: break;
+    }
+    log(type, slug, pan);
+    return next;
+  }
+
+  // ---------------------------------------------------------------- per frame
   function update(s) {
-    if (!ctx || !g || dead) return;
+    if (!ctx || !g || dead || !s) return;
     try {
       const t = now(), M = ORBIT_MIX;
-      const pull = clamp(s.pull || 0), duck = 1 - M.duck * pull;
-      // the pulse: always keeps time (the beat grid is the context's own clock), heard by the hull
+      const pull = clamp(s.pull || 0), duck = 1 - 0.85 * pull;
       const hd = Math.max(0, s.hullDist ?? 1e9);
-      const near = 1 - smooth(60, 20000, hd);
-      const pulseLvl = Math.max(M.pulse * (M.pulseFar + (1 - M.pulseFar) * Math.pow(near, 2.2)), pull * M.pulse * 0.3);
-      set(g.pulseG.gain, pulseLvl, 0.4);
-      set(g.pulseLp.frequency, 220 + 2600 * Math.pow(1 - smooth(60, 6000, hd), 1.6), 0.4);
+      const near = 1 - smooth(80, 15000, hd);      // 1 inside the canyon, about a third 3 km out, 0 by 15 km
+      const close = 1 - smooth(60, 1500, hd);      // only near the hull
+      st.near = near;
+      // the derelict's bed
+      set(g.subG.gain, M.sub * Math.max(Math.pow(near, 1.5), pull * 0.35), 1.0);
+      set(g.roomG.gain, M.room * Math.pow(near, 1.3) * duck, 1.0);
+      set(g.roomLp.frequency, 90 + 220 * close, 1.0);
+      set(g.brG.gain, M.breath * Math.pow(close, 1.2) * duck, 0.8);
+      // the derelict's events, scheduled on the audio clock
+      if (st.nextBreath < t) st.nextBreath = t + 2 + ev() * 3;
+      if (st.nextBreath < t + 0.3) { if (close > 0.05) breath(st.nextBreath, close); st.nextBreath += 7 + ev() * 3; }
+      if (st.nextMetal < t) st.nextMetal = t + 3 + ev() * 5;
+      if (st.nextMetal < t + 0.3) {
+        if (near > 0.08 && pull < 0.5) metal(st.nextMetal, near);
+        st.nextMetal += lerp(40, 6, near) + ev() * lerp(30, 14, near);
+      }
       if (st.nextBeat < t) st.nextBeat = Math.ceil(t / PULSE) * PULSE;
-      while (st.nextBeat < t + 0.3) { heart(st.nextBeat, 1); reply(st.nextBeat + 0.12, 1); st.nextBeat += PULSE; }
-      // the shuttle
-      const thr = clamp((s.speed || 0) / Math.max(1, s.cap || 1), 0, 2);
-      const boost = s.boost ? 1 : 0, on = s.thrust > 0 ? 1 : 0;
-      const push = clamp(0.35 * on + 0.65 * Math.min(1, thr));
-      const engLvl = M.engine * (0.07 + 0.43 * on + 0.3 * boost) * (0.6 + 0.4 * Math.min(1, thr)) * duck * (s.descent ? 0.3 : 1);
-      set(g.engG.gain, engLvl, 0.35);
-      set(g.engLp.frequency, 160 + 650 * push + 1300 * boost, 0.5);
-      const pitch = 49 * (1 + 0.08 * push + 0.05 * boost);
-      for (const o of g.eng.slice(0, 2)) set(o.frequency, pitch, 0.6);
-      set(g.eng[2].frequency, pitch * 2, 0.6);
-      set(g.airG.gain, M.air * boost * duck, 0.4);
-      set(g.engPan.pan, clamp(-(s.bank || 0) * 0.4, -0.35, 0.35), 0.3);
-      // space between: thinner the further from everything
+      while (st.nextBeat < t + 0.3) {
+        // about one beat in seven, never two within three beats: rare, irregular, on the grid
+        st.beats = (st.beats || 0) + 1;
+        if (ev() < 0.15 && st.beats > 3 && close > 0.15) { heart(st.nextBeat, Math.pow(close, 1.5)); st.beats = 0; }
+        st.nextBeat += PULSE;
+      }
+      if (st.nextReply < t) st.nextReply = t + 10 + ev() * 15;
+      if (st.nextReply < t + 0.3) { if (near > 0.25) reply(st.nextReply, near); st.nextReply += 25 + ev() * 20; }
+      // space between
       const ws = s.worlds || [];
       let nearest = hd;
       for (const w of ws) nearest = Math.min(nearest, Math.max(0, w.surf ?? 1e9));
-      const open = smooth(400, 30000, nearest);
-      const bedLvl = M.bed * lerp(1, M.bedFar, open) * (1 - 0.5 * pull);
-      set(g.bedG.gain, bedLvl, 1.2);
-      set(g.bedLp.frequency, lerp(700, 300, open), 1.5);
-      set(g.shG.gain, M.shimmer * lerp(1, 0.2, open), 1.5);
-      set(g.shDepth.gain, M.shimmer * lerp(0.8, 0.15, open), 1.5);
-      // the voices: closeness, pull-back, the descent's swell, the reduced view's focus
-      const dsl = s.descent ? s.descent.slug : null, dt0 = s.descent ? clamp(s.descent.t / 0.9) : 0;
+      const open = smooth(500, 30000, nearest);
+      set(g.clG.gain, M.cluster * lerp(0.6, 1, open) * duck, 3);
+      set(g.shG.gain, M.shimmer * lerp(1, 0.6, open), 3);
+      if (st.nextFar < t) st.nextFar = t + 8 + ev() * 15;
+      if (st.nextFar < t + 0.3) { if (pull < 0.5 && !s.descent) farEvent(st.nextFar); st.nextFar += 30 + ev() * 30; }
+      // the worlds
+      const dsl = s.descent ? s.descent.slug : null, dk = s.descent ? clamp(s.descent.t / 0.9) : 0;
       for (const w of ws) {
-        const vo = g.voices[w.slug]; if (!vo) continue;
-        let c = Math.pow(smooth(8, 0.4, w.x), 1.6);
-        if (s.focus === w.slug) c = Math.max(c, 0.55);
-        if (dsl === w.slug) c = Math.max(c, lerp(c, 1.35, dt0));
-        else if (dsl) c *= 1 - dt0;
-        const lvl = M.voice * Math.max(c, pull * M.orrery);
-        vo.lvl = lvl;
-        set(vo.level.gain, lvl, 0.6);
-        set(vo.pan.pan, clamp(w.pan || 0, -0.9, 0.9), 0.4);
-        if (lvl > 0.002) phrase(vo, t + 0.4); else vo.next = 0;
+        const W = g.worlds[w.slug]; if (!W) continue;
+        let c = Math.pow(smooth(8, 0.5, w.x), 1.7);
+        if (s.focus === w.slug) c = Math.max(c, 0.45);
+        if (dsl === w.slug) c = Math.max(c, lerp(c, 1.25, dk)); else if (dsl) c *= 1 - dk;
+        const droneLvl = M.drone * Math.max(c, pull * M.orrery);
+        W.lvl = c;
+        set(W.level.gain, droneLvl, 1.2);
+        const inHull = 1 - 0.85 * close;   // inside the canyon the ship is what you hear
+        set(W.tex.gain, c * inHull, 0.8); set(W.texW.gain, c * inHull, 0.8);
+        set(W.glG.gain, 0.0035 * pull, 1.0);
+        set(W.pan.pan, clamp(w.pan || 0, -0.9, 0.9), 0.5);
+        // signature events while the world can be heard
+        if (c * (1 - 0.85 * close) > 0.1 && pull < 0.5 && !(dsl && dsl !== w.slug)) {
+          if (!W.next || W.next < t) W.next = t + 1 + ev() * 3;
+          if (W.next < t + 0.3) W.next += signature(w.slug, W.next, c, clamp(w.pan || 0, -0.9, 0.9));
+        } else W.next = 0;
+        // the descent: the drone bends apart into a dissonant cluster
+        if (dsl === w.slug && dk > 0) W.oscs.forEach((o, i) => set(o.detune, (i % 2 ? 1 : -1) * (20 + 140 * dk) * (1 + i * 0.3), 0.15));
       }
-      // the descent: a rush of air that swells and opens over the flood, ending near the surface's wind
-      if (s.descent) {
-        const k = clamp(s.descent.t / 0.9);
-        set(g.rushG.gain, M.rush * Math.pow(k, 1.5), 0.08);
-        set(g.rushLp.frequency, 250 + 1100 * k, 0.1);
-      } else { set(g.rushG.gain, 0, 0.3); }
+      // the nearest world's swell (the nameplate moment): slow, low, no hit
+      if (s.plate && s.plate !== st.plate && g.worlds[s.plate]) {
+        const v = VOICES[s.plate], wp = ws.find((w) => w.slug === s.plate);
+        toneEv(t + 0.05, { type: 'triangle', f0: v.root / 2, a: 3, d: 4, peak: M.swell, pan: wp ? clamp(wp.pan, -0.8, 0.8) : 0, dry: 0.6, wet: 0.8 });
+        noiseEv(t + 0.05, { buf: g.pink, type: 'lowpass', f0: 120, f1: 600, q: 0.6, a: 3, d: 3, peak: M.swell * 0.6, pan: 0, dry: 0.5, wet: 0.6 });
+        log('swell', s.plate, 0);
+      }
+      st.plate = s.plate || null;
+      // the shuttle: breath under thrust, a whoosh as boost opens, a servo tick in hard turns
+      const thr = clamp((s.speed || 0) / Math.max(1, s.cap || 1), 0, 2);
+      const on = s.thrust > 0 ? 1 : 0;
+      set(g.thG.gain, M.thrust * on * (0.4 + 0.6 * Math.min(1, thr)) * duck * (s.descent ? 0.2 : 1), 0.5);
+      set(g.thBp.frequency, 300 + 500 * Math.min(1, thr), 0.6);
+      set(g.thPan.pan, clamp(-(s.bank || 0) * 0.4, -0.35, 0.35), 0.3);
+      if (s.boost && !st.boostWas && !s.descent) { noiseEv(t + 0.01, { buf: g.pink, type: 'lowpass', f0: 250, f1: 1800, q: 0.7, a: 0.3, d: 1.4, peak: M.whoosh * duck, pan: 0, dry: 0.8, wet: 0.4 }); log('whoosh', 'shuttle', 0); }
+      st.boostWas = !!s.boost;
+      if (Math.abs(s.bank || 0) > 0.55 && t > st.nextServo && !s.descent) {
+        const p = clamp(-(s.bank || 0), -0.5, 0.5);
+        noiseEv(t + 0.01, { type: 'bandpass', f0: 3800, q: 6, a: 0.002, d: 0.05, peak: M.servo * duck, pan: p, dry: 0.8, wet: 0.2 });
+        toneEv(t + 0.03, { f0: 2200, f1: 2600, a: 0.003, d: 0.06, peak: M.servo * 0.3 * duck, pan: p, dry: 0.8, wet: 0.2 });
+        st.nextServo = t + 1.2; log('servo', 'shuttle', p);
+      }
+      // the descent's air, swelling and opening over the flood toward the surface's wind
+      if (s.descent) { set(g.ruG.gain, M.rush * Math.pow(dk, 1.5), 0.08); set(g.ruLp.frequency, 250 + 1100 * dk, 0.1); }
+      else set(g.ruG.gain, 0, 0.3);
     } catch { /* the loop never throws for sound */ }
   }
 
@@ -338,7 +526,6 @@ export function createSound(opts = {}) {
     if (!g) return;
     try { g.fade.gain.cancelScheduledValues(now()); set(g.fade.gain, hidden ? 0 : 1, hidden ? 0.05 : 0.3); } catch { /* gone */ }
   }
-
   function start() {
     if (dead || disposed) return Promise.resolve(false);
     try {
@@ -354,9 +541,8 @@ export function createSound(opts = {}) {
         ready = new Promise((r) => setTimeout(r, 0)).then(() => {
           if (disposed) return false;
           build();
-          // arrival: fade in over about two seconds
           g.fade.gain.setValueAtTime(0, now());
-          g.fade.gain.linearRampToValueAtTime(hidden ? 0 : 1, now() + 2.0);
+          g.fade.gain.linearRampToValueAtTime(hidden ? 0 : 1, now() + 2.0);   // arrival: in over about two seconds
           return true;
         }).catch(() => { dead = true; return false; });
         return Promise.all([ready, resumed.catch(() => {})]).then(([ok]) => !!ok && !dead && (!!external || ctx.state === 'running'));
@@ -383,24 +569,24 @@ export function createSound(opts = {}) {
       if (!external && c.state !== 'closed') c.close().catch(() => {});
     }, external ? 0 : 200);
   }
-  return { start, update, setMuted, dispose, stats: () => ({ persistentNodes: st.nodes, state: ctx ? ctx.state : 'none', scriptProcessor: false, worklet: false }), get context() { return ctx; } };
+  return { start, update, setMuted, dispose,
+    stats: () => ({ persistentNodes: st.nodes, state: ctx ? ctx.state : 'none', scriptProcessor: false, worklet: false, events: st.log.slice() }) };
 }
 
-// Offline render (tests): states(t) -> the update() state at time t (seconds); events(t) may return
-// { mute: bool } to toggle muting. Updates run every `step` seconds through suspend/resume.
+// Offline render (tests): states(t) -> the update() state at time t; events(t) may return { mute }.
 export async function renderScene(states, { seconds = 20, sr = 48000, step = 1 / 30, seed = 7, events = null } = {}) {
   const oac = new OfflineAudioContext(2, Math.floor(sr * seconds), sr);
   const s = createSound({ context: oac, seed });
   await s.start();
   for (let k = 1, t = step; t < seconds - step; k++, t = k * step) {
     oac.suspend(Math.round(t * sr / 128) * 128 / sr).then(() => {
-      const st = states(t);
-      s.update({ dt: step, ...st });
-      const ev = events && events(t);
-      if (ev && ev.mute !== undefined) s.setMuted(ev.mute);
+      s.update({ dt: step, ...states(t) });
+      const e = events && events(t);
+      if (e && e.mute !== undefined) s.setMuted(e.mute);
       oac.resume();
     }).catch(() => oac.resume());
   }
-  const buf = await oac.startRendering();
-  return { buffer: buf, nodes: s.stats().persistentNodes };
+  const buffer = await oac.startRendering();
+  const st = s.stats();
+  return { buffer, nodes: st.persistentNodes, events: st.events };
 }

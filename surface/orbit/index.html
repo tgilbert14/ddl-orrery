@@ -24,6 +24,8 @@
   .ui { position: fixed; z-index: 3; display: flex; gap: 6px; flex-wrap: wrap; }
   #bar { right: 12px; top: 12px; justify-content: flex-end; }
   #home { left: 12px; top: 12px; }
+  /* narrow screens: the bar needs the whole top row, so the way out moves to the bottom left */
+  @media (max-width: 560px) { #home { top: auto; bottom: 12px; } html body #hint { bottom: 62px; } }
   .ui button, .ui a, #approach button { font: inherit; font-size: 13px; color: #f4e8d6; background: rgba(20, 13, 9, 0.55); border: 1px solid rgba(244, 232, 214, 0.35);
     border-radius: 999px; padding: 6px 12px; min-height: 34px; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
   .ui button[aria-pressed="true"], .ui button[aria-expanded="true"] { background: rgba(244, 232, 214, 0.86); color: #24170f; }
@@ -57,6 +59,14 @@
   #plate.on { opacity: 1; }
   #plate b { display: block; font-size: 22px; font-weight: 500; letter-spacing: 0.06em; }
   #plate span { display: block; margin-top: 2px; font-style: italic; opacity: 0.85; }
+  /* the course's target: a thin ring on the world, or a pointer at the frame's edge */
+  #target { position: fixed; z-index: 2; left: 0; top: 0; width: 0; height: 0; pointer-events: none; --s: 40px; }
+  #target[hidden] { display: none; }
+  #target .ring { position: absolute; left: calc(var(--s) / -2); top: calc(var(--s) / -2); width: var(--s); height: var(--s); border-radius: 50%;
+    border: 1px solid rgba(255, 236, 210, 0.7); box-shadow: 0 0 0 1px rgba(20, 13, 9, 0.35); }
+  #target .arrow { position: absolute; left: 0; top: 0; width: 0; height: 0; display: none; }
+  #target .arrow::after { content: ""; position: absolute; left: 14px; top: -5px; border: 5px solid transparent; border-left: 8px solid rgba(255, 236, 210, 0.8); }
+  #target.off .arrow { display: block; }
   #dot { position: fixed; z-index: 2; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
     background: rgba(255, 244, 228, 0.8); box-shadow: 0 0 0 1px rgba(20, 13, 9, 0.5); display: none; pointer-events: none; }
   body.locked #dot { display: block; }
@@ -96,6 +106,7 @@
 <p id="title" aria-hidden="true"><b>The Orrery</b><span>Eleven worlds, one dead ship.</span></p>
 <p id="hint"><span class="desk-only">W A S D or arrows to fly, Space or Shift to boost. Click a world to fly there; click empty space to steer with the mouse. Hold M for the whole orrery.</span><span class="touch-only">Left thumb steers, right thumb looks. Tap a world to fly there; pinch out for the whole orrery.</span></p>
 <div id="plate" aria-live="polite"><b></b><span></span></div>
+<div id="target" hidden aria-hidden="true"><i class="ring"></i><i class="arrow"></i></div>
 <div id="dot"></div>
 <div id="stick"><i></i></div>
 <nav class="ui" id="home" aria-label="Leave the orbit"><a href="../../">Classic hub</a></nav>

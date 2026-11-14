@@ -9,13 +9,14 @@ const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const ease = (dt, tau) => 1 - Math.exp(-dt / tau);
 
 export const FLY = {
-  capMin: 70, capK: 1.05, capMax: 30000,  // cap = capMin + capK * room (m/s)
+  capMin: 70, capK: 1.3, capMax: 34000,  // cap = capMin + capK * room (m/s)
   boost: 2.0, idle: 0.28, touchCruise: 0.7,
   tauUp: 0.8, tauDown: 0.8, tauCap: 0.4,
   yawRate: 0.95, pitchRate: 0.75, tauTurn: 0.35, pitchMax: 1.25,
   bankK: 0.6, bankMax: 0.85, tauBank: 0.45,
   margin: 16, hard: 3,
   apTurn: 0.85, // autopilot turn rate (rad/s)
+  nearK: 0.32,  // the cap's slope near a world (see update)
 };
 
 export function dirOf(yaw, pitch) { return [Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw)]; }
@@ -38,7 +39,23 @@ export function createFlight(pose) {
     const room = Math.max(0, env.room);
     s.room = room;
     const capT = clamp(FLY.capMin + FLY.capK * room, FLY.capMin, FLY.capMax);
-    s.cap += (capT - s.cap) * ease(dt, capT < s.cap ? FLY.tauCap : 1.2);
+    s.capRoom = (s.capRoom ?? s.cap) + (capT - (s.capRoom ?? s.cap)) * ease(dt, capT < (s.capRoom ?? s.cap) ? FLY.tauCap : 1.2);
+    s.cap = s.capRoom; s.capWorld = Infinity;
+    // near a world the cap closes faster (its slope falls to nearK inside 2 radii of the surface), so
+    // the last two radii down to the air take about four to five seconds: the planet fills the sky
+    // first. The world's ceiling applies at once and looks ahead, so a fast arrival brakes into it.
+    if (env.world) {
+      const { R } = env.world;
+      let closing = 0;
+      if (env.world.pos) { const c = env.world.pos, d = [c[0] - s.pos[0], c[1] - s.pos[1], c[2] - s.pos[2]], dl = Math.hypot(...d) || 1; closing = Math.max(0, (s.vel[0] * d[0] + s.vel[1] * d[1] + s.vel[2] * d[2]) / dl); }
+      const surf = Math.max(0, env.world.surf - closing * 0.2);
+      // only while closing on it: passing a world by (or leaving it) keeps the open-space slope
+      const toward = Math.min(1, closing / Math.max(1, s.speed));
+      const kNear = FLY.nearK + (FLY.capK - FLY.nearK) * Math.min(1, Math.max(0, (surf - 2 * R) / (2 * R)));
+      const k = FLY.capK + (kNear - FLY.capK) * toward;
+      s.capWorld = 25 + 45 * Math.min(1, surf / R) + k * surf;   // a small world still takes its seconds
+      s.cap = Math.min(s.cap, s.capWorld);
+    }
     // ---- heading
     const yaw0 = s.yaw;
     if (env.target) {
@@ -75,12 +92,17 @@ export function createFlight(pose) {
     // ---- speed
     let want;
     if (env.mode === 'arrival') want = 30;
-    else if (env.target) want = s.cap * Math.max(0.12, Math.pow((1 + (s.apAlign ?? 1)) / 2, 6));   // turn first, then run
+    else if (env.target) {
+      // turn first, then run: thrust builds only once the nose is nearly on the course
+      const a = Math.min(1, Math.max(0, ((s.apAlign ?? 1) - 0.55) / 0.42));
+      want = s.cap * Math.max(0.05, a * a * (3 - 2 * a));
+    }
     else {
       const k = it.boost ? FLY.boost : 1;
       want = it.thrust > 0 ? s.cap * k : it.thrust < 0 ? 0 : (it.touchCruise ? FLY.touchCruise : FLY.idle) * s.cap * (it.boost ? FLY.boost : 1);
+      want = Math.min(want, s.capWorld);   // boost never outruns a world's approach
     }
-    const tau = want > s.speed ? FLY.tauUp : (s.speed > s.cap * FLY.boost ? 0.4 : FLY.tauDown);
+    const tau = want > s.speed ? FLY.tauUp : (s.speed > s.cap * (it && it.boost ? FLY.boost : 1) ? 0.22 : FLY.tauDown);
     s.speed += (want - s.speed) * ease(dt, tau);
     // ---- move, then metal pushes back
     const f = dirOf(s.yaw, s.pitch);

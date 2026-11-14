@@ -208,10 +208,14 @@ async function buildGraphics() {
   sun1.shadow.bias = -0.0004; sun1.shadow.normalBias = 1.0;
   const sun2 = new THREE.DirectionalLight(new THREE.Color().setRGB(...SUN2.col), 0.45);
   sun2.position.set(...mul(SUN2.dir, 9000));
-  const bounce = new THREE.DirectionalLight(new THREE.Color().setRGB(0.55, 0.36, 0.2), 0.32);
+  const bounce = new THREE.DirectionalLight(new THREE.Color().setRGB(0.55, 0.38, 0.24), 0.42);
   bounce.position.set(-SUN1.dir[0] * 9000, 0.35 * 9000, -SUN1.dir[2] * 9000);
-  const amb = new THREE.HemisphereLight(new THREE.Color().setRGB(0.15, 0.135, 0.15), new THREE.Color().setRGB(0.05, 0.032, 0.018), 1.0);
-  scene.add(sun1, sun1.target, sun2, bounce, amb);
+  const amb = new THREE.HemisphereLight(new THREE.Color().setRGB(0.19, 0.17, 0.19), new THREE.Color().setRGB(0.065, 0.042, 0.025), 1.0);
+  // the shuttle's searchlight: a warm cone ahead that lights metal within about 400 m (it lights
+  // only surfaces, so in open space it is all but invisible)
+  const lamp = new THREE.SpotLight(new THREE.Color().setRGB(1.0, 0.78, 0.5), 90000, 520, 0.5, 0.8, 2);
+  scene.add(sun1, sun1.target, sun2, bounce, amb, lamp.target);
+  if (q.get('lamp') !== '0') scene.add(lamp);   // lamp=0: without the searchlight (timing only)
 
   const camera = new THREE.PerspectiveCamera(52, Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight), 1, 420000);
   if (!field) field = createField(hull.userData.boxes);
@@ -220,7 +224,7 @@ async function buildGraphics() {
     else { const gl = renderer.backend.gl; const px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
   };
   renderer.onDeviceLost = (info) => { onDeviceLost(info); };
-  return { THREE, renderer, isGPU, scene, sky, stars, hull, worlds, points, lines, fadeU, shuttle, mark, markA, markU, sun1, sun2, camera, drain,
+  return { THREE, renderer, isGPU, scene, lamp, sky, stars, hull, worlds, points, lines, fadeU, shuttle, mark, markA, markU, sun1, sun2, camera, drain,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' + (API.fellBack ? ' - FELL BACK: WebGPU did not start' : ''),
     exposure: 1.45, tmpQ: [new THREE.Quaternion(), new THREE.Quaternion()], tmpM: new THREE.Matrix4(), v: new THREE.Vector3() };
 }
@@ -329,7 +333,7 @@ function tick(dt) {
   const fs = field ? field.sample(flight.state.pos) : { d: 1e9 };
   if (!reduced && phase !== 'descent' && pull.t === 0) {
     const tw = autopilot ? live[SLUGS.indexOf(autopilot)] : null;
-    flight.update(dt, { field, room: Math.min(fs.d, near.surfaceDist), target: tw ? { pos: tw.pos, R: tw.R } : null, intent, mode: phase === 'arrival' ? 'arrival' : 'flight' });
+    flight.update(dt, { field, room: Math.min(fs.d, near.surfaceDist), world: { surf: near.surfaceDist, R: live[near.i].R, pos: live[near.i].pos }, target: tw ? { pos: tw.pos, R: tw.R } : null, intent, mode: phase === 'arrival' ? 'arrival' : 'flight' });
   } else if (phase === 'descent' && !reduced) {
     // the camera holds while the shuttle slips on into the air
     flight.update(dt, { field: null, room: 400, target: null, intent: { thrust: 0, yaw: 0, pitch: 0 }, mode: 'arrival' });
@@ -366,7 +370,7 @@ function soundState(dt, intent) {
     });
     const f = flight.state;
     return { dt, hullDist: field.sample(cp).d, speed: f.speed, cap: f.cap, thrust: intent.thrust || (intent.touchCruise ? 0.7 : 0) || (autopilot ? 1 : 0),
-      boost: !!intent.boost, bank: f.bank, worlds, pull: pull.k, descent: descent ? { slug: descent.slug, t: descent.t } : null, focus: reduced ? rView : null };
+      boost: !!intent.boost, bank: f.bank, worlds, pull: pull.k, descent: descent ? { slug: descent.slug, t: descent.t } : null, focus: reduced ? rView : null, plate: plateSlug, yawRate: f.yawRate };
   } catch { return null; }
 }
 
@@ -386,6 +390,21 @@ function place(dt, intent, near) {
     camPos = c.cam;
     let d = c.dir;
     if (portrait) { const yw = Math.atan2(d[2], d[0]) + 4 * DEG, pt = Math.asin(clamp(d[1], -1, 1)) + 2 * DEG; d = dirOf(yw, pt); }
+    // a course is set: lean the view toward the target (up to 16 degrees, easing in and out), so the
+    // world enters the frame early in the turn and stays in it
+    G.apBias = clamp((G.apBias || 0) + (autopilot ? dt : -dt) / 0.8, 0, 1);
+    if (autopilot) G.apSlug = autopilot;
+    if (G.apBias > 0 && G.apSlug) {
+      const tw = live[SLUGS.indexOf(G.apSlug)], toT = norm(sub(tw.show, camPos));
+      const ang = Math.acos(clamp(dot(d, toT), -1, 1));
+      if (ang > 1e-4) {
+        const a = Math.min(ang, 16 * DEG * smooth(G.apBias));
+        let ax = cross(d, toT); const al = len(ax);
+        ax = al > 1e-6 ? mul(ax, 1 / al) : [0, 1, 0];
+        const c = Math.cos(a), s2 = Math.sin(a), kd = dot(ax, d);
+        d = norm(add(add(mul(d, c), mul(cross(ax, d), s2)), mul(ax, kd * (1 - c))));
+      }
+    }
     look = add(camPos, d);
     const right = norm(cross(d, [0, 1, 0]));
     up = add(mul([0, 1, 0], Math.cos(c.roll)), mul(right, Math.sin(c.roll)));
@@ -426,6 +445,12 @@ function place(dt, intent, near) {
   G.shuttle.lookAt(...add(f.pos, dirOf(f.yaw, f.pitch)));
   G.shuttle.rotateZ(f.bank);
   G.shuttle.visible = k < 0.5;
+  {
+    const fd = dirOf(f.yaw, f.pitch);
+    G.lamp.position.set(...add(f.pos, mul(fd, 6)));
+    G.lamp.target.position.set(...add(f.pos, add(mul(fd, 200), [0, -18, 0])));
+    G.lamp.intensity = 90000 * (1 - k);   // intensity, not visibility: a light switched off would recompile every lit material
+  }
   G.markA.setXYZ(0, ...sp); G.markA.needsUpdate = true;
   G.markU.value = k;
   G.sky.position.copy(cam.position); G.stars.position.copy(cam.position);
@@ -439,13 +464,45 @@ function place(dt, intent, near) {
   const nw = live[near.i];
   const ang = Math.asin(clamp(nw.R / Math.max(nw.R, len(sub(nw.pos, cp))), 0, 1));
   const fill = clamp(ang / ((cam.fov * DEG) / 2), 0, 1);
-  const want = 1.45 - 0.45 * smooth((fill - 0.45) / 0.55);
+  // ... and easing up (over about 2.5 s) as the camera gets in close to the hull, back down in open light
+  const hullK = 1 - smooth((field.sample(cp).d - 60) / 400);
+  G.hullK = (G.hullK ?? hullK) + (hullK - (G.hullK ?? hullK)) * (dt > 0 ? ease(dt, 2.5) : 1);
+  const want = (1.45 - 0.45 * smooth((fill - 0.45) / 0.55)) * (1 + 0.7 * G.hullK);
   G.exposure += (want - G.exposure) * (dt > 0 ? ease(dt, 2.0) : 1);
   G.renderer.toneMappingExposure = G.exposure;
+  // the target ring: tracks the course's world on screen, clamped to the frame edge with a pointer
+  placeRing(cam, k);
   // the touch stick
   const st = controls.stick;
   if (st) { stickEl.style.display = 'block'; stickEl.style.left = st.x0 + 'px'; stickEl.style.top = st.y0 + 'px'; stickEl.firstElementChild.style.transform = `translate(${clamp(st.dx, -60, 60)}px, ${clamp(st.dy, -60, 60)}px)`; }
   else stickEl.style.display = 'none';
+}
+
+const ringEl = $('target');
+function placeRing(cam, k) {
+  if (!autopilot || k > 0.01 || reduced || phase === 'descent') { ringEl.hidden = true; return; }
+  const tw = live[SLUGS.indexOf(autopilot)], W = window.innerWidth, H = window.innerHeight;
+  const cp = [cam.position.x, cam.position.y, cam.position.z], e = cam.matrixWorld.elements;
+  const fwd = [-e[8], -e[9], -e[10]], toT = sub(tw.show, cp), dist = len(toT);
+  const v = G.v.set(...tw.show).project(cam);
+  let sx = (v.x * 0.5 + 0.5) * W, sy = (-v.y * 0.5 + 0.5) * H;
+  const front = dot(toT, fwd) > 0;
+  if (!front) { sx = W - sx; sy = H - sy; }
+  const rpx = (tw.showR / dist) * (H / 2) / Math.tan((cam.fov * DEG) / 2);
+  const m = 34;
+  const off = !front || sx < m || sx > W - m || sy < m || sy > H - m;
+  if (off) {
+    const dx = sx - W / 2, dy = sy - H / 2, s = Math.min((W / 2 - m) / Math.max(1e-3, Math.abs(dx)), (H / 2 - m) / Math.max(1e-3, Math.abs(dy)));
+    sx = W / 2 + dx * Math.min(s, front ? 1 : s); sy = H / 2 + dy * Math.min(s, front ? 1 : s);
+    sx = clamp(sx, m, W - m); sy = clamp(sy, m, H - m);
+  }
+  const big = rpx > H * 0.42;
+  ringEl.hidden = big && !off;
+  const size = off ? 26 : clamp(rpx * 2.3, 34, 260);
+  ringEl.style.transform = `translate(${sx}px, ${sy}px)`;
+  ringEl.style.setProperty('--s', size + 'px');
+  ringEl.classList.toggle('off', off);
+  ringEl.querySelector('.arrow').style.transform = `rotate(${Math.atan2(sy - H / 2, sx - W / 2)}rad)`;
 }
 
 // ---------------------------------------------------------------- the loop, the governor, the readout
@@ -525,6 +582,14 @@ async function startGraphics() {
   lightLamps();
   place(0, null, nearestWorld(flight.state.pos, live));
   resize();
+  // compile every pipeline now, behind the veil: every world, its atmosphere, the orbit lines and
+  // the marker (a world seen for the first time used to stall a frame for its shaders)
+  const saved = [];
+  G.scene.traverse((o) => { if (o.isMesh || o.isLine || o.isSprite) { saved.push([o, o.frustumCulled, o.visible]); o.frustumCulled = false; o.visible = true; } });
+  try { await G.renderer.compileAsync(G.scene, G.camera); } catch { /* compiled on first sight instead */ }
+  G.renderer.render(G.scene, G.camera);
+  for (const [o, fc, vis] of saved) { o.frustumCulled = fc; o.visible = vis; }
+  place(0, null, nearestWorld(flight.state.pos, live));
   G.renderer.render(G.scene, G.camera);
   await G.drain();
   posterEl.hidden = true;
@@ -581,6 +646,7 @@ API.step = async (n = 1, { dt = 1 / 60, drain = true } = {}) => {
   }
   return out;
 };
+API.lampInfo = () => G && { pos: G.lamp.position.toArray(), tgt: G.lamp.target.position.toArray(), I: G.lamp.intensity, inScene: !!G.lamp.parent };
 API.render = async () => { if (!G) return; place(0, null, nearestWorld(flight.state.pos, live)); G.renderer.render(G.scene, G.camera); await G.drain(); };
 API.loseDevice = () => {
   if (!G) return false;
