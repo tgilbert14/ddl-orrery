@@ -12,7 +12,7 @@ import { createShuttle } from './shuttle.js';
 
 const SHOTS = ['arrival', 'hull', 'approach', 'threshold', 'orrery'];
 // exposure per still (the worlds up close are far brighter than the dark metal)
-const P_EXPOSURE = { threshold: 1.0, approach: 1.3, hull: 1.25 };
+const P_EXPOSURE = { threshold: 1.0, approach: 1.3, hull: 2.1 };
 const q = new URLSearchParams(location.search);
 const readoutEl = document.getElementById('readout');
 const state = (window.__orbitLook = { ready: false, error: null, backend: null, shot: null });
@@ -88,13 +88,17 @@ function shotPose(name, placed) {
       shuttle: { pos: ARR.shuttle, dir: ARR.fwd } };
   }
   if (name === 'hull') {
-    // skimming the deck toward the stern down the open lane, the sun behind the right shoulder,
-    // the amidships tower (and its one window) ahead on the right, a world beyond the stern
-    const sx = 230, sz = 46;
-    const sp = [sx, deckAt(sx, sz) + 30, sz];
-    const fwd = norm(dirYP(180, -1));
-    const cam = add(sub(sp, mul(fwd, 210)), [0, 62, 2]);
-    return { cam, look: add(cam, norm(dirYP(181, -8))), vfov: 52, vfovPortrait: 78, shuttle: { pos: sp, dir: fwd } };
+    // low in the canyon, flying toward the stern: walls rising well above on both sides, walkways
+    // and cables across, the one amber window on the left wall in the middle distance, Abyssal at
+    // the far end of the vanishing line
+    const sx = 250, sz = 30;
+    const sp = [sx, deckAt(sx, sz) + 16, sz];
+    const fwd = norm(dirYP(178, -0.5));
+    const cam = add(sub(sp, mul(fwd, 175)), [0, 13, -12]);
+    return { cam, look: add(cam, norm(dirYP(175.5, 2.5))), vfov: 54, vfovPortrait: 80, shuttle: { pos: sp, dir: fwd },
+      // the close view's light: the pale sun slants across the lane from the port side, through the
+      // cross streets, so one wall is in warm light, the other in cool shadow, with shafts on the floor
+      light: { dir: norm(dirYP(-68, 38)), target: [-200, 150, 45], half: 1000 } };
   }
   if (name === 'approach') {
     const D = W['dust-sea'];
@@ -195,7 +199,8 @@ async function run() {
   if (shot === 'orrery') scene.add(createOrbitLines(placed));
   // a thin dust between the ship and the camera (metal only: the worlds and sky opt out), so the
   // derelict's far end recedes; off for the orrery, where the ship is far away by design
-  if (shot !== 'orrery') scene.fogNode = fog(vec3(0.05, 0.032, 0.018), densityFogFactor(shot === 'approach' ? 0.00005 : 0.00016));
+  if (shot === 'hull') scene.fogNode = fog(vec3(0.22, 0.12, 0.045), densityFogFactor(0.0009)); // a warm haze in the canyon
+  else if (shot !== 'orrery') scene.fogNode = fog(vec3(0.05, 0.032, 0.018), densityFogFactor(shot === 'approach' ? 0.00005 : 0.00016));
 
   // the suns as lights on the metal (the worlds and sky shade themselves from the same directions)
   const sun1 = new THREE.DirectionalLight(new THREE.Color().setRGB(...SUN1.col), 1.0);
@@ -219,6 +224,19 @@ async function run() {
 
   // ---- camera
   const P = shotPose(shot, placed);
+  if (P.light) {
+    // a still may light its metal from its own sun angle (the sky and the worlds keep the shared suns)
+    const L = P.light;
+    sun1.position.set(...add(L.target, mul(L.dir, 6000)));
+    sun1.target.position.set(...L.target);
+    sc.left = -L.half; sc.right = L.half; sc.top = L.half; sc.bottom = -L.half; sc.near = 4000; sc.far = 8000;
+    sun1.shadow.normalBias = 0.6;
+    bounce.color.setRGB(0.46, 0.42, 0.40); bounce.intensity = 0.75;
+    sun2.intensity = 0.14;
+    sun1.intensity = 1.9;
+    bounce.position.set(-L.dir[0] * 9000, 0.25 * 9000, -L.dir[2] * 9000);
+    amb.color.setRGB(0.15, 0.17, 0.23); amb.groundColor.setRGB(0.09, 0.07, 0.05);
+  }
   const aspect = window.innerWidth / window.innerHeight;
   const portrait = aspect < 1;
     // near plane 5 m: nothing in any still comes closer than ~50 m. WebGPU uses a reversed (float)

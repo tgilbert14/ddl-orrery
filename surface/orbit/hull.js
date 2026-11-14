@@ -139,6 +139,15 @@ function prism(sides, taper) {
 }
 const cone6 = flat(new THREE.ConeGeometry(0.5, 1, 6));
 const cyl8 = new THREE.CylinderGeometry(1, 1, 1, 8, 1);
+const cyl16 = new THREE.CylinderGeometry(1, 1, 1, 18, 1);
+const cyl32 = new THREE.CylinderGeometry(1, 1, 1, 40, 1);
+const cylDuct = new THREE.CylinderGeometry(1, 1, 1, 10, 1);
+const dome = new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+// a barrel vault along x: half a cylinder, unit length, radius 1 (scaled by the caller)
+const vault = new THREE.CylinderGeometry(1, 1, 1, 16, 1, false, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2);
+const ring = new THREE.RingGeometry(0.86, 1.0, 48);
+// a dead craft's hull: a flattened lathe, nose along +y before it is laid down
+const hulkBody = new THREE.LatheGeometry([[0, 0.5], [0.35, 0.38], [0.5, 0.1], [0.48, -0.3], [0.35, -0.5], [0, -0.5]].map(([r, y]) => new THREE.Vector2(r, y)), 14);
 
 // a box from point a to point b: length along a-b, d tall (toward up), w wide
 function beam(a, b, w, d, up = [0, 1, 0]) {
@@ -155,7 +164,9 @@ function beam(a, b, w, d, up = [0, 1, 0]) {
 
 function buildParts(seed) {
   const R = rng(seed);
+  const R2 = rng(seed * 7 + 13); // detail added in round three draws from its own stream, so the city's layout is unchanged
   const parts = [[loftHull(), null, null]];
+  const paint = [];               // faded markings on the lane floor (their own material)
   const add = (geo, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) => parts.push([geo, M(x, y, z, sx, sy, sz, rx, ry, rz), [sx, sy, sz]]);
   const roofClutter = (x0, x1, z0, z1, y, k) => {
     for (let i = 0; i < k; i++) {
@@ -182,6 +193,45 @@ function buildParts(seed) {
   const pilastersX = (z0, z1, xf, sgn, y0, h, stepM) => {
     for (let z = Math.min(z0, z1) + stepM / 2; z < Math.max(z0, z1) - 2; z += stepM) add(box, xf + sgn * 1.0, y0 + h / 2, z, 2.0, h, 2.2);
   };
+  // relief on a lane face (z = zf, facing out along sgn): cornices every few storeys, recessed bays
+  // between buttresses, ducts climbing the face, a balcony or two
+  const relief = (x0, x1, zf, sgn, y0, h) => {
+    const len = x1 - x0;
+    for (let y = y0 + 14 + R2() * 10; y < y0 + h - 6; y += 16 + R2() * 14) add(box, (x0 + x1) / 2, y, zf + sgn * 1.6, len, 1.4 + R2() * 1.2, 3.2);
+    const bayW = 8 + R2() * 10;
+    for (let x = x0 + 4; x + bayW < x1 - 4; x += bayW * 2 + 3) {
+      const bh = h * (0.35 + R2() * 0.5);
+      add(box, x + bayW / 2, y0 + bh / 2, zf + sgn * 2.4, bayW, bh, 4.8);
+    }
+    const nd = R2() < 0.6 ? 1 + Math.floor(R2() * 2) : 0;
+    for (let i = 0; i < nd; i++) {
+      const r = 1.0 + R2() * 1.6, x = x0 + 3 + R2() * (len - 6);
+      parts.push([cylDuct, M(x, y0 + h / 2, zf + sgn * (r + 0.8), r, h, r), null]);
+    }
+    if (R2() < 0.4) {
+      const by = y0 + 10 + R2() * (h - 20), bl = Math.min(len - 6, 18 + R2() * 30), bx = x0 + 3 + R2() * (len - bl - 6);
+      add(box, bx + bl / 2, by, zf + sgn * 3.5, bl, 0.9, 7);
+      add(box, bx + bl / 2, by + 1.3, zf + sgn * 6.8, bl, 1.6, 0.5);
+    }
+  };
+  const roundTower = (xc, zc, base, s, th) => {
+    // a round tower with bands, stepping in, a dome on top
+    let y = base, r = s / 2;
+    const steps = 2 + Math.floor(R2() * 2);
+    for (let i = 0; i < steps; i++) {
+      const hh = th / steps * (1.1 - i * 0.1);
+      parts.push([cyl16, M(xc, y + hh / 2, zc, r, hh, r), [2 * r, hh, 2 * r]]);
+      for (let yy = y + 10; yy < y + hh - 4; yy += 14 + R2() * 8) parts.push([cyl16, M(xc, yy, zc, r + 0.9, 1.4, r + 0.9), null]);
+      y += hh; r *= 0.72;
+    }
+    parts.push([dome, M(xc, y, zc, r * 1.15, r * 1.15, r * 1.15), null]);
+    return y + r;
+  };
+  const tank = (x, z, y, r, h) => {
+    parts.push([cyl16, M(x, y + h / 2, z, r, h, r), [2 * r, h, 2 * r]]);
+    parts.push([dome, M(x, y + h, z, r, r * 0.5, r), null]);
+    parts.push([cyl16, M(x, y + h * 0.3, z, r + 0.4, 0.8, r + 0.4), null]);
+  };
   // ---- the building types
   // zIn is the face toward the lane (or the inner edge of a band), sgn the side (+1 starboard)
   const terrace = (x0, x1, zIn, zOut, base, H, sgn) => {
@@ -195,6 +245,7 @@ function buildParts(seed) {
       const zc = zIn + sgn * wid / 2;
       add(prism(4, 0.97), xc, y + h / 2, zc, len, h, wid);
       if (R() < 0.85) pilasters(xc - len / 2, xc + len / 2, zIn, -sgn, y, h * 0.97, 9 + R() * 14);
+      if (h > 18) relief(xc - len / 2 + 2, xc + len / 2 - 2, zIn, -sgn, y, h * 0.96);
       // a ledge or parapet along the lane face on some levels: a long line
       if (R() < 0.5) add(box, xc, y + h + 1.2, zIn + sgn * 1.5, len, 2.4, 3);
       y += h;
@@ -213,10 +264,19 @@ function buildParts(seed) {
     const s = Math.min(fx, fz) * (0.55 + R() * 0.3);
     const th = H * (1.4 + R() * 1.2);
     const xc = (x0 + x1) / 2 + (R() - 0.5) * (fx - s) * 0.6;
-    add(prism(8, 0.78 + R() * 0.12), xc, base + ph + th / 2, zc, s, th, s * (0.8 + R() * 0.3));
+    const taper = 0.78 + R() * 0.12, sz = s * (0.8 + R() * 0.3);
+    const round = R2() < 0.4;   // the main stream's draws below are made either way, so the layout holds
     let top = base + ph + th;
-    if (R() < 0.7) { const h2 = th * (0.15 + R() * 0.2); add(prism(8, 0.65), xc, top + h2 / 2, zc, s * 0.5, h2, s * 0.45); top += h2; }
-    if (R() < 0.6) { const sh = 25 + R() * 90; parts.push([cone6, M(xc, top + sh / 2, zc, s * 0.18, sh, s * 0.18), null]); }
+    if (round) top = roundTower(xc, zc, base + ph, s, th);
+    else {
+      add(prism(8, taper), xc, base + ph + th / 2, zc, s, th, sz);
+      if (R2() < 0.5) for (let y = base + ph + 20 + R2() * 10; y < base + ph + th - 10; y += 22 + R2() * 16) {
+        const k = 1 - (1 - taper) * ((y - base - ph) / th);
+        add(prism(8, 1), xc, y, zc, s * k + 3, 1.6, sz * k + 3);
+      }
+    }
+    if (R() < 0.7) { const h2 = th * (0.15 + R() * 0.2); if (!round) { add(prism(8, 0.65), xc, top + h2 / 2, zc, s * 0.5, h2, s * 0.45); top += h2; } }
+    if (R() < 0.6) { const sh = 25 + R() * 90; parts.push([cone6, M(xc, top + sh / 2, zc, s * (round ? 0.1 : 0.18), sh, s * (round ? 0.1 : 0.18)), null]); }
     else antennas(xc, top, zc, 2 + Math.floor(R() * 3), 90);
   };
   const gallery = (x0, x1, zIn, zOut, base, H, sgn) => {
@@ -232,7 +292,9 @@ function buildParts(seed) {
   const hall = (x0, x1, zIn, zOut, base, H) => {
     const h = 8 + H * 0.35 * R();
     add(prism(8, 0.9), (x0 + x1) / 2, base + h / 2, (zIn + zOut) / 2, x1 - x0, h, Math.abs(zOut - zIn));
-    add(prism(4, 0.4), (x0 + x1) / 2, base + h + 3, (zIn + zOut) / 2, (x1 - x0) * 0.9, 6, Math.abs(zOut - zIn) * 0.4);
+    if (R2() < 0.5) parts.push([vault, M((x0 + x1) / 2, base + h, (zIn + zOut) / 2, (x1 - x0) * 0.9, Math.min(14, Math.abs(zOut - zIn) * 0.3), Math.abs(zOut - zIn) * 0.42), null]);
+    else add(prism(4, 0.4), (x0 + x1) / 2, base + h + 3, (zIn + zOut) / 2, (x1 - x0) * 0.9, 6, Math.abs(zOut - zIn) * 0.4);
+    if (R2() < 0.5) tank((x0 + x1) / 2 + (R2() - 0.5) * (x1 - x0) * 0.5, (zIn + zOut) / 2 + (R2() - 0.5) * 20, base + h, 5 + R2() * 8, 8 + R2() * 12);
     roofClutter(x0 + 4, x1 - 4, Math.min(zIn, zOut) + 2, Math.max(zIn, zOut) - 2, base + h, 3);
   };
 
@@ -297,6 +359,67 @@ function buildParts(seed) {
       const g = beam([x, yA, z], [x1, yB, z], 2 * r, 2 * r); g[0] = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1).rotateZ(-Math.PI / 2); g[2] = null; parts.push(g);
     }
     if (R() < 0.7) { const sx = 3 + R() * 10; add(box, x + R() * 50, deckAt(x, 92) + 2, 92 - R() * 6, sx, 3 + R() * 5, 3 + R() * 5); }
+  }
+  // ---- flying walkways across the lane at several heights, some arched, a collapsed one, cables
+  const za = LANE.z0 - 6, zb = LANE.z1 + 6;
+  for (const [wx, hy, arched] of [[-760, 38, true], [-430, 92, false], [-120, 64, true], [140, 118, false], [-600, 140, false], [-300, 48, false], [-980, 70, true]]) {
+    const y = deckAt(wx, 45) + hy;
+    parts.push(beam([wx, y, za], [wx, y, zb], 7, 1.6));
+    parts.push(beam([wx + 3.2, y + 1.6, za], [wx + 3.2, y + 1.6, zb], 0.4, 1.4));
+    parts.push(beam([wx - 3.2, y + 1.6, za], [wx - 3.2, y + 1.6, zb], 0.4, 1.4));
+    if (arched) {
+      const rise = 16, n = 12;
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n, t1 = (i + 1) / n;
+        const yA = y - 2 - rise + rise * Math.sin(Math.PI * t0), yB = y - 2 - rise + rise * Math.sin(Math.PI * t1);
+        parts.push(beam([wx, yA, za + (zb - za) * t0], [wx, yB, za + (zb - za) * t1], 3, 2.2, [1, 0, 0]));
+      }
+      for (let i = 1; i < n; i += 2) {
+        const t = i / n, ya = y - 2 - rise + rise * Math.sin(Math.PI * t);
+        parts.push(beam([wx, ya, za + (zb - za) * t], [wx, y - 0.8, za + (zb - za) * t], 0.8, 0.8, [1, 0, 0]));
+      }
+    }
+  }
+  // the collapsed walkway: torn from the starboard wall, its far end on the lane floor
+  {
+    const wx = -250, y = deckAt(wx, 45) + 76;
+    parts.push(beam([wx, y, za], [wx - 12, deckAt(wx, 60) + 2, 66], 7, 1.6));
+    parts.push(beam([wx + 3, y + 1.5, za], [wx - 9, deckAt(wx, 60) + 3.5, 66], 0.4, 1.4));
+    parts.push(beam([wx - 14, deckAt(wx, 70) + 1, 72], [wx - 30, deckAt(wx, 80) + 1, 86], 7, 1.2));   // the broken-off end
+    parts.push(beam([wx, y, zb], [wx + 2, y - 5, zb - 14], 7, 1.6));                                  // the stub on the far wall
+  }
+  // cables sagging across the lane between towers
+  for (const [cx0, y0, sag] of [[-560, 110, 16], [-200, 150, 24], [-880, 95, 12], [60, 130, 20], [-680, 60, 10]]) {
+    const yb = deckAt(cx0, 45) + y0, n = 14;
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n, t1 = (i + 1) / n;
+      const f = (t) => yb - sag * 4 * t * (1 - t);
+      parts.push(beam([cx0 + 6 * t0, f(t0), za + (zb - za) * t0], [cx0 + 6 * t1, f(t1), za + (zb - za) * t1], 0.5, 0.5, [1, 0, 0]));
+    }
+  }
+  // the lane floor: landing pads (raised discs, faded paint), hatches, debris, two dead craft
+  for (const [px0, pz] of [[-60, 45], [-520, 40], [-900, 48], [330, 46]]) {
+    const y = deckAt(px0, pz) + 0.4;
+    parts.push([cyl32, M(px0, y, pz, 22, 0.8, 22), null]);
+    paint.push([ring, M(px0, y + 0.42, pz, 18, 18, 18, -Math.PI / 2)]);
+    paint.push([box, M(px0, y + 0.42, pz, 24, 0.05, 2.4)]);
+    paint.push([box, M(px0, y + 0.42, pz, 2.4, 0.05, 24)]);
+  }
+  for (let x = LANE.x0 + 20; x < 520; x += 22 + R2() * 30) {
+    // broken edge stripes down the lane
+    if (R2() < 0.75) paint.push([box, M(x, deckAt(x, 4) + 0.2, 4, 10 + R2() * 8, 0.06, 1.0)]);
+    if (R2() < 0.75) paint.push([box, M(x + 8, deckAt(x, 86) + 0.2, 86, 10 + R2() * 8, 0.06, 1.0)]);
+    if (R2() < 0.35) { const hz = 15 + R2() * 60; add(box, x, deckAt(x, hz) + 0.3, hz, 5, 0.6, 5); add(box, x, deckAt(x, hz) + 0.62, hz, 3.6, 0.1, 3.6); }
+    if (R2() < 0.5) {
+      const dz = 10 + R2() * 70, l = 3 + R2() * 12;
+      parts.push(beam([x, deckAt(x, dz) + 0.5, dz], [x + l * (R2() - 0.5), deckAt(x, dz) + 0.5 + R2() * 3, dz + l * (R2() - 0.5)], 0.6 + R2() * 2.5, 0.4 + R2() * 1.2, [R2() - 0.5, 1, R2() - 0.5]));
+    }
+  }
+  for (const [hx, hz, len, yaw, roll] of [[-150, 76, 42, 0.5, 0.22], [-640, 18, 34, -0.35, -0.15]]) {
+    const y = deckAt(hx, hz) + len * 0.1;
+    parts.push([hulkBody, M(hx, y, hz, len * 0.14, len, len * 0.1, Math.PI / 2 + 0.04, yaw, roll), null]);
+    parts.push(beam([hx - 4, y, hz], [hx - 4 + len * 0.35 * Math.cos(yaw + 1.2), y - 2, hz + len * 0.35 * Math.sin(yaw + 1.2)], len * 0.18, 0.6));
+    parts.push(beam([hx + 8, y + 1, hz - 4], [hx + 8 + len * 0.22 * Math.cos(yaw - 1.6), y - 3, hz + len * 0.22 * Math.sin(yaw - 1.6)], len * 0.12, 0.6, [0.2, 1, 0.3]));
   }
   // ---- gantries over the lane: a truss bridge from wall to wall
   for (const gx of [-1000, -760, -520, 60, 600, 980, 1260, 1520]) {
@@ -450,7 +573,9 @@ function buildParts(seed) {
     if (!bins.has(k)) bins.set(k, []);
     bins.get(k).push(part);
   }
-  return [merge([parts[0]]), ...[...bins.keys()].sort((a, b) => a - b).map((k) => merge(bins.get(k)))];
+  const chunks = [merge([parts[0]]), ...[...bins.keys()].sort((a, b) => a - b).map((k) => merge(bins.get(k)))];
+  chunks.paint = merge(paint.map(([g, m]) => [g, m, null]));
+  return chunks;
 }
 
 // ---- the metal, in the shader: gunmetal and oxidised bronze in sections; panels of varied sizes,
@@ -467,26 +592,24 @@ function hullMaterial() {
   const upright = select(useY, float(0.0), float(1.0));
   const fwm = length(fwidth(pc)).add(1e-4);                 // metres per pixel here
   const fade = (metres) => float(1.0).sub(smoothstep(metres * 0.25, metres * 0.6, fwm)); // 1 while a feature of this size is resolved
-  // sections, 48 x 24 m, each split into its own number of panels
-  const sq = pc.div(vec2(48.0, 24.0));
-  const sc = floor(sq), sf = fract(sq);
-  const sh = mx_cell_noise_float(vec3(sc, axisId)), sh2 = mx_cell_noise_float(vec3(sc, axisId.add(5.0)));
-  const nx = floor(sh.mul(4.0)).add(2.0), ny = floor(sh2.mul(3.0)).add(2.0);
-  const pf = sf.mul(vec2(nx, ny));
-  const pcell = floor(pf), pfr = fract(pf);
-  const pid = mx_cell_noise_float(vec3(sc.mul(7.0).add(pcell), axisId.add(2.0)));
-  const pid2 = mx_cell_noise_float(vec3(sc.mul(7.0).add(pcell), axisId.add(9.0)));
-  const panelM = vec2(48.0, 24.0).div(vec2(nx, ny));
-  const dPanel = min(min(pfr.x, float(1.0).sub(pfr.x)).mul(panelM.x), min(pfr.y, float(1.0).sub(pfr.y)).mul(panelM.y));
-  const dSec = min(min(sf.x, float(1.0).sub(sf.x)).mul(48.0), min(sf.y, float(1.0).sub(sf.y)).mul(24.0));
-  const seamP = float(1.0).sub(smoothstep(0.12, fwm.add(0.12), dPanel)).mul(fade(3.0));
-  const seamS = float(1.0).sub(smoothstep(0.3, fwm.add(0.3), dSec)).mul(fade(4.0));
-  const pv = mix(float(0.5), pid, fade(6.0));
-  // small plates inside the panels (fine structure up close)
-  const fq = pc.div(vec2(2.4, 1.6));
-  const ff = fract(fq);
-  const dFine = min(min(ff.x, float(1.0).sub(ff.x)).mul(2.4), min(ff.y, float(1.0).sub(ff.y)).mul(1.6));
-  const seamF = float(1.0).sub(smoothstep(0.05, fwm.add(0.05), dFine)).mul(fade(0.9)).mul(step(0.2, pid2));
+  // irregular plating: the face is cut into 60 m columns; each column into horizontal bands of one
+  // to four storeys; each band into panels 7, 13 or 29 m long, or left unbroken. Offsets differ per
+  // band, so no regular grid can be read. Seams are thin and dark; panels differ by value and
+  // roughness, not by outline.
+  const cx = floor(pc.x.div(60.0));
+  const sh = mx_cell_noise_float(vec3(cx, axisId, 21.0)), sh2 = mx_cell_noise_float(vec3(cx, axisId, 9.0));
+  const hb = floor(sh.mul(4.0)).add(2.0).mul(3.4);
+  const by = floor(pc.y.div(hb));
+  const bh = mx_cell_noise_float(vec3(cx, by, axisId.add(3.0)));
+  const wb = select(bh.lessThan(0.25), float(13.0), select(bh.lessThan(0.5), float(23.0), select(bh.lessThan(0.7), float(41.0), float(600.0))));
+  const ox = pc.x.add(bh.mul(wb));
+  const px = floor(ox.div(wb));
+  const pid = mx_cell_noise_float(vec3(px, by.add(cx.mul(31.0)), axisId.add(2.0)));
+  const fy = fract(pc.y.div(hb)), fx = fract(ox.div(wb)), fc = fract(pc.x.div(60.0));
+  const dSeam = min(min(min(fy, float(1.0).sub(fy)).mul(hb), min(fx, float(1.0).sub(fx)).mul(wb)), min(fc, float(1.0).sub(fc)).mul(60.0));
+  const seamP = float(1.0).sub(smoothstep(0.04, fwm.mul(0.8).add(0.04), dSeam)).mul(fade(2.5));
+  const pv = mix(float(0.5), pid, fade(5.0));
+  const seamS = float(0.0), seamF = float(0.0);
   // gunmetal or oxidised bronze, by large region
   // the region noise varies over kilometres: computed per vertex
   const region = vertexStage(mx_fractal_noise_float(p.mul(0.0014), 2, 2.0, 0.5, 1.0)).add(sh.sub(0.5).mul(0.35));
@@ -500,7 +623,7 @@ function hullMaterial() {
   const wfw = fwidth(wq).add(0.01);
   const wx = smoothstep(0.33, float(0.33).add(wfw.x), wf.x).mul(float(1.0).sub(smoothstep(float(0.67).sub(wfw.x), 0.67, wf.x)));
   const wy = smoothstep(0.34, float(0.34).add(wfw.y), wf.y).mul(float(1.0).sub(smoothstep(float(0.72).sub(wfw.y), 0.72, wf.y)));
-  const floorOn = step(0.5, mx_cell_noise_float(vec3(floor(wq.y), sc.x, axisId.add(13.0))));
+  const floorOn = step(0.5, mx_cell_noise_float(vec3(floor(wq.y), cx, axisId.add(13.0))));
   const winZone = upright.mul(step(0.45, sh2)).mul(floorOn);
   const winMask = mix(float(0.42).mul(floorOn), wx.mul(wy), fade(2.2)).mul(winZone);
   const winVar = mx_cell_noise_float(vec3(floor(wq), axisId.add(17.0)));
@@ -511,20 +634,24 @@ function hullMaterial() {
   const e2 = e.x.add(e.y).add(e.z).sub(eMin).sub(eMax);   // distance to the nearest edge on this face
   const wear = float(1.0).sub(smoothstep(0.0, fwm.mul(1.5).add(0.6), e2));
   const foot = mix(float(0.45), float(1.0), smoothstep(0.0, 7.0, eP.y.add(eH.y))).mul(upright).add(float(1.0).sub(upright));
+  // fake ambient occlusion: walls darken toward the deck they rise from (the canyon is deep), and a
+  // dark contact line where a form meets another (any face within a metre of its part's foot)
+  const deckAO = mix(float(1.0), mix(float(0.5), float(1.0), smoothstep(150.0, 260.0, p.y)), upright.mul(smoothstep(110.0, 150.0, p.y)));
+  const contact = mix(float(0.55), float(1.0), smoothstep(0.0, 1.2, eP.y.add(eH.y)));
   const gun = vec3(0.052, 0.054, 0.059), bronze = vec3(0.088, 0.060, 0.036);
   m.colorNode = Fn(() => {
     const col = mix(gun, bronze, bronzeK).toVar();
-    col.mulAssign(pv.mul(0.2).add(0.9));
+    col.mulAssign(pv.mul(0.07).add(0.965));
     col.mulAssign(sh.mul(0.14).add(0.93));
     col.mulAssign(grime.mul(0.4).add(0.72));
     col.mulAssign(float(1.0).sub(soot.mul(0.45)));
-    col.mulAssign(float(1.0).sub(seamP.mul(0.38)).mul(float(1.0).sub(seamS.mul(0.5))).mul(float(1.0).sub(seamF.mul(0.18))));
+    col.mulAssign(float(1.0).sub(seamP.mul(0.22)));
     col.assign(mix(col, vec3(0.012, 0.011, 0.011).add(vec3(0.03, 0.026, 0.02).mul(step(0.92, winVar))), winMask.mul(0.92)));
-    col.assign(mix(col, mix(vec3(0.17, 0.165, 0.16), vec3(0.22, 0.16, 0.10), bronzeK), wear.mul(0.6)));
-    col.mulAssign(foot);
+    col.assign(mix(col, mix(vec3(0.12, 0.12, 0.125), vec3(0.13, 0.115, 0.1), bronzeK), wear.mul(0.35)));
+    col.mulAssign(foot.mul(deckAO).mul(contact));
     return col;
   })();
-  m.roughnessNode = clamp(pv.mul(0.08).add(0.55).add(seamP.mul(0.15)).sub(wear.mul(0.25)).add(soot.mul(0.12)), 0.18, 0.95);
+  m.roughnessNode = clamp(pv.mul(0.22).add(0.47).add(seamP.mul(0.1)).sub(wear.mul(0.25)).add(soot.mul(0.12)), 0.18, 0.95);
   m.metalnessNode = mix(float(0.55), float(0.45), bronzeK);
   return m;
 }
@@ -532,7 +659,14 @@ function hullMaterial() {
 export function createHull({ seed = 4417 } = {}) {
   const group = new THREE.Group();
   const mat = hullMaterial();
-  for (const geo of buildParts(seed)) {
+  const chunks = buildParts(seed);
+  const paintMat = new THREE.MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0.0 });
+  // faded: worn through in patches, scuffed along the lane
+  paintMat.colorNode = vec3(0.13, 0.095, 0.06).mul(smoothstep(-0.35, 0.25, mx_fractal_noise_float(positionLocal.mul(vec3(0.08, 1.0, 0.25)), 3, 2.0, 0.5, 1.0)).mul(0.8).add(0.2));
+  const paintMesh = new THREE.Mesh(chunks.paint, paintMat);
+  paintMesh.receiveShadow = true;
+  group.add(paintMesh);
+  for (const geo of chunks) {
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
