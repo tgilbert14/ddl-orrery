@@ -36,6 +36,7 @@ export async function start(world) {
   const reduced = q.get('reduced') === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const showFps = q.get('fps') === '1';
   const testMode = q.get('test') === '1';
+  const soundLog = q.get('soundlog') === '1';
   const forceWebGL = q.get('r') === 'webgl2';
   const polar = q.get('mesh') === 'polar';
   const fixedDpr = /^\d(\.\d+)?$/.test(q.get('dpr') || '') ? Math.min(2, +q.get('dpr')) : null;
@@ -49,7 +50,7 @@ export async function start(world) {
   let viewMode = START_VIEW;
 
   const $ = (id) => document.getElementById(id);
-  const stage = $('stage'), readoutEl = $('readout'), hintEl = $('hint'), posterEl = $('poster');
+  const stage = $('stage'), readoutEl = $('readout'), hintEl = $('hint'), posterEl = $('poster'), eventLineEl = $('event-line');
   if (showFps) readoutEl.hidden = false;
   document.body.classList.toggle('touch', matchMedia('(pointer: coarse)').matches);
 
@@ -216,7 +217,7 @@ export async function start(world) {
       g.follow.setYaw(figYaw);
       g.pil.setVisible(viewMode === 'third');
     }
-    EG.makeParticles({ U: mats.uniforms, scene });
+    EG.makeParticles({ U: mats.uniforms, scene, fns: mats.fns });
     if (figMod) {
       g.fig = figMod.createFigure({ kind: FIGURE, U: mats.uniforms, shade: figShade, scene });
       g.persp = camera;
@@ -432,6 +433,33 @@ export async function start(world) {
     if (G.camera.fov !== (window.innerWidth / Math.max(1, window.innerHeight) < 1 ? CAM.vfovPortrait : CAM.vfov)) resize();
     placeCamera();
   }
+  // the staff strike (F or Space, a long press on touch): only standing. The Pilgrim plants the staff,
+  // the sand takes a ring and a puff, a dry thud; then the world's events hear it (three in time
+  // call the colossus; a strike that cannot call is still felt, and nothing comes)
+  function strike() {
+    if (ws.speed > 0.3 || ws.sliding > 0.1 || ws.airborne) return;
+    API.events.strike = (API.events.strike || 0) + 1;
+    API.lastStrikeFrame = API.frames || 0;
+    const third = G.pil && viewMode === 'third';
+    let tip = [ws.x + Math.cos(ws.yaw) * 0.5, ws.z + Math.sin(ws.yaw) * 0.5];
+    if (third) { const p = G.pil.strike(); tip = [p[0], p[2]]; }
+    const ex = ws.exposure;
+    G.trace.stamp({ type: 'slide', x0: tip[0], z0: tip[1], x1: tip[0], z1: tip[1], depth: 0.05, width: 0.05, exposure: ex });
+    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2, b = a + Math.PI / 5, r = 0.32; G.trace.stamp({ type: 'slide', x0: tip[0] + Math.cos(a) * r, z0: tip[1] + Math.sin(a) * r, x1: tip[0] + Math.cos(b) * r, z1: tip[1] + Math.sin(b) * r, depth: 0.008, width: 0.05, berm: 0.4, exposure: ex }); }
+    if (third && G.puffs) G.puffs.land({ x: tip[0], z: tip[1], vy: 0.6, speed: 0, dirX: Math.cos(ws.yaw), dirZ: Math.sin(ws.yaw), exposure: ex }, windNow());
+    const called = director ? director.strike({ x: tip[0], z: tip[1] }) : false;
+    try { sound?.strike?.(); } catch { /* no sound */ }
+    API.lastStrike = { called };
+  }
+  // a live event's line, once as it begins, in the DOM (polite; nothing in the canvas)
+  let announced = null;
+  function announce() {
+    const n = director.live;
+    if (n === announced) return;
+    announced = n;
+    const ev = n ? director.event(n) : null, line = ev && ev.announce ? ev.announce() : '';
+    if (line && eventLineEl) { eventLineEl.textContent = line; eventLineEl.classList.add('on'); clearTimeout(announce.t); announce.t = setTimeout(() => eventLineEl.classList.remove('on'), 12000); }
+  }
   function tickThird(dt, intent) {
     const F = G.follow;
     const look = { dx: (intent.lookX || 0) + (intent.turn || 0) * 1.7 * dt, dy: intent.lookY || 0 };
@@ -454,7 +482,7 @@ export async function start(world) {
     ws.yaw = figYaw;
     const wind = windNow();
     for (const e of events) if (e.type === 'land') G.pil.land(e);
-    const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ] });
+    const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ], act: director ? director.figure() : null });
     for (const st of stamps) G.trace.stamp(st);
     for (const e of events) {
       if (e.type === 'leap') { e.noPrint = true; continue; }
@@ -544,6 +572,7 @@ export async function start(world) {
     const t0 = performance.now();
     if (G.pil) { if (!prevPose.p) { prevPose.p = G.camera.position.clone(); prevPose.q = G.camera.quaternion.clone(); } else { prevPose.p.copy(G.camera.position); prevPose.q.copy(G.camera.quaternion); } }
     const intent = G.fig && G.fig.state.placed ? {} : input.read();
+    if (intent.strike && !G.fig) strike();
     if (intent.tap) {
       const hit = pick(intent.tap.ndcX, intent.tap.ndcY);
       if (hit) { intent.target = { x: hit.x, z: hit.z }; lastTap = { x: hit.x, z: hit.z }; }
@@ -553,7 +582,10 @@ export async function start(world) {
     // a cut (cross-faded from the frame before)
     let evCut = false;
     if (director) {
-      const r = director.update(dt);
+      const c = G.camera.position, ce = G.camera.matrixWorld.elements;
+      const r = director.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, cam: [c.x, c.y, c.z], yaw: Math.atan2(-ce[10], -ce[8]),
+        suns: [timeNow.uSun1Dir, timeNow.uSun2Dir], cols: [timeNow.uSun1Col, timeNow.uSun2Col] });
+      announce();
       if (r.cleared) { G.trace.clear(); G.pour?.clear(); traceC = null; }
       evCut = r.cut;
     }
@@ -598,8 +630,10 @@ export async function start(world) {
     try {
       const wnd = walker.wind(simTime);
       const ce = G.camera.matrixWorld.elements;   // the listener faces where the camera does
-      sound?.update({ dt, windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding, listenerYaw: Math.atan2(-ce[10], -ce[8]),
-        ...(director ? director.sound() : {}) });
+      const si = { windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding, listenerYaw: Math.atan2(-ce[10], -ce[8]),
+        ...(director ? director.sound() : {}) };
+      if (soundLog) API.lastSoundIn = si;   // ?soundlog=1: a script renders the same sound offline
+      sound?.update({ dt, ...si });
     } catch { /* no sound */ }
     const work = performance.now() - t0;
     return { work, bake: bakeDid, trace: traceDid };
@@ -611,6 +645,7 @@ export async function start(world) {
     lastNow = now;
     while (intervals.length && intervals[0][0] < now - 1000) intervals.shift();
     const r = tick(Math.min(dt, 0.1));
+    API.frames = (API.frames || 0) + 1;
     works.push([now, r.work]);
     while (works.length && works[0][0] < now - 1000) works.shift();
     governor(now);
@@ -732,6 +767,7 @@ export async function start(world) {
     canvas: G ? [G.renderer.domElement.width, G.renderer.domElement.height] : null, hintGone, sound: sound ? (muted ? 'muted' : 'on') : (soundMod === false ? 'unavailable' : 'not started'),
   });
   API.hold = (intent) => input.hold(intent);
+  API.strike = () => input.strike();
   if (FIGURE) {
     API.figure = {
       walk: () => figureWalk(),
@@ -795,6 +831,7 @@ export async function start(world) {
     for (let i = 0; i < n; i++) {
       const t0 = performance.now();
       const r = tick(dt);
+      API.frames = (API.frames || 0) + 1;
       if (drain) await G.drain();
       out.ms.push(+(performance.now() - t0).toFixed(3));
       out.bake.push(r.bake === 'slice' ? 1 : r.bake === 'fade' ? 2 : 0);

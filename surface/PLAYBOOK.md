@@ -45,8 +45,12 @@ in the repo at `surface/PLAYBOOK.md`.
 3. **The figure in third person** (the Pilgrim is reused, see below), the follow camera, shadows.
 4. **What the walker leaves behind** (on sand: prints, staff marks, slides, pouring sand). Each world
    needs its own answer to "what does my passing do to this ground".
-5. **One event that happens to you** (on the Dust Sea: the storm front). It changes what you can see
-   and then leaves the world clean.
+5. **Events that happen to you** (on the Dust Sea: the storm front, and the colossus). Each one
+   changes what you can see or hear and then leaves the world clean. Build them on the engine's
+   director (see "Adding an event to a world"); the first one a visitor meets should come within
+   about 90 s of arriving, and how to see each on purpose (its `?<name>=now` switch, where to look)
+   is written in the world's README. Give each world at least one weather-like event (it comes to
+   you) and, if the world has a verb, one that the visitor can call (the Dust Sea's staff strike).
 6. **Sound**, generated in WebAudio.
 7. **Link it from the planet**, verify live, write the hand-over.
 
@@ -62,7 +66,10 @@ run, and a README section saying what was measured and what was not.
 - **A branch on a uniform for anything that is not always there**, so the calm frame is untouched.
   Check it: calm stills must be pixel-identical before and after a change.
 - **The figure has no face except two dim amber eyes in the hood, no visible limbs or legs; no text
-  in the canvas; no other people or creatures.** (The owner chose the dim eyes on 13 Nov 2026 from a
+  in the canvas; no other people or creatures.** One written exception (the owner, 15 Nov 2026): the
+  Dust Sea's colossus. It stays massive (350 to 420 m), far (never nearer than 1.5 km), mostly hidden
+  in its own falling sand, and only silhouette and rim: no face, eyes, teeth or countable segments.
+  It is not a precedent for close creatures on other worlds; a world that wants one asks again. (The owner chose the dim eyes on 13 Nov 2026 from a
   sheet of three; `?eyes=0` removes them.)
 - **Reduced motion** is a designed state: cuts with a short fade, nothing races, nothing shakes.
 - **No jump button.** A leap only happens where the ground throws you (a brink).
@@ -80,7 +87,7 @@ run, and a README section saying what was measured and what was not.
 | `figure.js`, `pilgrim.js` | the Pilgrim: geometry in code, cloak, staff, lantern pendulum | as is; the wind and the ground contact are per world |
 | `shadows.js` | log-polar horizon shadow map, baked in slices | as is for any height-field world |
 | `main.js` | `start(world)`: boot, device loss, the frame loop, the governor, the test API (`window.__walk`) | as is; it names no world and no event |
-| `events.js` | the event director: every event's phase clock and schedule, one live at a time, the staff strike, and the folding of each live event's hooks into the walker, camera, figure, trace, light and sound | as is; see "Adding an event to a world" |
+| `events.js` | the event director: every event's phase clock and schedule, one live at a time, the staff strike, and the folding of each live event's hooks into the walker, camera (boom, lift, toward, shake), figure (look, brace), trace, light and sound | as is; see "Adding an event to a world" |
 | `world.js` | the world contract (in its header) and the live bindings (`height`, `heightD`, `WIND`, `G`, `SH`, `CAM`, ...) | as is |
 | `walk/index.html` | the page, the arrival overlay (`?from=orbit`), "Return to orbit" | copy per world page |
 
@@ -149,6 +156,24 @@ the contract) runs every event of a world; the world only describes them.
 7. **Gates** for every new event: calm stills byte-identical; seeded stills of every phase on both
    backends; the console sweep (the event at 8x while walking, six configurations) empty; its cost
    over calm measured interleaved in four directions; reduced motion checked as a designed state.
+8. **The first meeting.** The world's first event comes within about 90 s of ready (the storm: 60 to
+   120 s); rarer, larger ones later (the colossus: 5 to 8 min, then every 12 to 18). Write in the
+   walk README how a visitor sees each one on purpose.
+9. **A called event** (`call: { cooldown }`): the engine reads the verb (the Dust Sea: F or Space, a
+   500 ms long press on touch, only standing), plays it on the Pilgrim at once (the staff plant, a
+   ring in the trace, a puff, a thud) and passes it to `director.strike(e)`; the def counts the
+   rhythm and returns a delay. A strike that cannot call is still felt. One controls line in the DOM.
+10. **Order of work for an event**, as the colossus was built: placement and scale first (a JS march
+   over `height()` for the sightline, placed in front of the camera), then stills of its peak at
+   every time of day and both backends, iterated at least three rounds on scale, distance and light;
+   then the motion; then the sound (offline render, peaks at or under -4 dBFS); then timing, the
+   sweep, reduced motion and the switches; then a 30 to 40 s clip with sound for the owner.
+   Hooks an event can lean on: `figure()` turns the hood and braces the Pilgrim; `camera()` gives
+   `lift` (boom +3 m, the view raised), `toward` (after 3 s without input) and `shake` (0.3 degrees,
+   never under reduced motion); `update(dt, P)` gets `P.env` (the visitor, the camera, the suns);
+   `?<name>=<phase>` jumps straight to a phase (`?colossus=rise`); `announce()` gives the polite DOM
+   line when it begins. Meshes and sprites go in `particles({ U, scene, fns })` (`fns` has the world's
+   `skyColor`, `fogAmount` and `finish`, so they sit in the same haze and tone).
 
 The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
 byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
@@ -241,5 +266,5 @@ Not started. What this session knows that bears on it:
 - No real phone has been tried. Nobody has heard the sound.
 - (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
   see the walk README, "The storm cleanup".)
-- Not built: brink plumes, the landing and leaving, the shuttle overhead, the colossus, the caravan
-  tracks, the score.
+- Not built: brink plumes, the landing and leaving, the shuttle overhead, the caravan tracks, the
+  score. (The colossus is built, 15 Nov 2026: see the walk README, "The colossus".)

@@ -14,7 +14,8 @@
 //   update(dt, P) -> { cleared?, cut? }   EVERY frame, live or not (P.live false, P.phase 'none'
 //                                          between): an event keeps its own background clocks there
 //                                          (the storm's gusts and its dome bake). P = { phase, t, live,
-//                                          left (the phase the clock left this frame, or null), scale }
+//                                          left (the phase the clock left this frame, or null), scale,
+//                                          env: { x, z, ground, cam, yaw, suns, cols } or null }
 //   sound() -> { ... }                     every frame too (shallow-merged), so a voice cut off by
 //                                          skipTo is written back to rest, not left where it was
 //   only while live:
@@ -23,7 +24,9 @@
 //   modify(name, v)                        a time-of-day uniform on its way to the shaders (chained)
 //   wind(env) -> { strength, gust, mix, figure? }   env = { lamp: [x,y,z] | null, cam: {x,y,z} | null }
 //   walk() -> { k, ... } | null            the walker's push (the largest k wins)
-//   camera() -> { boom?, amount, toward?: [x, z], shake? }   (shortest boom, largest amount)
+//   camera() -> { boom?, amount, lift?, toward?: [x, z, beat], shake? }   (shortest boom, largest amount;
+//                                          lift 0..1 a longer, raised view; toward the point to turn to
+//                                          after 3 s without input; shake 0..1 at most 0.3 degrees)
 //   trace() -> { healMul, clear? }         (healMul multiplied, clear ORed)
 //   figure() -> { look?: [x, z], brace?: 0..1 }
 //   strike?(e) -> boolean | number         a staff strike (only defs with `call`); e.blocked when it
@@ -73,11 +76,13 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
   for (let i = 0; i < defs.length; i++) {
     const def = defs[i];
     const m = url ? url.get(def.name) : null;
-    const mode = allOff ? 'off' : MODES.includes(m) ? m : null;
+    // ?<name>=<one of its phases> (e.g. ?colossus=rise): as now, then straight to that phase
+    const jump = !allOff && m && !MODES.includes(m) && def.phases.includes(m) ? m : null;
+    const mode = allOff ? 'off' : MODES.includes(m) ? m : jump ? 'now' : null;
     const rnd = mulberry32(i === 0 ? base : (base ^ hashName(def.name)) >>> 0);
     const C = { phase: 'none', t: 0, scale: mode === 'fast' ? 4 : 1, clock: 0, next: null, hold: false, live: false, cooldown: -1 };
     const ev = def.create({ reduced, rnd, testMode, world, mode });   // (its own draws come first)
-    const e = { def, ev, C, mode, rnd };
+    const e = { def, ev, C, mode, rnd, jump };
     list.push(e);
     schedule(e, true);
   }
@@ -98,11 +103,14 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
     for (const x of list) if (x !== e && x.C.phase !== 'none') end(x);
     e.ev.prepare?.({ how: 'start', ...o, scale: e.C.scale });
     e.C.phase = e.def.phases[0]; e.C.t = 0; e.C.next = null;
+    if (e.jump) { const j = e.jump; e.jump = null; e.ev.prepare?.({ how: 'skip', phase: j, scale: e.C.scale }); e.C.phase = j; }
   }
   function end(e) { e.C.phase = 'none'; e.C.t = 0; schedule(e, false); }
 
   // one frame: the clocks, then every event's update. Returns { cleared, cut }
-  function update(dt) {
+  // env (optional): where the visitor and the camera are this frame, and the time's suns ({ x, z,
+  // ground, cam, yaw, suns, cols }); passed to every event's update as P.env
+  function update(dt, env = null) {
     const out = { cleared: false, cut: false };
     clock += dt;
     for (const e of list) {
@@ -130,7 +138,7 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
       const wasLive = C.live;
       C.live = C.phase !== 'none';
       if (wasLive && !C.live) quiet = { until: clock + (e.def.quiet || 0) / C.scale, by: e };
-      const r = e.ev.update?.(dt, { phase: C.phase, t: C.t, live: C.live, left, scale: C.scale }) || {};
+      const r = e.ev.update?.(dt, { phase: C.phase, t: C.t, live: C.live, left, scale: C.scale, env }) || {};
       if (r.cleared) out.cleared = true;
       if (r.cut) out.cut = true;
       if (wasLive && !C.live) e.ev.release?.();
@@ -169,10 +177,10 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
       const c = e.ev.camera();
       if (c) {
         camAmt = c.amount; if (c.boom !== undefined) camBoom = c.boom;
-        return { storm: camAmt, stormBoom: camBoom, toward: reduced ? null : c.toward || null, shake: reduced ? 0 : c.shake || 0 };
+        return { storm: camAmt, stormBoom: camBoom, lift: c.lift || 0, toward: reduced ? null : c.toward || null, shake: reduced ? 0 : c.shake || 0 };
       }
     }
-    return { storm: camAmt, stormBoom: camBoom === Infinity ? 0 : camBoom, toward: null, shake: 0 };
+    return { storm: camAmt, stormBoom: camBoom === Infinity ? 0 : camBoom, lift: 0, toward: null, shake: 0 };
   }
   function trace() {
     const e = live();

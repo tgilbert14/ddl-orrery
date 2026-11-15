@@ -742,7 +742,7 @@ export function createTslMaterials(values, opts, shadowTex) {
   return {
     ground, sky, bake, probe, probeD,
     // walk slice: the shared formula and the uniforms, for the walk's own passes
-    fns: { hash2, vnoise, vnoiseD, height, heightD }, uniforms: U,
+    fns: { hash2, vnoise, vnoiseD, height, heightD, skyColor, fogAmount, finish }, uniforms: U,
     set(name, v) {
       const u = name === 'uGridOrigin' ? uGridOrigin : name === 'uProbeO' ? uProbeO : name === 'uShC' ? uShC : U[name];
       if (typeof u.value === 'number') u.value = v; else u.value.fromArray(v);
