@@ -673,6 +673,35 @@ regression, and the look test on all three renderers above its readout: all iden
 sweep (a full storm at 8x while walking, six configurations): empty. Calm frame at 1440x900 and
 DPR 2, four directions: within the run-to-run spread of `main`.
 
+## The event system, 15 Nov 2026
+
+The storm is now one of the engine's events (`../engine/events.js`, its header is the contract; the
+playbook's "Adding an event to a world" is the how-to). The director there owns every event's phase
+clock and schedule, keeps one live at a time (a scheduled start waits behind a live event and its
+`quiet`), takes the staff strike for events that can be called, and folds the live event's hooks into
+the walker, the follow camera, the figure's wind, the trace's healing, the light and the sound.
+`storm.js` exports `stormDef` (its `createStorm` is now the Event: no clock of its own), the world
+lists it in `graphics().events`, and `main.js` names no event. The material hooks in `opts.walk` are
+`event`, `eventSky` and `eventSkyFull` (were `storm`, `stormSky`). The URL keeps `?storm=` (any event
+takes `?<name>=now|fast|off`; `?events=off` turns all off); `__walk.storm` keeps `start`, `state`,
+`skipTo`, `hold`, `raw` (its state with the clock's `phase`, `t`, `scale`, `next` writable) and
+`visibility`, and `__walk.events` gains `list/start/skipTo/hold/state` beside its step counters.
+
+Not done: renaming the event push the engine's modules take (walker `intent.storm`, follow
+`f.storm`/`f.stormBoom`, pilgrim `wind.storm`, sound `storm`/`stormGust`). `events.js` maps an event's
+hooks onto those names; renaming them is the optional last step of the move and was left.
+
+Checked against a worktree of the branch's starting commit served beside this one (headless Chrome):
+twelve calm stills (third person at dusk, day and ember, an orbit, walked; first person still and
+walked; WebGL2 third, walked and first; reduced motion; `storm=off`) and forty seeded storm stills
+(`seed=7`: eleven phases at dusk on WebGPU and WebGL2, eleven at day on WebGPU, four at ember on
+WebGL2 with reduced motion) byte-identical, except the day `after` still, which differs between two
+runs of the old tree too (109 dB) and matched the old tree's repeat exactly. The schedule (five URL
+cases, 260 stepped seconds each), `smoke.mjs` and `measure.mjs` printed identical numbers on both
+trees. Console sweep (a full storm at 8x while walking, six configurations): empty. Held calm and
+inside frame times sat within the run-to-run spread of the old tree (noisy: other browsers were
+running).
+
 ## Not built yet
 
 Brink plumes, the hub landing and leaving, the shuttle, the colossus and the score. There

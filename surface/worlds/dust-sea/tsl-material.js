@@ -40,8 +40,9 @@ export function createTslMaterials(values, opts, shadowTex) {
   // look test's graph. With it: a second shadow map and a cross-fade between the two, two more suns
   // (the next time of day, faded in while the current two fade out), a bake that reads its own sun
   // uniforms and centre, and hooks for the ground's position (the clipmap), the trace map and the air,
-  // and the storm front (walk.storm: composited last over the ground and the sky, a branch on its own
-  // uniform; the look test passes no walk options and is unchanged).
+  // and the walk's events (walk.event over the ground, walk.eventSky the sky's share drawn at half
+  // resolution and fetched, or walk.eventSkyFull over the sky at full resolution: composited last, each
+  // a branch on its own uniform; the look test passes no walk options and is unchanged).
   const WK = opts.walk || null;
   if (WK) {
     for (const k of ['uSun3Dir', 'uSun4Dir', 'uSun3Col', 'uSun4Col', 'uSun3Disc', 'uSun4Disc', 'uSun3Tint', 'uSun4Tint', 'uBakeSun1', 'uBakeSun2']) U[k] = uniform(new THREE.Vector3());
@@ -663,7 +664,7 @@ export function createTslMaterials(values, opts, shadowTex) {
     });
     // walk slice: the storm front (surface/walk/storm.js), over everything; a branch on a uniform, so
     // with no storm the colour is untouched. The pixel's angular size is taken here, outside any branch.
-    if (WK && WK.storm) WK.storm({ col, ro, rd, dist, face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar(), ground: true } });
+    if (WK && WK.event) WK.event({ col, ro, rd, dist, face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar(), ground: true } });
 
     return vec4(finish(col), 1.0);
   })();
@@ -681,8 +682,8 @@ export function createTslMaterials(values, opts, shadowTex) {
     });
     // walk slice: the storm front (see the ground)
     // (the sky's share is drawn at half resolution by storm.js and fetched here, when the walk asks)
-    if (WK && WK.stormSky) WK.stormSky({ col, face: { vnoise, vnoiseD, domes } });
-    else if (WK && WK.storm) WK.storm({ col, ro, rd, dist: float(1e9), face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar() } });
+    if (WK && WK.eventSky) WK.eventSky({ col, face: { vnoise, vnoiseD, domes } });
+    else if (WK && WK.eventSkyFull) WK.eventSkyFull({ col, ro, rd, dist: float(1e9), face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar() } });
     return vec4(finish(col), 1.0);
   })();
 

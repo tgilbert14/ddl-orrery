@@ -79,7 +79,8 @@ run, and a README section saying what was measured and what was not.
 | `input.js` | keyboard, mouse, touch (left thumb walks, right looks) | as is |
 | `figure.js`, `pilgrim.js` | the Pilgrim: geometry in code, cloak, staff, lantern pendulum | as is; the wind and the ground contact are per world |
 | `shadows.js` | log-polar horizon shadow map, baked in slices | as is for any height-field world |
-| `main.js` | `start(world)`: boot, device loss, the frame loop, the governor, the test API (`window.__walk`) | as is; it names no world |
+| `main.js` | `start(world)`: boot, device loss, the frame loop, the governor, the test API (`window.__walk`) | as is; it names no world and no event |
+| `events.js` | the event director: every event's phase clock and schedule, one live at a time, the staff strike, and the folding of each live event's hooks into the walker, camera, figure, trace, light and sound | as is; see "Adding an event to a world" |
 | `world.js` | the world contract (in its header) and the live bindings (`height`, `heightD`, `WIND`, `G`, `SH`, `CAM`, ...) | as is |
 | `walk/index.html` | the page, the arrival overlay (`?from=orbit`), "Return to orbit" | copy per world page |
 
@@ -98,10 +99,60 @@ console sweep was empty on all six configurations, and the calm frame cost was u
 the run-to-run spread. To add a world: make `surface/worlds/<slug>/` with its own `world.js` and
 modules, copy `surface/walk/index.html` and its three-line `main.js` into the world's page folder
 (or give the world's page its own folder under `surface/`), and add the `SURFACES` entry in
-`src/05-core.js`. Parts of the engine still assume a figure that kicks up sand (`puffs`), an event
-with the storm's instance interface (`.active`, `.k`, `.wind`, `.gust`, `.boom`, `.erase`, `.tauAt`,
-`.STORM.lampBoost`, `.STORM.boom`) and the material hooks named `trace`, `air`, `figure`, `storm`,
-`stormSky` in `createMaterials` `opts.walk`; the second world will say which of those need to move.
+`src/05-core.js`. Parts of the engine still assume a figure that kicks up sand (`puffs`) and the
+material hooks named `trace`, `air`, `figure`, `event`, `eventSky`, `eventSkyFull` in
+`createMaterials` `opts.walk`; the second world will say which of those need to move. Events no
+longer assume the storm (15 Nov 2026, below), but the engine's modules still take the storm's names
+for an event's push (walker `intent.storm`, follow `f.storm`/`f.stormBoom`, pilgrim `wind.storm`,
+sound `storm`/`stormGust`); `events.js` maps them, and renaming them is a later, optional step.
+
+## Adding an event to a world
+
+An event is something that happens to the visitor and then leaves the world clean (on the Dust Sea:
+the storm front, and the colossus). The engine's director (`surface/engine/events.js`, its header is
+the contract) runs every event of a world; the world only describes them.
+
+1. **One file per event**, `surface/worlds/<slug>/<event>.js`, exporting a def:
+   `{ name, phases, dur, schedule, call, quiet, create(ctx), graphics(gctx) }`.
+   - `name` is its URL switch and its script handle: `?<name>=now|fast|off`, `__walk.<name>`.
+   - `phases` in order and `dur` (seconds at scale 1) for each. The director owns the clock: it
+     starts the first phase, advances `t`, moves to the next phase, and ends the event.
+   - `schedule: { firstMin, firstMax, gapMin, gapMax, nowDelay }` (seconds after ready, and after the
+     last one ended), or `null` for an event that only comes when called. Seeded by `?seed=`: the
+     world's first event gets the seed's stream exactly, the others `seed ^ hash(name)`.
+   - `call: { cooldown }` if the visitor can call it with the staff strike (the def counts the
+     strikes in its `strike(e)` hook and returns `true`, or a delay in seconds, when they make a
+     call; `e.blocked` says it cannot come now, and the strike should still be felt), else `null`.
+   - `quiet`: seconds after it ends before another event may start.
+2. **List it** in the world's `graphics()`: `events: [stormDef, colossusDef]`. Order matters only
+   for seeds (the first keeps the plain seed).
+3. **`create(ctx)`** (`{ reduced, rnd, testMode, world, mode }`) returns the Event. Every hook is
+   optional. `update(dt, P)` and `sound()` run every frame, live or not (an event keeps background
+   clocks, and its voice must go back to rest); the rest run only while it is live: `prepare`,
+   `uniforms(base, at, cam)`, `modify(name, v)` (the time-of-day uniforms on their way to the
+   shaders), `wind`, `walk`, `camera`, `trace`, `figure`, `strike`, `readout`, `state`. `release()`
+   runs once on the frame it stops being live and must write calm back. `update` returns
+   `{ cleared }` to wipe every track, or `{ cut }` for a reduced-motion cut (cross-faded).
+4. **`graphics(gctx)`** returns its hooks in the world's shaders and the scene: `ground(a)`,
+   `sky(a)` (full resolution), `skyPass` (its sky drawn at half resolution), `fog(col, P, lamp)` over
+   the figure and the puffs, and `particles({ U, scene })`, made after the figure. Everything sits
+   behind a branch on its own uniform, so the calm frame is untouched: prove it with calm stills
+   byte-identical before and after.
+5. **One live at a time.** A scheduled start while another event is live, or in its quiet, waits
+   until that quiet ends; a strike then returns false. Two at once is not supported until a world
+   needs it.
+6. **The switches come free:** `?<name>=now` (its first phase `nowDelay` s after ready), `fast` (4x,
+   schedule included), `off`; `?events=off` for all of them; with `?test=1` nothing is scheduled
+   unless the URL asks. Scripts: `__walk.events.list/start(name, o)/skipTo(name, phase)/
+   hold(name, bool)/state(name)` and `__walk.<name>.start/state/skipTo/hold/raw` (`raw()` is its
+   state with the clock's `phase`, `t`, `scale` and `next` writable), plus anything in its `api`.
+7. **Gates** for every new event: calm stills byte-identical; seeded stills of every phase on both
+   backends; the console sweep (the event at 8x while walking, six configurations) empty; its cost
+   over calm measured interleaved in four directions; reduced motion checked as a designed state.
+
+The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
+byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
+scripts' numbers identical).
 
 ## How a planet links to its surface
 
@@ -119,9 +170,11 @@ cache. On the surface page, with `?from=orbit` an overlay in the flood's colour 
   `W.world.findCrest()`, `W.world.params.CAM`, `W.world.WIND`; scripts used to import
   `../look-test/height.js` from the page), `ready`, `error`, `backend`,
   `state()`, `setPose`, `setTime`, `hold`/`release` (input), `orbit`, `lookOverride`,
-  `step(n, { drain })` (fixed 1/60 s steps, returns frame ms), `render()`, `loseDevice()`, and
-  `storm.start/skipTo/hold/raw/state`.
-- **URL switches:** `r=webgl2`, `view=first`, `reduced=1`, `time=`, `storm=off|now|fast`, `seed=`,
+  `step(n, { drain })` (fixed 1/60 s steps, returns frame ms), `render()`, `loseDevice()`,
+  `events.list/start/skipTo/hold/state` and one handle per event, e.g.
+  `storm.start/skipTo/hold/raw/state/visibility`.
+- **URL switches:** `r=webgl2`, `view=first`, `reduced=1`, `time=`, `<event>=off|now|fast` (e.g.
+  `storm=`), `events=off`, `seed=`,
   `fps=1`, `dpr=`, `skyfull=1` (the storm's sky in the old full-resolution path).
 - **Console sweep:** a full storm at 8x while walking, on WebGPU and WebGL2 times third person,
   reduced motion and first person. The console must be empty (`anim/sweep.mjs`).

@@ -25,7 +25,7 @@
 // looks through, and tongues of dust run ahead along the ground in the blown dust. Far off, nothing
 // of that is evaluated and the face is as it was.
 //
-// The same function colours the ground and the sky (tsl-material.js opts.walk.storm), and the
+// The same function colours the ground and the sky (tsl-material.js opts.walk.event), and the
 // figure, the lantern and the thrown sand (pilgrim.js, puffs.js: opts.fog), so they agree. When no
 // storm is active the shaders take a branch on a uniform and change nothing.
 //
@@ -509,11 +509,6 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
 }
 
 // ---------------------------------------------------------------- the state machine (JS)
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-}
-
 // the leading face's distance upwind during the approach and arrival: A e^(-t / tau) - B through
 // (0, D0), (75, Dlast), (83, Dend): it creeps up from the horizon and looms at the end (about 60 m/s
 // over the last 300 m)
@@ -551,54 +546,31 @@ function geometry(phase, t) {
   return { lead: trail + STORM.depth, trail, wall: 1 - sstep(D.after - 25, D.after, t), top: 1 - 0.55 * sstep(D.after - 30, D.after, t) };
 }
 
-export function createStorm({ reduced = false, seed = null, mode = null, testMode = false } = {}) {
-  const rnd = mulberry32(seed != null ? seed : (Math.random() * 4294967296) >>> 0);
-  const fast = mode === 'fast';
+// The storm as one of the engine's events (surface/engine/events.js): the director there owns the
+// phase clock and the schedule (STORM.phases, STORM.dur, the schedule numbers above); this is what
+// the storm does with them. ctx = { reduced, rnd, mode, testMode }: rnd is the director's stream for
+// the storm (?seed=), drawn once here (the gusts' phase) before the director draws the schedule.
+export function createStorm({ reduced = false, rnd, mode = null } = {}) {
   const st = {
-    phase: 'none', t: 0, scale: fast ? 4 : 1, clock: 0, next: null, hold: false,
+    phase: 'none', t: 0,
     k: 0, pre: 0, after: 0, gust: 0.5, gustT: rnd() * 100, boom: 0, drift: 0, airPh: 0,
-    lead: -1e5, trail: -1e5 - STORM.depth, wall: 0, top: 1, haze: 0, sunCover: [0, 0], cleared: 0, ended: false,
+    lead: -1e5, trail: -1e5 - STORM.depth, wall: 0, top: 1, haze: 0, sunCover: [0, 0], cleared: 0,
   };
   const off = mode === 'off';
-  function schedule(first) {
-    if (off) { st.next = null; return; }
-    if (testMode && !mode) { st.next = null; return; }
-    if (mode === 'now' && first) { st.next = STORM.nowDelay; return; }
-    const lo = first ? STORM.firstMin : STORM.gapMin, hi = first ? STORM.firstMax : STORM.gapMax;
-    st.next = st.clock + lerp(lo, hi, rnd()) / st.scale;
-  }
-  schedule(true);
 
-  function start({ scale } = {}) {
-    if (scale) st.scale = scale;
+  // a start or a skip: the billows' texture finished at once
+  function prepare({ how } = {}) {
     bakeDomes(DOME.N);
-    st.phase = 'approach'; st.t = 0; st.next = null; st.cleared = 0;
-  }
-  function skipTo(phase) {
-    if (phase === 'none') { st.phase = 'none'; st.t = 0; st.ended = true; schedule(false); return; }
-    if (!STORM.phases.includes(phase)) return;
-    bakeDomes(DOME.N);
-    st.phase = phase; st.t = 0; st.next = null;
+    if (how === 'start') st.cleared = 0;
   }
 
-  // one frame. Returns events: { cleared: true } when the inside ends (the caller wipes the trace)
-  function update(dt) {
+  // one frame, live or not (P from the director: { phase, t, left }). Returns { cleared: true } when
+  // the inside ends (the engine wipes the trace)
+  function update(dt, P) {
     const ev = {};
-    st.clock += dt;
     if (!off) bakeDomes(DOME.rows);
-    if (st.phase === 'none') {
-      if (st.next !== null && st.clock >= st.next) start();
-    } else if (!st.hold) {
-      st.t += dt * st.scale;
-      const d = STORM.dur[st.phase];
-      if (st.t >= d) {
-        const i = STORM.phases.indexOf(st.phase);
-        if (st.phase === 'inside') ev.cleared = true;
-        st.t -= d;
-        if (i + 1 < STORM.phases.length) st.phase = STORM.phases[i + 1];
-        else { st.phase = 'none'; st.t = 0; ev.ended = true; schedule(false); }
-      }
-    }
+    st.phase = P.phase; st.t = P.t;
+    if (P.left === 'inside') ev.cleared = true;
     if (ev.cleared) st.cleared++;
     // geometry
     if (st.phase !== 'none') {
@@ -720,23 +692,62 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     return v;
   }
 
+  const wind = () => Math.max(st.k, 0.35 * st.pre * (1 - st.k), 0.25 * st.after);
   return {
-    STORM, update, apply, modify, start, skipTo, tauAt, visNow,
-    setHold(h) { st.hold = !!h; },
-    get active() { return st.phase !== 'none'; },
+    STORM, update, prepare, tauAt, visNow,
+    uniforms: apply,
+    release() { apply(null, null, null); },
+    modify,
     get k() { return st.k; },
-    get boom() { return st.boom; },
-    get phase() { return st.phase; },
-    get state() { return st; },
-    // the walker's, figure's and sound's share of the storm
-    get wind() { return Math.max(st.k, 0.35 * st.pre * (1 - st.k), 0.25 * st.after); },
     get gust() { return st.gust; },
-    get erase() {
-      if (st.phase === 'inside' && st.t > STORM.dur.inside - 6) return STORM.eraseLast;
-      return 1 + (STORM.erase - 1) * st.k;
+    // the figure: the cloak streams hard, the gusts are the storm's, the lantern's pool brighter and its
+    // glow sprite dimmed by the dust between it and the eye (env.lamp, env.cam: positions)
+    wind({ lamp = null, cam = null } = {}) {
+      const sg = st.gust;
+      const lampT = lamp && cam ? Math.exp(-tauAt(Math.hypot(lamp[0] - cam.x, lamp[1] - cam.y, lamp[2] - cam.z))) : 1;
+      return { strength: 1.45 + 0.45 * sg, gust: sg, mix: wind(), figure: { k: st.k, lamp: STORM.lampBoost * st.k, lampT } };
     },
+    // the walker: into the wind slower, nudged downwind (walker.js reads these numbers)
+    walk: () => (st.k > 0 ? { k: st.k, gust: st.gust, ...STORM } : null),
+    // the camera's boom comes in to STORM.boom inside (st.boom: k eased over about 3 s)
+    camera: () => ({ boom: STORM.boom, amount: st.boom }),
+    // prints fill in: fast inside, faster in its last 6 s
+    trace() {
+      if (st.phase === 'inside' && st.t > STORM.dur.inside - 6) return { healMul: STORM.eraseLast };
+      return { healMul: 1 + (STORM.erase - 1) * st.k };
+    },
+    // the sound module's storm (at rest when the storm is not live)
+    sound: () => ({ storm: st.phase !== 'none' ? wind() : 0, stormGust: st.gust }),
+    readout: () => `k ${st.k.toFixed(2)}`,
+    state: () => ({ k: Math.round(st.k * 1000) / 1000 }),
+    raw: () => st,
+    api: { visibility: () => visNow() },
   };
 }
+
+// The storm as the engine's event def (worlds/dust-sea/world.js lists it in graphics().events).
+export const stormDef = {
+  name: 'storm',
+  phases: STORM.phases,
+  dur: STORM.dur,
+  schedule: { firstMin: STORM.firstMin, firstMax: STORM.firstMax, gapMin: STORM.gapMin, gapMax: STORM.gapMax, nowDelay: STORM.nowDelay },
+  call: null,
+  quiet: 60,
+  create: (ctx) => createStorm(ctx),
+  // its hooks in the ground and sky shaders (the same function), the half-resolution pass over the
+  // sky, what it does to the figure's and the puffs' colour, and the sand racing past
+  graphics({ renderer, shade, lamp, reduced, event }) {
+    const ground = (a) => stormApply(a.col, { ...a, lamp });
+    let sand = null;
+    return {
+      ground, sky: ground,
+      skyPass: createStormSky({ renderer, lamp }),
+      fog: stormFog,
+      particles: ({ U, scene }) => (sand = createStormSand({ U, shade, scene, storm: event, reduced })),
+      readout: () => `sand ${sand ? sand.live : 0}`,
+    };
+  },
+};
 
 // ---------------------------------------------------------------- the sand racing past (sprites)
 // Ribbons (long soft streams of sand, a hand's width to a forearm's, slightly curved, their width
