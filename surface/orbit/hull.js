@@ -12,9 +12,10 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, positionLocal, normalLocal, abs, floor, fract, min, max, mix, smoothstep, select,
   fwidth, mx_cell_noise_float, mx_fractal_noise_float, uv, length, exp, step, attribute, clamp, vertexStage, uniform,
-  vec4, rtt, texture, mod,
+  vec4, texture, mod,
 } from 'three/tsl';
 import { rng } from './light.js';
+import { bakeMode, bakeField } from './stars.js';
 
 export const SHIP = { stern: -2200, bow: 2200 };
 const L = SHIP.bow - SHIP.stern;
@@ -591,26 +592,44 @@ function buildParts(seed) {
 // ---- the metal's two noise fields, baked once. Soot and grime are fixed functions of the ship-frame
 // position, and evaluating their fractal noise per pixel was most of the canyon frame on WebGL2. Each
 // is rendered once, on the first frame the hull is drawn (behind the arrival veil), from the same
-// TSL noise into a half-float texture, then read with bilinear lookups. The domains cover the whole
-// ship (vertices span x -2580..2680, y -470..881, z -368..343) with a margin; lookups past them clamp.
-// soot: noise(pc.x * 0.07, pc.y * 0.005, axisId), axisId 1, 2 or 3, so three 2D slices in R, G, B
-const SOOT = { u0: -192, u1: 192, v0: -3, v1: 5, per: 10 };   // 3840 x 80, inside a 4096 texture limit
+// TSL noise into a texture, then read with bilinear lookups. The domains cover the whole ship
+// (vertices span x -2580..2680, y -470..881, z -368..343) with a margin; lookups past them clamp.
+// How they are stored (half float, 8-bit, or not baked at all) is chosen in stars.js (bakeMode).
+// soot: noise(pc.x * 0.07, pc.y * 0.005, axisId), axisId 1, 2 or 3, so three 2D slices in R, G, B.
+// 3840 texels along u would pass WebGL2's guaranteed 2048, so the u range is cut in two halves
+// stacked one above the other (1922 x 160), each half with one texel of its neighbour at both ends,
+// so a lookup is still one bilinear sample and reads exactly what the 3840-wide texture held.
+const SOOT = { u0: -192, u1: 192, v0: -3, v1: 5, per: 10, cuts: 2 };
+const SOOT_N = (SOOT.u1 - SOOT.u0) * SOOT.per, SOOT_TW = SOOT_N / SOOT.cuts, SOOT_TH = (SOOT.v1 - SOOT.v0) * SOOT.per;
+const SOOT_W = SOOT_TW + 2, SOOT_H = SOOT_TH * SOOT.cuts;
 // grime: noise(p * (0.004, 0.02, 0.01)), a 3D field stored as 64 z slices tiled 8 x 8 in one red
-// texture, 8 texels per noise unit; a lookup blends the two nearest slices
+// texture (1408 x 1792), 8 texels per noise unit; a lookup blends the two nearest slices
 const GRIME = { x0: -11, y0: -10, z0: -4, nx: 176, ny: 224, nz: 64, per: 8, tiles: 8 };
 const noise2 = (q) => mx_fractal_noise_float(q, 2, 2.0, 0.5, 1.0);
+// 8-bit packing (v * k + 0.5): soot spans -1.12..1.05 and grime -1.11..1.16, so k = 0.4 for both
+const SOOT_K = 0.4, GRIME_K = 0.4;
 
-function bakedSoot() {
-  const S = SOOT, W = (S.u1 - S.u0) * S.per, H = (S.v1 - S.v0) * S.per;
+function bakedSoot(mode) {
   const bake = Fn(() => {
-    const q = uv();
-    const a = q.x.mul(S.u1 - S.u0).add(S.u0), b = q.y.mul(S.v1 - S.v0).add(S.v0);
+    const px = floor(uv().mul(vec2(SOOT_W, SOOT_H)));        // this texel
+    const t = floor(px.y.div(SOOT_TH));                      // which half of the u range
+    const j = t.mul(SOOT_TW).add(px.x).sub(1.0);             // its texel along the whole u range
+    const a = j.add(0.5).div(SOOT.per).add(SOOT.u0), b = px.y.sub(t.mul(SOOT_TH)).add(0.5).div(SOOT.per).add(SOOT.v0);
     return vec4(noise2(vec3(a, b, 1.0)), noise2(vec3(a, b, 2.0)), noise2(vec3(a, b, 3.0)), 1.0);
   })();
-  return rtt(bake, W, H, { type: THREE.HalfFloatType, autoUpdate: false, depthBuffer: false });
+  return bakeField('soot', mode, bake, SOOT_W, SOOT_H, { k: SOOT_K });
 }
 
-function bakedGrime() {
+// the soot slices at (u, v) = (pc.x * 0.07, pc.y * 0.005)
+function sootAt(f, u, v) {
+  const j = clamp(u.sub(SOOT.u0).mul(SOOT.per).sub(0.5), 0.0, SOOT_N - 1);   // texel-centre units
+  const r = clamp(v.sub(SOOT.v0).mul(SOOT.per).sub(0.5), 0.0, SOOT_TH - 1);
+  const t = min(floor(j.div(SOOT_TW)), float(SOOT.cuts - 1));
+  f.node.uvNode = vec2(j.sub(t.mul(SOOT_TW)).add(1.5).div(SOOT_W), t.mul(SOOT_TH).add(r).add(0.5).div(SOOT_H));
+  return f.read(f.node);
+}
+
+function bakedGrime(mode) {
   const G = GRIME, W = G.nx * G.tiles, H = G.ny * G.tiles;
   const bake = Fn(() => {
     const px = floor(uv().mul(vec2(W, H)));                  // this texel
@@ -620,18 +639,18 @@ function bakedGrime() {
     const g = vec3(c.x.div(G.per).add(G.x0), c.y.div(G.per).add(G.y0), k.div(G.per).add(G.z0));
     return vec4(noise2(g), 0.0, 0.0, 1.0);
   })();
-  return rtt(bake, W, H, { type: THREE.HalfFloatType, format: THREE.RedFormat, autoUpdate: false, depthBuffer: false });
+  return bakeField('grime', mode, bake, W, H, { red: true, k: GRIME_K });
 }
 
 // the grime noise at g = p * (0.004, 0.02, 0.01), from the baked slices
-function grimeAt(node, g) {
+function grimeAt(f, g) {
   const G = GRIME, W = G.nx * G.tiles, H = G.ny * G.tiles;
   const cx = clamp(g.x.sub(G.x0).mul(G.per), 0.0, G.nx - 1), cy = clamp(g.y.sub(G.y0).mul(G.per), 0.0, G.ny - 1);
   const cz = clamp(g.z.sub(G.z0).mul(G.per), 0.0, G.nz - 1);
-  const k0 = min(floor(cz), float(G.nz - 2)), f = cz.sub(k0);
+  const k0 = min(floor(cz), float(G.nz - 2)), fz = cz.sub(k0);
   const at = (k) => vec2(mod(k, G.tiles).mul(G.nx).add(cx).add(0.5).div(W), floor(k.div(G.tiles)).mul(G.ny).add(cy).add(0.5).div(H));
-  node.uvNode = at(k0);
-  return mix(node.x, texture(node.value, at(k0.add(1.0))).x, f);
+  f.node.uvNode = at(k0);
+  return f.read(mix(f.node.x, texture(f.node.value, at(k0.add(1.0))).x, fz));
 }
 
 // ---- the metal, in the shader: gunmetal and oxidised bronze in sections; panels of varied sizes,
@@ -670,13 +689,20 @@ function hullMaterial() {
   // the region noise varies over kilometres: computed per vertex
   const region = vertexStage(mx_fractal_noise_float(p.mul(0.0014), 2, 2.0, 0.5, 1.0)).add(sh.sub(0.5).mul(0.35));
   const bronzeK = smoothstep(0.05, 0.3, region);
-  // soot streaks down the upright faces, and grime across the decks
-  // (both read from the baked fields: the same noise, sampled)
-  const sootTex = bakedSoot();
-  sootTex.uvNode = vec2(pc.x.mul(0.07).sub(SOOT.u0).div(SOOT.u1 - SOOT.u0), pc.y.mul(0.005).sub(SOOT.v0).div(SOOT.v1 - SOOT.v0));
-  const sootN = select(useY, sootTex.x, select(useZ, sootTex.y, sootTex.z));
-  const soot = smoothstep(0.0, 0.55, sootN).mul(upright);
-  const grime = grimeAt(bakedGrime(), p.mul(vec3(0.004, 0.02, 0.01))).mul(0.5).add(0.5);
+  // soot streaks down the upright faces, and grime across the decks: read from the baked fields (the
+  // same noise, sampled), or worked out per pixel where bakes are off. Chosen when the material is
+  // built, from the renderer it is built for; each kind of bake is made once.
+  const fields = {};
+  const noises = Fn((builder) => {
+    const mode = bakeMode(builder.renderer);
+    const gp = p.mul(vec3(0.004, 0.02, 0.01));
+    if (mode === 'off') return vec2(noise2(vec3(pc.x.mul(0.07), pc.y.mul(0.005), axisId)), noise2(gp));
+    const f = fields[mode] ??= { soot: bakedSoot(mode), grime: bakedGrime(mode) };
+    const s = sootAt(f.soot, pc.x.mul(0.07), pc.y.mul(0.005));
+    return vec2(select(useY, s.x, select(useZ, s.y, s.z)), grimeAt(f.grime, gp));
+  })();
+  const soot = smoothstep(0.0, 0.55, noises.x).mul(upright);
+  const grime = noises.y.mul(0.5).add(0.5);
   // windows: 0.8 x 1.3 m, 1.8 m apart, floors 3.4 m, in some sections and some floors
   const wq = pc.div(vec2(1.5, 3.0));
   const wf = fract(wq);
