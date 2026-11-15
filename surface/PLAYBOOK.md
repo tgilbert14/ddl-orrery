@@ -239,6 +239,7 @@ Not started. What this session knows that bears on it:
 ## Still not built or not checked on the Dust Sea
 
 - No real phone has been tried. Nobody has heard the sound.
-- Early in the storm's passing there is a hard line between dark sky and bright sand.
+- (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
+  see the walk README, "The storm cleanup".)
 - Not built: brink plumes, the landing and leaving, the shuttle overhead, the colossus, the caravan
   tracks, the score.

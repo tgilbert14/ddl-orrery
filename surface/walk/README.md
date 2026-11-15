@@ -528,9 +528,9 @@ look along the front and it recedes into the haze both ways.
 |---|---|---|
 | approach | 75 | The wall rises on the upwind horizon (its leading face from 9 km to 300 m, along A e^(-t/62.5 s) - B, so it creeps up and then looms, about 60 m/s at the end). The drift along the ground strengthens (to 2.5x), the wind sound rises, the light goes ochre; at day, when the sun is upwind, the wall swallows the sun and its shadow comes over the sand. |
 | arrival | 8 | It crosses the last 300 m and the soft edge passes over: the far dunes go first (the blown dust ahead of it), then fast darkening. |
-| inside | 55 | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, a glowing ochre at day. The suns are dim glows with a faint disc. Ribbons and sheets of sand race past along the wind (11 m round the camera, about 11 to 24 m/s, densest low), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. |
-| passing | 25 | It thins from the upwind side; light returns from there. Turn downwind and the wall is leaving across the dunes. |
-| after | 60 | Calm. No tracks anywhere. The drift stays stronger (1.5x, easing to normal); the wall sinks and fades into the haze downwind over the last 25 s. |
+| inside | 30 (55 before 15 Nov) | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, a glowing ochre at day. The suns are dim glows with a faint disc. Ribbons and sheets of sand race past along the wind (11 m round the camera, about 11 to 24 m/s, densest low), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. Every 8 to 15 s a gust hole opens it to 40 to 80 m for about 2 s (since 15 Nov). |
+| passing | 25 | It thins from the upwind side; light returns from there over about 6 s (10 to 16 s). Turn downwind and the wall is leaving across the dunes, lit by a sun behind you, hiding a sun beyond it. A near-silence of 3.5 s as the trailing edge passes (since 15 Nov). |
+| after | 30 (60 before 15 Nov) | Calm. No tracks anywhere. The drift stays stronger (1.5x, easing to normal); the wall sinks and fades into the haze downwind over the last 25 s. |
 
 Inside, the dust thins toward the eye (its density ramps up from nothing over 12 m), so the figure 5 m
 off is about 35% through the dust and readable as a silhouette while the sand 8.5 m off is gone. That
@@ -558,7 +558,7 @@ to 5 m, eased over about 3 s like the rest (without it the figure is lost in the
 the steps' bus down 90%; all of it eases in and out over about 1.5 s. No thunder, no lightning.
 
 **Switches and test API.** `storm=off` (never), `storm=now` (the approach 8 s after ready), `storm=fast`
-(every phase and the schedule at 4x), `seed=N` (seeds the schedule). The first storm comes 150 to 240 s
+(every phase and the schedule at 4x), `seed=N` (seeds the schedule). The first storm comes 60 to 120 s (150 to 240 s before 15 Nov)
 after ready, then one 300 to 480 s after the last one ended. With `test=1` there is no schedule unless
 `storm=` asks. `__walk.storm.start({ scale })`, `state()` -> `{ phase, t, k, next }` (k: 0..1, the storm's
 strength at the visitor), `skipTo(phase | 'none')`, `hold(bool)` (stops the phase clock),
@@ -701,6 +701,133 @@ cases, 260 stepped seconds each), `smoke.mjs` and `measure.mjs` printed identica
 trees. Console sweep (a full storm at 8x while walking, six configurations): empty. Held calm and
 inside frame times sat within the run-to-run spread of the old tree (noisy: other browsers were
 running).
+
+## The storm cleanup, 15 Nov 2026
+
+The owner asked how to see the storm wall and when it comes, and found it a little boring. Four
+changes (the critic's first four), all in `../worlds/dust-sea/storm.js` and `sound.js`, plus one line in
+`../engine/main.js` (the listener's heading for the sound).
+
+**How to see it.** It comes on its own 60 to 120 s after the page is ready (it was 150 to 240 s), and
+again 300 to 480 s after each one ends; a whole storm is 168 s (it was 223 s). To see it on purpose open
+`/surface/walk/?storm=now`: the approach starts 8 s after ready (`?storm=fast` runs everything at 4x).
+Face upwind, heading about 200 (the way the Pilgrim's cloak streams from), to watch the wall come; facing
+downwind only the light turns ochre until it is on you.
+
+**New baseline first.** Before any change the seeded storm stills (`seed=7`: eleven states at dusk on
+WebGPU and WebGL2, eleven at day on WebGPU, four at ember on WebGL2 with reduced motion) and the twelve
+calm stills were re-recorded from the event-system commit (0656786); they are the baseline this round is
+compared with.
+
+- *The hard line in the passing (S1).* Facing downwind early in the passing, the sky was the leaving
+  wall's dark dust and the sand in front of it was in full sun, with a lit rim along the crest at dusk.
+  Now: a sun downwind is covered while the slab is over or beyond the visitor (its trailing face's
+  distance under the top, with the leading face's 140 m ramp on how much slab is downwind), so the sand
+  and the crest rim lose it, and its glow in the blown dust goes too; the face's own colour and the blown
+  dust take only the light that is not hidden. Once the trailing face is within reach, the dust near the
+  eye is thin and lit by the light coming back (a sun's full light, not a surface's share), a sun upwind
+  lights the trailing face from the front (a sunlit wall leaving, up to 3x the face's sunlit share), and
+  dust blown out low behind the trailing face (0.012 per metre at the face, e-folding over 150 m, only
+  where a sun lights it, less of it looking upwind, gone 20 s into the after) lies over the sand at the
+  foot of the leaving wall. All of it is in `stormApply`, which the walk's ground, sky, figure and sand
+  share on both backends (`glsl-material.js` is the look test's own, older storm and was not touched).
+  The trailing face also slows over its last 70 m to the visitor (12 m/s from 10 to 16 s into the
+  passing; a monotone cubic through `STORM.pass`), because the dust is opaque through all but the last
+  few per cent of its ramp and the light came back in about one second.
+- *Sound from the wall (S2).* A rumble bus (brown noise held to 40 to 120 Hz and a hum on 55 and 110 Hz
+  with 165 and 220 Hz above them, for laptop speakers), panned to the wall's bearing against the camera's
+  heading, rising with the wall's nearness through the approach; at the arrival a 1.5 s swell of brown
+  noise and a low thud as the leading face reaches the visitor; 3.5 s of near-silence (the wind bed
+  down 14 dB) as the trailing edge passes, then the calm wind back over 4 s. `STORM_MIX` holds the levels.
+  **The owner is to judge it with the sound on; these numbers are not that judgement.**
+- *Gust holes inside (S3).* Every 8 to 15 s of the inside (seeded from the gusts' phase and the storm's
+  count, so the schedule's draws are untouched) a gust over 0.8 opens the visibility from 8.5 m to 40 to
+  80 m for about 2 s (0.5 s in, 1.1 s held, 0.7 s out), the suns' glow in the dust brightens fivefold
+  (a bright smear where the sun is), the nearest crest shows, and the racing sand thins with the air.
+  Reduced motion: the same holes with a 1 s ease each way, the gust itself does not race. A uniform and
+  numbers only; no new pass.
+- *Dead time cut (S4).* Inside 55 -> 30 s, after 60 -> 30 s (the wall now leaves faster, 420 + 38 t +
+  2.3 t^2 m, so it has gone about 3.6 km when it has faded), the first storm 60 to 120 s after ready.
+
+**Measured** (headless Chrome, M5 Pro, 1280x720, `seed=7`, the critic's pose: the third-person start on
+the windward face, the camera looking along heading 20 or 200 at pitch 0; luminance is linear, Rec. 709;
+"before" is a worktree of 0656786 served beside this one):
+
+| Passing, facing heading 20 | dusk before | dusk after | day before | day after |
+|---|---|---|---|---|
+| 10 s: ratio across the horizon line (10 px above / below, full width) | 1.08 | 1.05 | 1.01 | 1.00 |
+| 16 s | 2.04 | 1.05 | 4.65 | 1.24 |
+| 22 s | 1.20 | 1.15 | 2.76 | 1.34 |
+
+WebGPU and WebGL2 print the same ratios to the third decimal and the frames match at 45 to 53 dB. The
+horizon line per column is found by a march over `height()` from the camera. The upwind clearing (heading
+200, frame mean luminance stepped every second from 10 to 16 s into the passing) is now monotonic at dusk
+and day, the largest one-second step carrying 35% (dusk) and 34% (day) of the change (it was 67% and 51%,
+over about a second, and not monotonic at day). Contact sheets: `sheet-S1-dusk.jpg`, `sheet-S1-day.jpg`
+(rows: before WebGPU, after WebGPU, before WebGL2, after WebGL2; columns 10, 16, 22 s) and
+`sheet-S1-upwind.jpg` (not in the repo: the builder's test folder, `dustsea-work/storm/out/`, with the
+scripts `s1.mjs`, `s3.mjs`, `soundwall.mjs`, `perfab.mjs`).
+
+Sound, rendered offline (OfflineAudioContext at 24 kHz, the real `storm.js` values through a whole storm,
+against the same render with no storm at the same moments; exposure 0.6, then 0.3 and 1.0):
+
+| Window | 0.6 | 0.3 | 1.0 (a crest) |
+|---|---|---|---|
+| approach 28 to 32 s, RMS over calm | +6.3 dB | +10.4 | +2.6 |
+| approach 55 to 60 s | +9.9 | +13.9 | +5.4 |
+| arrival (8 s) | +8.8, peak -5.2 dBFS | +13.4, -5.7 | +4.0, -3.4 |
+| inside 5 to 25 s | +8.7 | +12.4 | +4.5 |
+| the hush, 16.3 to 19.5 s into the passing | -12.4 | -11.6 | -13.1 |
+| the calm back, 20 to 24 s | -0.4 | +0.3 | -0.6 |
+
+On a crest the calm wind alone peaks at -3.2 dBFS in the same render (the soft clip holds it), so the
+-4 dBFS peak is met at 0.6 and 0.3 and not on a crest, where the storm adds 0.4 dB to the peak the
+calm already has. In the approach the rumble sits about 4 dB to the right ear when facing heading 48
+with the wall upwind (the panner works from the camera's heading).
+
+Gust holes (stepped every 0.5 s through the inside from 3 s in, the frame's mean luminance against its
+median): 19% (heading 20) and 26% (heading 200) of frames more than 15% off at dusk, 17% and 15% at day,
+23% with reduced motion; the holes peak at +200% at dusk and +54 to +65% at day and each is 2 to 2.5 s
+above the line (3 s reduced). The old tree: 9 to 11% of frames, from the gusts alone, never more than
++21%. WebGPU and WebGL2 print the same numbers; the hole frames match at 49 dB. Sheet: `sheet-S3.jpg`.
+
+Calm stills: all twelve byte-identical to the baseline. Seeded storm stills: two runs of the new tree are
+byte-identical (37 of 37); against the baseline the approach and arrival stills are identical or above
+100 dB, and the inside, passing and after differ as intended (sheets `sheet-seeded-*.jpg`); the ember
+set's approach and arrival differ because they follow the schedule, which this round changed. Console
+sweep (a full storm at 8x while walking; WebGPU, WebGL2, reduced motion on both, first person on both):
+every phase seen, console empty.
+
+Cost (ms over calm, the same standing pose and method as `anim2/perfab.mjs`: storm and calm interleaved
+five times per view, 1440x900 at DPR 2, the median difference; views: the follow camera at heading 48,
+then turned to 20 (downwind), 290 (across) and 200 (upwind)). WebGPU, this tree / the event-system
+commit served beside it, run one after the other:
+
+| State | h48 | h20 | h290 | h200 |
+|---|---|---|---|---|
+| approach 68 s | 0.5 / 1.2 | 0.5 / -0.1 | 0.8 / 1.0 | 0.7 / 0.6 |
+| arrival 5 s | 0.5 / 0.5 | 0.6 / 0.4 | 0.8 / 1.0 | 0.7 / 0.7 |
+| inside 15 s | 0.7 / 0.8 | 0.7 / 0.6 | 1.0 / 0.8 | 0.5 / 1.5 |
+| inside, in a gust hole (old: no hole) | 0.7 / 0.7 | 0.7 / 0.7 | 0.9 / 1.1 | 0.6 / 0.4 |
+| passing 3 s | 0.9 / 0.6 | 0.5 / 1.0 | 1.1 / 0.9 | 0.9 / 1.2 |
+| passing 12 s | 1.0 / 1.2 | 0.9 / 1.6 | 1.5 / 2.9 | 1.0 / 1.0 |
+| passing 16 s | 0.4 / 0.7 | 0.9 / 0.5 | 1.4 / 0.9 | 0.9 / 0.5 |
+| passing 18 s | 0.6 / 0.5 | 0.5 / 0.5 | 0.6 / 0.7 | 0.5 / 0.7 |
+| after 10 s | 0.6 / 0.6 | 0.7 / 0.5 | 1.0 / 0.4 | 1.7 / 0.7 |
+
+The machine was shared with other browsers: the old tree's repeats spread by up to 2.9 ms and this
+tree's by up to 2.3 ms (after 10 s upwind: 1.7 with a spread of 1.6, and 1.1 / 0.6 / -2.2 / 0.6 when
+re-run alone, spread 5 to 11). The worst steady cell, passing 12 s across the wind (1.5, spread 0.3), is
+0.1 ms over the storm's 1.4 ms allowance and below the old tree's 2.9 (spread 2.2) in the same run. The same run on WebGL2
+stalled on both trees (frames of tens of ms from the passing on, other GPU work on the machine), so
+WebGL2 was taken from single back-to-back runs at the follow camera instead (median frame ms, storm held,
+this tree / old): calm 5.1 / 5.0, inside 15 s 7.2 / 7.1, passing 12 s 7.9 / 7.9, passing 16 s 6.9 / 6.8,
+after 10 s 6.4 / 6.3. The new shader work is one more closed-form dust term in the passing and the after,
+a mix in the dust's colour, and a gain on the trailing face; nothing new runs in the calm frame or deep
+inside. **The lead should re-time this on a quiet machine** (both backends, `perfab.mjs`).
+
+**Not checked:** any phone; the sound has not been heard by a person (the owner to judge, with the sound
+on); the passing's new light at ember was only seen through the reduced-motion seeded stills.
 
 ## Not built yet
 

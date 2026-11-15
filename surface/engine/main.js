@@ -597,7 +597,8 @@ export async function start(world) {
     G.renderer.render(G.scene, G.camera);
     try {
       const wnd = walker.wind(simTime);
-      sound?.update({ dt, windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding,
+      const ce = G.camera.matrixWorld.elements;   // the listener faces where the camera does
+      sound?.update({ dt, windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding, listenerYaw: Math.atan2(-ce[10], -ce[8]),
         ...(director ? director.sound() : {}) });
     } catch { /* no sound */ }
     const work = performance.now() - t0;
