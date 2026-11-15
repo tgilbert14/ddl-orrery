@@ -1,10 +1,14 @@
 // Orbit look test: the sky behind everything. A dome (dark gradient warmed toward the pale sun,
 // a faint dust band, both suns as discs with exponential halos) and one instanced point pass of
 // seeded stars. Both follow the camera, so they read as infinitely far.
+// The dome's three noise fields never change, so they are baked once, on the first frame the dome
+// is drawn (behind the arrival veil), into an equirectangular half-float texture and sampled from
+// there; the band, lanes, knots and nebula are then shaped from those samples per pixel exactly as
+// before, and the suns' discs and halos stay analytic.
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec3, positionLocal, normalize, dot, exp, acos, clamp, smoothstep, mix, pow, max, abs,
-  mx_fractal_noise_float, instancedBufferAttribute, uv, length,
+  mx_fractal_noise_float, instancedBufferAttribute, uv, length, vec2, vec4, sin, cos, atan, asin, rtt,
 } from 'three/tsl';
 import { SUN1, SUN2, rng, norm, cross, DEG } from './light.js';
 
@@ -24,7 +28,15 @@ function sunTerm(rd, S) {
   return v3(S.col).mul(halo).add(v3(S.disc).mul(disc));
 }
 
-export function skyColor(rd) {
+// the dome's three noise fields at a direction: the band's width and knots, its lanes, the nebula
+function skyNoise(rd) {
+  const n1 = mx_fractal_noise_float(rd.mul(3.2), 5, 2.1, 0.55, 1.0);
+  const n2 = mx_fractal_noise_float(rd.mul(9.0).add(vec3(4.1, 1.7, 8.3)), 4, 2.0, 0.5, 1.0);
+  const nb = mx_fractal_noise_float(rd.mul(1.6).add(vec3(9.0, 2.0, 5.0)), 4, 2.0, 0.5, 1.0);
+  return [n1, n2, nb];
+}
+
+function skyShade(rd, n1, n2, nb) {
   // base: cool deep blue-violet, warmed toward the pale sun and faintly toward the red one
   const toward1 = dot(rd, v3(SUN1.dir)).mul(0.5).add(0.5);
   const toward2 = dot(rd, v3(SUN2.dir)).mul(0.5).add(0.5);
@@ -32,8 +44,6 @@ export function skyColor(rd) {
   col.addAssign(vec3(0.006, 0.0012, 0.0004).mul(pow(toward2, 8.0)));
   // the dust band: a soft great-circle glow with darker lanes and brighter knots through it
   const bd = dot(rd, v3(BAND_N));
-  const n1 = mx_fractal_noise_float(rd.mul(3.2), 5, 2.1, 0.55, 1.0);
-  const n2 = mx_fractal_noise_float(rd.mul(9.0).add(vec3(4.1, 1.7, 8.3)), 4, 2.0, 0.5, 1.0);
   const w = float(0.16).add(n1.mul(0.06));
   const band = exp(bd.add(n1.mul(0.05)).div(w).pow(2.0).negate());
   const core = exp(bd.add(n2.mul(0.02)).div(0.045).pow(2.0).negate());
@@ -42,16 +52,44 @@ export function skyColor(rd) {
   col.addAssign(vec3(0.016, 0.010, 0.0062).mul(band).mul(knots).mul(lanes));
   col.addAssign(vec3(0.012, 0.0095, 0.008).mul(core).mul(lanes));
   // a cool reflection nebula, very faint, off the band
-  const neb = max(mx_fractal_noise_float(rd.mul(1.6).add(vec3(9.0, 2.0, 5.0)), 4, 2.0, 0.5, 1.0), 0.0);
+  const neb = max(nb, 0.0);
   col.addAssign(vec3(0.003, 0.005, 0.010).mul(neb.mul(neb)));
   col.addAssign(sunTerm(rd, SUN1));
   col.addAssign(sunTerm(rd, SUN2));
   return col;
 }
 
+// the sky computed outright (every noise octave per call)
+export function skyColor(rd) {
+  return skyShade(rd, ...skyNoise(rd));
+}
+
+// the baked noise: longitude across, latitude up, half float (16 MB). At 2048 x 1024 the finest
+// octave spans about 4.5 texels at the equator, and the shaped sky differs from the outright one
+// by at most 2/255 in any pixel of the stills (1024 x 512 reached 5/255).
+const BAKE_W = 2048, BAKE_H = 1024;
+function bakedSkyNoise() {
+  const bake = Fn(() => {
+    const q = uv();
+    const lon = q.x.sub(0.5).mul(Math.PI * 2), lat = q.y.sub(0.5).mul(Math.PI);
+    const cl = cos(lat);
+    const [n1, n2, nb] = skyNoise(vec3(cl.mul(cos(lon)), sin(lat), cl.mul(sin(lon))));
+    return vec4(n1, n2, nb, 1.0);
+  })();
+  const node = rtt(bake, BAKE_W, BAKE_H, { type: THREE.HalfFloatType, autoUpdate: false, depthBuffer: false });
+  node.renderTarget.texture.wrapS = THREE.RepeatWrapping;   // longitude wraps without a seam
+  return node;
+}
+
 export function createSky() {
   const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false });
-  mat.colorNode = Fn(() => skyColor(normalize(positionLocal)))();
+  const baked = bakedSkyNoise();
+  mat.colorNode = Fn(() => {
+    const rd = normalize(positionLocal);
+    baked.uvNode = vec2(atan(rd.z, rd.x).div(Math.PI * 2).add(0.5), asin(clamp(rd.y, -1.0, 1.0)).div(Math.PI).add(0.5));
+    const s = baked;
+    return skyShade(rd, s.x, s.y, s.z);
+  })();
   mat.fog = false;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(SKY_R, 96, 48), mat);
   mesh.renderOrder = -2;
