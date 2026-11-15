@@ -10,6 +10,9 @@
 // quickly to boost), the right half looks around, a quick tap on a world flies there, and two
 // fingers pinching out pull back to the whole orrery (pinching in drops back).
 // Any steering input cancels an autopilot course (main.js).
+// While a modal (the Ship's log) or the world list is open (shielded()), the keys belong to it: no
+// flight key, no M, and the arrows keep their default (they scroll the dialog).
+// Reduced motion: no flight, no stick, no M; a click or tap still picks a world.
 
 const KEYS = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
 const STEER_MOUSE = 0.0016;   // rad per CSS px (captured)
@@ -17,7 +20,7 @@ const STEER_DRAG = 0.0024;
 const LOOK = 0.004;
 const STICK_R = 60, TAP_MS = 300, TAP_PX = 9, DOUBLE_MS = 320;
 
-export function createControls(el, { onFirstInput, onPullBack, onGesture, pullState } = {}) {
+export function createControls(el, { onFirstInput, onPullBack, onGesture, pullState, shielded, reduced = false } = {}) {
   const keys = new Set();
   let steerX = 0, steerY = 0, lookX = 0, lookY = 0, pick = null, steered = false;
   let locked = false, lockRefused = false;
@@ -27,9 +30,13 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture, pullSt
   const firstInput = () => { if (!first) { first = true; onFirstInput?.(); } };
 
   const typing = (e) => e.target && e.target.closest && e.target.closest('button, a, input, dialog, [role="dialog"]');
+  // a modal dialog is open, the world list is open, or the key was pressed inside either
+  const isShielded = (e) => !!(shielded?.() || document.querySelector('dialog[open]') || (e && e.target && e.target.closest && e.target.closest('dialog, [role="dialog"], #worlds')));
   let mDown = 0, mWasOn = false;
   const onKeyDown = (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (reduced) return;   // nothing to fly: every key keeps its default
+    if (isShielded(e)) { keys.clear(); return; }
     // Space or Enter on a focused button or link activates it, never the shuttle
     if ((e.code === 'Space' || e.code === 'Enter') && typing(e)) return;
     if (e.code === 'KeyM') {
@@ -49,7 +56,13 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture, pullSt
     // M held longer than a tap: letting go drops back; a tap leaves it pulled back (or returned)
     if (e.code === 'KeyM' && mDown) { if (performance.now() - mDown > 300 && !mWasOn) onPullBack?.(false, 'hold'); mDown = 0; }
   };
-  const onBlur = () => { keys.clear(); stick = null; lookTouch = null; pinch = null; pointers.clear(); mDown = 0; };
+  // focus leaves the window (or the tab is hidden): drop every held key; an M hold in progress
+  // ends as its key-up would have ended it (the view drops back)
+  const onBlur = () => {
+    if (mDown && !mWasOn) onPullBack?.(false, 'hold');
+    keys.clear(); stick = null; lookTouch = null; pinch = null; pointers.clear(); mDown = 0;
+  };
+  const onVisibility = () => { if (document.hidden) onBlur(); };
 
   const lockSupported = typeof el.requestPointerLock === 'function';
   const onLockChange = () => { locked = document.pointerLockElement === el; document.body.classList.toggle('locked', locked); };
@@ -63,7 +76,7 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture, pullSt
   const onPointerDown = (e) => {
     onGesture?.();
     pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: performance.now(), type: e.pointerType, button: e.button, dragged: false });
-    if (e.pointerType === 'touch') {
+    if (e.pointerType === 'touch' && !reduced) {
       const touches = [...pointers.values()].filter((p) => p.type === 'touch');
       if (touches.length === 2) {
         const [a, b] = touches;
@@ -93,8 +106,9 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture, pullSt
         const t = [...pointers.values()].filter((q) => q.type === 'touch');
         if (t.length >= 2 && !pinch.fired) {
           const d = Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y);
-          if (d > pinch.d0 * 1.35) { pinch.fired = true; onPullBack?.(true, 'toggle'); firstInput(); }
-          else if (d < pinch.d0 * 0.7) { pinch.fired = true; onPullBack?.(false, 'toggle'); firstInput(); }
+          // the direction matters: out pulls back, in drops back (never a toggle)
+          if (d > pinch.d0 * 1.35) { pinch.fired = true; onPullBack?.(true, 'pinch'); firstInput(); }
+          else if (d < pinch.d0 * 0.7) { pinch.fired = true; onPullBack?.(false, 'pinch'); firstInput(); }
         }
         return;
       }
@@ -121,6 +135,7 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture, pullSt
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
+  document.addEventListener('visibilitychange', onVisibility);
   document.addEventListener('pointerlockchange', onLockChange);
   document.addEventListener('pointerlockerror', onLockError);
   el.addEventListener('pointerdown', onPointerDown);
@@ -138,6 +153,7 @@ export function createControls(el, { onFirstInput, onPullBack, onGesture, pullSt
       return out;
     }
     let thrust = 0, yaw = 0, pitch = 0;
+    if (keys.size && isShielded(null)) keys.clear();   // a dialog opened over held keys
     if (keys.has('KeyW') || keys.has('ArrowUp')) thrust += 1;
     if (keys.has('KeyS') || keys.has('ArrowDown')) thrust -= 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) yaw -= 1;

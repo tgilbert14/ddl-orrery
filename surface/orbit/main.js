@@ -7,7 +7,7 @@
 //
 // URL switches: test=1 (no loop until a script asks), r=webgl2, reduced=1, fps=1, dpr=N, seed=N.
 // Script handle: window.__orbit (see the end of this file).
-import { SUN1, SUN2, DEG, norm, add, sub, mul, dot, cross, len, lin } from './light.js';
+import { SUN1, SUN2, DEG, dirYP, norm, add, sub, mul, dot, cross, len, lin } from './light.js';
 import { ARR, arrange, INFO, ORRERY, compressPos } from './layout.js';
 import { createControls } from './controls.js';
 import { createFlight, dirOf } from './flight.js';
@@ -35,6 +35,7 @@ const API = (window.__orbit = { ready: false, error: null, backend: null, reduce
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const ease = (dt, tau) => 1 - Math.exp(-dt / tau);
 const smooth = (t) => { const c = clamp(t, 0, 1); return c * c * c * (c * (c * 6 - 15) + 10); };
+const AIM_RATE = 90 * DEG;   // the course camera's turn limit (rad/s): see place()
 const lerp3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
 // ---------------------------------------------------------------- the surveyed set (shared with the hub)
@@ -83,8 +84,10 @@ let hintGone = false;
 const hideHint = () => { if (!hintGone) { hintGone = true; hintEl.classList.add('gone'); } };
 const controls = createControls(stage, {
   onFirstInput: hideHint,
-  onPullBack: (on, how) => { if (how === 'toggle') pullBack(!pull.want); else pullBack(on); },
+  onPullBack: (on) => pullBack(on),   // M (hold or tap) and the pinch both say which way they mean
   pullState: () => pull.want,
+  shielded: () => !worldsEl.hidden && !document.body.classList.contains('poster-on'),
+  reduced,
 });
 
 // ---------------------------------------------------------------- sound (another module; optional)
@@ -92,15 +95,30 @@ const controls = createControls(stage, {
 let soundMod = null, sound = null, muted = q.get('mute') === '1';
 const muteBtn = $('mute');
 import('./sound.js').then((m) => { soundMod = m; }).catch(() => { soundMod = false; muteBtn.disabled = true; muteBtn.textContent = 'No sound'; });
+// The context is made and resumed only inside an event that carries user activation (keydown, a
+// mouse's pointerdown, and on touch pointerup, touchend or click: a touch's pointerdown does not
+// activate), so it is never created suspended; until it runs, every later gesture calls start()
+// again (its second call resumes), synchronously inside the handler.
+let soundOff = false;   // the poster replaced the scene: the page is silent for good
 function onGesture() {
-  if (sound || !soundMod || typeof soundMod.createSound !== 'function') return;
-  try { sound = soundMod.createSound({ muted }); sound.start().then((ok) => { API.sound = ok ? 'on' : 'refused'; }).catch(() => {}); } catch { sound = null; }
+  if (soundOff || !soundMod || typeof soundMod.createSound !== 'function') return;
+  const ua = navigator.userActivation;
+  if (ua && !ua.isActive) return;
+  try {
+    if (sound) { if (sound.stats().state === 'running') return; }
+    else sound = soundMod.createSound({ muted });
+    sound.start().then((ok) => { API.sound = ok ? 'on' : 'refused'; }).catch(() => {});
+  } catch { /* the page is complete without sound */ }
+}
+function silence() {
+  soundOff = true;
+  try { sound?.dispose(); } catch { /* gone */ }
+  sound = null; API.sound = 'off';
 }
 function setMuteLabel() { muteBtn.textContent = muted ? 'Sound off' : 'Sound on'; muteBtn.setAttribute('aria-pressed', String(muted)); }
 setMuteLabel();
 muteBtn.addEventListener('click', () => { muted = !muted; setMuteLabel(); onGesture(); try { sound?.setMuted(muted); } catch { /* no sound */ } });
-addEventListener('pointerdown', onGesture, { capture: true });
-addEventListener('keydown', onGesture, { capture: true });
+for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, onGesture, { capture: true });
 
 // ---------------------------------------------------------------- pull back to the whole orrery
 const pull = { want: false, t: 0, k: 0 };
@@ -115,20 +133,49 @@ wholeBtn.addEventListener('click', () => pullBack(!pull.want));
 if (reduced) wholeBtn.hidden = true;
 
 // ---------------------------------------------------------------- DOM: world list, log, nameplate
+// the list opens under the bar's real bottom edge (on a narrow phone the bar wraps to two rows)
+const barEl = $('bar');
+function placeList() {
+  if (document.body.classList.contains('poster-on')) { worldsEl.style.top = ''; worldsEl.style.maxHeight = ''; return; }
+  const top = Math.round(barEl.getBoundingClientRect().bottom + 8);
+  worldsEl.style.top = top + 'px';
+  worldsEl.style.maxHeight = `calc(100% - ${top + 16}px)`;
+}
+function closeList(focusBtn) {
+  if (worldsEl.hidden) return;
+  // focus first: never hide a container while it holds focus
+  if (focusBtn || worldsEl.contains(document.activeElement)) worldsBtn.focus({ preventScroll: true });
+  worldsEl.hidden = true; worldsBtn.setAttribute('aria-expanded', 'false');
+}
 worldsBtn.addEventListener('click', () => {
-  const open = worldsEl.hidden;
-  worldsEl.hidden = !open; worldsBtn.setAttribute('aria-expanded', String(open));
-  if (open) worldsEl.querySelector('a')?.focus();
+  if (!worldsEl.hidden) { closeList(true); return; }
+  placeList();
+  worldsEl.hidden = false; worldsBtn.setAttribute('aria-expanded', 'true');
+  worldsEl.querySelector('a')?.focus();
 });
 worldsEl.addEventListener('click', (e) => {
   const a = e.target.closest('a[data-slug]');
   if (!a || !G) return;              // with no graphics the links simply go to the world
   e.preventDefault();
-  worldsEl.hidden = true; worldsBtn.setAttribute('aria-expanded', 'false');
+  closeList(true);
   flyTo(a.dataset.slug);
 });
-worldsEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') { worldsEl.hidden = true; worldsBtn.setAttribute('aria-expanded', 'false'); worldsBtn.focus(); } });
-logBtn.addEventListener('click', () => { try { logEl.showModal(); } catch { logEl.setAttribute('open', ''); } });
+worldsEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeList(true); });
+// a tap or click outside the open list closes it, and that tap sets no course
+let swallowPickUntil = 0;
+addEventListener('pointerdown', (e) => {
+  if (worldsEl.hidden || document.body.classList.contains('poster-on')) return;
+  if (worldsEl.contains(e.target) || worldsBtn.contains(e.target)) return;
+  closeList(false);
+  if (stage.contains(e.target)) swallowPickUntil = performance.now() + 600;
+}, { capture: true });
+addEventListener('resize', () => { if (!worldsEl.hidden) placeList(); });
+logBtn.addEventListener('click', () => {
+  try { logEl.showModal(); } catch { logEl.setAttribute('open', ''); }
+  // open at the top, with focus inside the dialog, so the arrows and Page keys scroll it
+  logEl.scrollTop = 0;
+  $('logTitle').focus({ preventScroll: true });
+});
 let plateSlug = null;
 function showPlate(slug) {
   plateSlug = slug;
@@ -142,10 +189,12 @@ function showPlate(slug) {
 let G = null, running = false, onScreen = true, paused = testMode;
 const intervals = [], works = [];
 let lastNow = 0, govSlow = 0, govFast = 0, govLast = 0;
+let govBase = Infinity, govWait = 8, govRaisedAt = -1e9;   // the display's own interval (lowest median seen), the climb's patience
 const dprCap = Math.min(window.devicePixelRatio || 1, 2);
 let dpr = fixedDpr ?? dprCap;
 
 function poster(msg, err) {
+  silence();   // the static fallback is silent: the orbit's sound would hang at its last state
   posterEl.hidden = false;
   posterEl.querySelector('.why').textContent = msg;
   document.body.classList.add('poster-on');
@@ -160,13 +209,15 @@ async function buildGraphics() {
   const THREE = await import('three/webgpu');
   const { fog, densityFogFactor, vec3, uniform, instancedBufferAttribute, uv, length, exp, float } = await import('three/tsl');
   const { createSky, createStars } = await import('./stars.js');
-  const { createHull } = await import('./hull.js');
+  const { createHull, deckAt } = await import('./hull.js');
   const { createWorlds, createWorldPoints, createOrbitLines } = await import('./worlds.js');
   const { createShuttle } = await import('./shuttle.js');
   const { createField } = await import('./field.js');
 
   const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL, reversedDepthBuffer: !forceWebGL, powerPreference: 'high-performance' });
-  try { await renderer.init(); } catch (e) { try { renderer.dispose(); } catch { /* nothing */ } throw e; }
+  // a renderer that never started is not disposed: r186's dispose() then calls setAnimationLoop(),
+  // which re-runs the failed init() and leaves an unhandled rejection in the console
+  try { await renderer.init(); } catch (e) { if (renderer._initialized) disposeRenderer(renderer); throw e; }
   const isGPU = renderer.backend.isWebGPUBackend === true;
   if (!forceWebGL && !isGPU) API.fellBack = true;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -198,7 +249,10 @@ async function buildGraphics() {
   mm.sizeNode = float(16.0);
   const mark = new THREE.Sprite(mm); mark.count = 1; mark.frustumCulled = false;
   scene.add(mark);
-  scene.fogNode = fog(vec3(0.05, 0.032, 0.018), densityFogFactor(0.00016));
+  // the fog from two uniforms: the canyon's light blends them toward the hull still's warm haze
+  // (a uniform change compiles nothing)
+  const fogC = uniform(new THREE.Color(...RIG.arrival.fog)), fogD = uniform(RIG.arrival.fogD);
+  scene.fogNode = fog(fogC, densityFogFactor(fogD));
 
   const sun1 = new THREE.DirectionalLight(new THREE.Color().setRGB(...SUN1.col), 1.0);
   sun1.castShadow = true;
@@ -226,7 +280,12 @@ async function buildGraphics() {
   renderer.onDeviceLost = (info) => { onDeviceLost(info); };
   return { THREE, renderer, isGPU, scene, lamp, sky, stars, hull, worlds, points, lines, fadeU, shuttle, mark, markA, markU, sun1, sun2, camera, drain,
     backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' + (API.fellBack ? ' - FELL BACK: WebGPU did not start' : ''),
+    deckAt, lights: { bounce, amb, fogC, fogD }, aim: null,
     exposure: 1.45, tmpQ: [new THREE.Quaternion(), new THREE.Quaternion()], tmpM: new THREE.Matrix4(), v: new THREE.Vector3() };
+}
+
+function disposeRenderer(r) {
+  try { const p = r.dispose(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch { /* lost */ }
 }
 
 function lightLamps() {
@@ -254,6 +313,7 @@ function flyTo(slug) {
   if (!SLUGS.includes(slug) || phase === 'descent') return;
   hideHint();
   if (reduced) { reducedChoose(slug); return; }
+  parked = false;
   autopilot = slug;
   if (phase === 'arrival') phase = 'flight';
   pullBack(false);
@@ -279,14 +339,25 @@ function tickDescent(dt) {
     else location.href = url;
   }
 }
-// back from a world's page out of the back/forward cache: clear the flood, and wait at a safe distance
+// back from a world's page out of the back/forward cache: clear the flood, and wait at a safe distance.
+// The shuttle is parked: outside the approach (7.5 radii from the centre, past the 6 radii where the
+// nameplate lets go), facing away from the world, with no speed, and it stays put until the first
+// input. Reduced motion returns to the arrival vista.
+let parked = false;
 addEventListener('pageshow', (e) => {
   if (!e.persisted || !descent) return;
-  const w = live[SLUGS.indexOf(descent.slug)];
-  const out = norm(sub(flight.state.pos, w.pos));
-  flight.setPose({ pos: add(w.pos, mul(out, w.R * 4)), yaw: Math.atan2(-out[2], -out[0]), pitch: Math.asin(clamp(-out[1], -1, 1)), speed: 0 });
+  if (reduced) {
+    flight.setPose({ ...startPose, speed: 0 });
+  } else {
+    const w = live[SLUGS.indexOf(descent.slug)];
+    const out = norm(sub(flight.state.pos, w.pos));
+    flight.setPose({ pos: add(w.pos, mul(out, w.R * 7.5)), yaw: Math.atan2(out[2], out[0]), pitch: Math.asin(clamp(out[1], -1, 1)) * 0.5, speed: 0 });
+    parked = true;
+  }
+  flight.state.vel = [0, 0, 0];
   chase.snap(flight.state);
-  descent = null; phase = reduced ? 'arrival' : 'flight'; rView = null; floodEl.style.opacity = '0'; showPlate(null); approachEl.hidden = true;
+  autopilot = null; pull.want = false; pull.t = 0;
+  descent = null; phase = 'arrival'; rView = null; floodEl.style.opacity = '0'; showPlate(null); approachEl.hidden = true;
   syncSurveyed();
 });
 
@@ -301,10 +372,21 @@ function crossFade(fn) {
   setTimeout(() => { fn(); fadeEl.classList.remove('on'); }, 200);
 }
 function reducedChoose(slug) {
-  crossFade(() => { rView = slug; showPlate(slug); approachEl.hidden = false; phase = 'approach'; $('land').focus({ preventScroll: true }); });
+  if (slug === rView) return;
+  crossFade(() => { rView = slug; showPlate(slug); approachEl.hidden = false; document.body.classList.add('approach-on'); phase = 'approach'; $('land').focus({ preventScroll: true }); });
 }
-$('land').addEventListener('click', () => { if (rView) { approachEl.hidden = true; startDescent(rView); } });
-$('back').addEventListener('click', () => crossFade(() => { rView = null; showPlate(null); approachEl.hidden = true; phase = 'arrival'; }));
+$('land').addEventListener('click', () => {
+  if (!rView) return;
+  if (approachEl.contains(document.activeElement)) worldsBtn.focus({ preventScroll: true });
+  approachEl.hidden = true; document.body.classList.remove('approach-on'); startDescent(rView);
+});
+// Back: to the arrival vista (the approach view moved the shuttle; put it back where the visit began),
+// with focus on the Worlds button, moved before the buttons are hidden
+$('back').addEventListener('click', () => crossFade(() => {
+  if (approachEl.contains(document.activeElement)) worldsBtn.focus({ preventScroll: true });
+  rView = null; showPlate(null); approachEl.hidden = true; document.body.classList.remove('approach-on'); phase = 'arrival';
+  flight.setPose({ ...startPose }); chase.snap(flight.state);
+}));
 
 // ---------------------------------------------------------------- one frame
 let lastIntent = null;
@@ -319,21 +401,43 @@ function tick(dt) {
     w.show = k > 0 ? lerp3(w.pos, compressPos(w.pos), k) : w.pos;
     w.showR = w.R * (1 + (ORRERY.scaleR - 1) * k);
   }
-  const intent = phase === 'descent' || reduced ? { thrust: 0, yaw: 0, pitch: 0, steerX: 0, steerY: 0, lookX: 0, lookY: 0, pick: null, steered: false } : controls.read();
+  // reduced motion still reads the controls, for the pick alone (a world clicked in the view is chosen)
+  const read = phase === 'descent' ? null : controls.read();
+  const intent = !read || reduced ? { thrust: 0, yaw: 0, pitch: 0, steerX: 0, steerY: 0, lookX: 0, lookY: 0, pick: read ? read.pick : null, steered: false } : read;
   lastIntent = intent;
+  if (intent.pick && swallowPickUntil && performance.now() < swallowPickUntil) { intent.pick = null; swallowPickUntil = 0; }   // the tap that closed the list
   if (intent.pick && G) {
     const slug = pickWorld(intent.pick.ndcX, intent.pick.ndcY);
     if (slug) flyTo(slug);
-    else if (intent.pick.thenLock && !touch && k < 0.01) controls.requestLock();
+    else if (intent.pick.thenLock && !touch && !reduced && k < 0.01) controls.requestLock();
   }
   if (intent.steered && autopilot) autopilot = null;
   if (intent.steered && phase === 'arrival') phase = 'flight';
+  if (parked && (intent.steered || intent.thrust || intent.boost || intent.touchCruise || autopilot)) parked = false;
 
   const near = nearestWorld(flight.state.pos, live);
   const fs = field ? field.sample(flight.state.pos) : { d: 1e9 };
-  if (!reduced && phase !== 'descent' && pull.t === 0) {
+  if (!reduced && phase !== 'descent' && pull.t === 0 && !parked) {
     const tw = autopilot ? live[SLUGS.indexOf(autopilot)] : null;
-    flight.update(dt, { field, room: Math.min(fs.d, near.surfaceDist), world: { surf: near.surfaceDist, R: live[near.i].R, pos: live[near.i].pos }, target: tw ? { pos: tw.pos, R: tw.R } : null, intent, mode: phase === 'arrival' ? 'arrival' : 'flight' });
+    let room = Math.min(fs.d, near.surfaceDist), wNear = { surf: near.surfaceDist, R: live[near.i].R, pos: live[near.i].pos };
+    if (tw) {
+      // A course is set: what is only being passed limits the speed by how fast it is being closed,
+      // not by its distance (room / cos of the angle to it, the cosine floored at 0.2), so the outer
+      // worlds are about 15 s away. The target alone brakes the approach (through its own cap). The
+      // hull stays distance-based inside 300 m, so a course that runs along the ship never grazes it.
+      // Manual flight keeps the distance cap (skimming the hull by hand stays slow).
+      const fp = flight.state.pos, fv = dirOf(flight.state.yaw, flight.state.pitch);
+      let wr = Infinity;
+      for (const w of live) {
+        const v = sub(w.pos, fp), dl = len(v), sd = dl - w.R;
+        wr = Math.min(wr, w === tw ? sd : sd / Math.max(0.2, dot(fv, v) / dl));
+      }
+      const into = fs.n ? -dot(fv, fs.n) : 1;
+      const hullRoom = fs.d <= 300 ? fs.d : 300 + (fs.d - 300) / Math.max(0.2, into);
+      room = Math.min(hullRoom, wr);
+      wNear = { surf: len(sub(tw.pos, fp)) - tw.R, R: tw.R, pos: tw.pos };
+    }
+    flight.update(dt, { field, room, world: wNear, target: tw ? { pos: tw.pos, R: tw.R } : null, intent, mode: phase === 'arrival' ? 'arrival' : 'flight' });
   } else if (phase === 'descent' && !reduced) {
     // the camera holds while the shuttle slips on into the air
     flight.update(dt, { field: null, room: 400, target: null, intent: { thrust: 0, yaw: 0, pitch: 0 }, mode: 'arrival' });
@@ -385,7 +489,24 @@ function place(dt, intent, near) {
     flight.setPose({ pos: P.shuttle, yaw: Math.atan2(-P.dir[2], -P.dir[0]), pitch: Math.asin(clamp(-P.dir[1], -1, 1)) });
     fov = portrait ? 70 : 46;
   } else {
-    if (phase !== 'descent') chase.update(dt, f, intent, field);
+    if (phase !== 'descent') {
+      // A course is set: the boom aims at the course, not at the heading, so the camera swings round
+      // behind the shuttle relative to the world and the target enters the frame early in a big turn.
+      // The aim turns toward the world at no more than 90 degrees a second (faster loses the shuttle
+      // from the frame); the flight and the shuttle's own turn are unchanged. When the course ends or
+      // the player steers, the aim is dropped and the chase eases back to the heading.
+      let fc = f;
+      if (autopilot && !reduced) {
+        const tw = live[SLUGS.indexOf(autopilot)], v = norm(sub(tw.show, f.pos));
+        const ty = Math.atan2(v[2], v[0]), tp = clamp(Math.asin(clamp(v[1], -1, 1)), -1.25, 1.25);
+        const R = AIM_RATE * dt;
+        if (!G.aim) G.aim = { y: f.yaw, p: f.pitch };
+        G.aim.y += clamp(Math.atan2(Math.sin(ty - G.aim.y), Math.cos(ty - G.aim.y)), -R, R);
+        G.aim.p += clamp(tp - G.aim.p, -R, R);
+        fc = { ...f, yaw: G.aim.y, pitch: G.aim.p };
+      } else G.aim = null;
+      chase.update(dt, fc, intent, field);
+    }
     const c = chase.state;
     camPos = c.cam;
     let d = c.dir;
@@ -421,9 +542,13 @@ function place(dt, intent, near) {
   } else {
     cam.position.set(...camPos); cam.up.set(...up); cam.lookAt(...look);
   }
-  // near plane: reversed depth on WebGPU; on WebGL2 from the distance to the nearest surface
+  // near plane: reversed depth on WebGPU; on WebGL2 from the distance to the nearest surface, and
+  // the shuttle on its boom counts as a surface (less its 15 m half-span and glow), so the near plane
+  // never cuts into it
   const cp = [cam.position.x, cam.position.y, cam.position.z];
-  const clear = Math.min(field.sample(cp).d, nearestWorld(cp, live).surfaceDist);
+  const camHull = field.sample(cp).d;
+  let clear = Math.min(camHull, nearestWorld(cp, live).surfaceDist);
+  if (k < 0.5) clear = Math.min(clear, len(sub(f.pos, cp)) - 15);
   const nearP = G.isGPU ? 1 : clamp(clear * 0.35, 1, 300);
   if (cam.fov !== fov || Math.abs(cam.near - nearP) > 0.01 || cam.aspect !== window.innerWidth / Math.max(1, window.innerHeight)) {
     cam.fov = fov; cam.near = nearP; cam.aspect = window.innerWidth / Math.max(1, window.innerHeight); cam.updateProjectionMatrix();
@@ -458,24 +583,71 @@ function place(dt, intent, near) {
   G.points.userData.update(cam, pxPerRad);
   // the shadow map follows the shuttle (held over the ship)
   const tgt = [clamp(f.pos[0], -2300, 2300), clamp(f.pos[1], -300, 500), clamp(f.pos[2], -350, 350)];
-  G.sun1.target.position.set(...tgt);
-  G.sun1.position.set(...add(tgt, mul(SUN1.dir, 6000)));
   // exposure: the arrival still's, easing down a little as a lit planet fills the view
   const nw = live[near.i];
   const ang = Math.asin(clamp(nw.R / Math.max(nw.R, len(sub(nw.pos, cp))), 0, 1));
   const fill = clamp(ang / ((cam.fov * DEG) / 2), 0, 1);
   // ... and easing up (over about 2.5 s) as the camera gets in close to the hull, back down in open light
-  const hullK = 1 - smooth((field.sample(cp).d - 60) / 400);
+  const hullK = 1 - smooth((camHull - 60) / 400);
   G.hullK = (G.hullK ?? hullK) + (hullK - (G.hullK ?? hullK)) * (dt > 0 ? ease(dt, 2.5) : 1);
   const want = (1.45 - 0.45 * smooth((fill - 0.45) / 0.55)) * (1 + 0.7 * G.hullK);
   G.exposure += (want - G.exposure) * (dt > 0 ? ease(dt, 2.0) : 1);
   G.renderer.toneMappingExposure = G.exposure;
+  canyonLight(dt, cp, tgt);
   // the target ring: tracks the course's world on screen, clamped to the frame edge with a pointer
   placeRing(cam, k);
   // the touch stick
   const st = controls.stick;
   if (st) { stickEl.style.display = 'block'; stickEl.style.left = st.x0 + 'px'; stickEl.style.top = st.y0 + 'px'; stickEl.firstElementChild.style.transform = `translate(${clamp(st.dx, -60, 60)}px, ${clamp(st.dy, -60, 60)}px)`; }
   else stickEl.style.display = 'none';
+}
+
+// ---------------------------------------------------------------- the canyon's light
+// In the lane down the middle of the ship the metal takes the approved hull still's rig (look.js,
+// shot 'hull': frames/hull.jpg) instead of the arrival rig: the pale sun higher and from further
+// port, so it reaches the lane floor in shafts; the red sun and the warm bounce down, a neutral
+// bounce and a cooler sky fill; and the still's warm haze. Only the lights on metal move: the sky
+// and the worlds keep SUN1.dir, so the sun discs never move. The blend cK is the hull ease (2.5 s)
+// times a lane mask on the camera, itself eased (1 s: 2.2 s from 90% to 10%); the haze also takes the unsmoothed mask, so
+// it is gone before the camera clears the walls (else the far hull washes out).
+// LANE is copied from hull.js (const LANE, which shapes the lane); keep the two the same.
+const LANE = { z0: -10, z1: 100, x0: -1120, x1: 1700 };   // source: hull.js LANE
+const LANE_SLACK = 30, LANE_TOP = 150, LANE_SOFT = 40;
+const RIG = {
+  arrival: { s1: 1.0, s2: 0.45, bounce: [0.55, 0.38, 0.24], bounceI: 0.42, bounceUp: 0.35, sky: [0.19, 0.17, 0.19], ground: [0.065, 0.042, 0.025], half: 1400, nb: 1.0,
+    fog: [0.05, 0.032, 0.018], fogD: 0.00016 },
+  canyon: { dir: norm(dirYP(-68, 38)), s1: 1.9, s2: 0.14, bounce: [0.46, 0.42, 0.40], bounceI: 0.75, bounceUp: 0.25, sky: [0.15, 0.17, 0.23], ground: [0.09, 0.07, 0.05], half: 1000, nb: 0.6,
+    fog: [0.22, 0.12, 0.045], fogD: 0.0009 },
+};
+function laneMask(p) {
+  const out = Math.max(LANE.x0 - LANE_SLACK - p[0], p[0] - LANE.x1 - LANE_SLACK, LANE.z0 - LANE_SLACK - p[2], p[2] - LANE.z1 - LANE_SLACK, 0);
+  const xc = clamp(p[0], LANE.x0, LANE.x1), zc = clamp(p[2], LANE.z0, LANE.z1);
+  const over = p[1] - (G.deckAt(xc, zc) + LANE_TOP);
+  return (1 - smooth(out / LANE_SOFT)) * (1 - smooth(over / LANE_SOFT + 0.5));
+}
+function canyonLight(dt, cp, tgt) {
+  const m = laneMask(cp);
+  const want = G.hullK * m;
+  G.cK = G.cK === undefined || !(dt > 0) ? want : G.cK + (want - G.cK) * ease(dt, 1.0);
+  const c = smooth(G.cK), A = RIG.arrival, B = RIG.canyon, L = G.lights;
+  const mix = (a, b) => a + (b - a) * c;
+  const dir = c > 0 ? norm(lerp3(SUN1.dir, B.dir, c)) : SUN1.dir;
+  G.sun1.target.position.set(...tgt);
+  G.sun1.position.set(...add(tgt, mul(dir, 6000)));
+  G.sun1.intensity = mix(A.s1, B.s1);
+  G.sun2.intensity = mix(A.s2, B.s2);
+  L.bounce.color.setRGB(...lerp3(A.bounce, B.bounce, c));
+  L.bounce.intensity = mix(A.bounceI, B.bounceI);
+  L.bounce.position.set(-dir[0] * 9000, mix(A.bounceUp, B.bounceUp) * 9000, -dir[2] * 9000);
+  L.amb.color.setRGB(...lerp3(A.sky, B.sky, c));
+  L.amb.groundColor.setRGB(...lerp3(A.ground, B.ground, c));
+  const half = Math.round(mix(A.half, B.half));
+  const sc = G.sun1.shadow.camera;
+  if (sc.right !== half) { sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.updateProjectionMatrix(); }
+  G.sun1.shadow.normalBias = mix(A.nb, B.nb);
+  const fk = smooth(Math.min(G.cK, m));
+  L.fogC.value.setRGB(...lerp3(A.fog, B.fog, fk));
+  L.fogD.value = A.fogD + (B.fogD - A.fogD) * fk;
 }
 
 const ringEl = $('target');
@@ -522,14 +694,26 @@ function frameStats() {
   const iv = intervals.map((x) => x[1]);
   return { medianMs: +median(iv).toFixed(2), worstMs: +(iv.length ? Math.max(...iv) : 0).toFixed(2), frames: iv.length, workMedianMs: +median(works.map((x) => x[1])).toFixed(2) };
 }
+// The pixel ratio: down a step after 2 s slower than 20 ms a frame; up a step after a spell at the
+// display's own frame interval. The interval is vsync-quantised (it never falls below 16.7 ms on a
+// 60 Hz display), so "fast" means at the lowest median seen (with 20% headroom, never stricter than
+// the old 14 ms), not under a fixed number. A climb that is undone within 5 s doubles the wait before
+// the next try (8 s, 16, 32 ... up to 2 min), so a GPU that cannot hold the higher ratio is not
+// asked every few seconds.
 function governor(now) {
   if (fixedDpr || now - govLast < 1000) return;
   govLast = now;
   const st = frameStats();
   if (st.frames < 5) return;
-  if (st.medianMs > 20) { govSlow++; govFast = 0; } else if (st.medianMs < 14) { govFast++; govSlow = 0; } else { govSlow = 0; govFast = 0; }
-  if (govSlow >= 2 && dpr > 1) { dpr = Math.max(1, +(dpr - 0.25).toFixed(2)); govSlow = 0; resize(); }
-  if (govFast >= 8 && dpr < dprCap) { dpr = Math.min(dprCap, +(dpr + 0.25).toFixed(2)); govFast = 0; resize(); }
+  govBase = Math.min(govBase, Math.max(4, st.medianMs));
+  const fastBelow = Math.max(14, govBase * 1.2);
+  if (st.medianMs > 20) { govSlow++; govFast = 0; } else if (st.medianMs < fastBelow) { govFast++; govSlow = 0; } else { govSlow = 0; govFast = 0; }
+  if (govSlow >= 2 && dpr > 1) {
+    dpr = Math.max(1, +(dpr - 0.25).toFixed(2)); govSlow = 0;
+    if (now - govRaisedAt < 5000) govWait = Math.min(120, govWait * 2);
+    resize();
+  }
+  if (govFast >= govWait && dpr < dprCap) { dpr = Math.min(dprCap, +(dpr + 0.25).toFixed(2)); govFast = 0; govRaisedAt = now; resize(); }
 }
 function readout() {
   const st = frameStats(), s = API.state();
@@ -570,7 +754,8 @@ async function onDeviceLost(info) {
   API.lastLoss = { api: info?.api, reason: info?.reason || null };
   const old = G; G = null;
   if (running) { try { old.renderer.setAnimationLoop(null); } catch { /* lost */ } running = false; }
-  try { old.renderer.domElement.remove(); old.renderer.dispose(); } catch { /* lost */ }
+  try { old.renderer.domElement.remove(); } catch { /* gone */ }
+  disposeRenderer(old.renderer);
   if (API.losses > 2) { rebuilding = false; poster('The graphics device was lost and could not be restarted.', 'device lost three times'); return; }
   try { await startGraphics(); } catch (e) { poster('The graphics device was lost and could not be restarted.', e); }
   rebuilding = false;
