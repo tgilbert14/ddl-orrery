@@ -144,7 +144,7 @@ export function createSound(opts = {}) {
   const seed = opts.seed != null ? opts.seed >>> 0 : (Date.now() ^ 0x5bd1e995) >>> 0;   // every visit differs
   const rnd = mulberry32(seed), ev = mulberry32(seed ^ 0x51ed270b);
   const bedOnly = !!opts.bedOnly;   // tests: the continuous beds alone, no events
-  let ctx = null, g = null, dead = false, muted = !!opts.muted, disposed = false, hidden = false, visHandler = null;
+  let ctx = null, g = null, dead = false, muted = !!opts.muted, disposed = false, hidden = false;
   let ready = Promise.resolve(false);
   const st = { nodes: 0, log: [], nextBeat: 0, nextMetal: 0, lastMetal: '', nextReply: 0, nextBreath: 0, nextFar: 0, lastFar: '',
     world: {}, plate: null, boostWas: false, nextServo: 0, descentSlug: null, near: 0 };
@@ -549,6 +549,7 @@ export function createSound(opts = {}) {
   // ---------------------------------------------------------------- per frame
   function update(s) {
     if (!ctx || !g || dead || !s) return;
+    if (!external && ctx.state !== 'running') return;   // asleep (hidden, muted, interrupted): nothing to schedule
     try {
       const t = now(), M = ORBIT_MIX;
       const pull = clamp(s.pull || 0), duck = 1 - 0.85 * pull;
@@ -692,12 +693,74 @@ export function createSound(opts = {}) {
     } catch { /* the loop never throws for sound */ }
   }
 
+  // ---- the context's life (owned contexts only; an offline or supplied context is the caller's).
+  // While the page is hidden or the sound is muted the whole graph is suspended, not just silenced:
+  // the level is brought to zero first, then the context sleeps, so there is no click at either edge.
+  // If the browser or the OS takes the context away itself (iOS 'interrupted', a call, a bfcache
+  // return), the next gesture, or the page coming back into view, brings it back. Every return
+  // starts from silence and comes in over half a second, like a short arrival.
+  let ownSuspend = false, sleepTimer = 0, gone = false, listeners = [];
+  const SLEEP_AFTER = 250;   // ms: the hide fade (60 ms) and the mute ramp (tau 20 ms) have settled
+  const wantRun = () => !hidden && !muted && !gone && !disposed && !dead;
+  const listenOn = (tgt, type, fn, o) => { tgt.addEventListener(type, fn, o); listeners.push([tgt, type, fn, o]); };
+  function fadeIn() {
+    // scheduled on the context clock, so if the context is asleep it starts the moment it wakes
+    if (!g) return;
+    try { const t = now(); g.fade.gain.cancelScheduledValues(t); g.fade.gain.setValueAtTime(0, t); g.fade.gain.linearRampToValueAtTime(hidden ? 0 : 1, t + 0.5); } catch { /* gone */ }
+  }
+  function wake() {
+    // synchronous, so it counts inside a gesture; never throws
+    if (external || !ctx || dead || ctx.state === 'running' || ctx.state === 'closed') return null;
+    clearTimeout(sleepTimer); sleepTimer = 0;
+    if (ctx.currentTime > 0) fadeIn();   // (never ran yet: the arrival's own two-second ramp stands)
+    ownSuspend = false;
+    try { return ctx.resume().catch(() => {}); } catch { return null; }
+  }
+  function sleepSoon(ms = SLEEP_AFTER) {
+    if (external || !ctx || sleepTimer) return;
+    sleepTimer = setTimeout(() => {
+      sleepTimer = 0;
+      if (wantRun() || !ctx || ctx.state !== 'running') return;
+      ownSuspend = true;
+      try { ctx.suspend().catch(() => {}); } catch { /* gone */ }
+    }, ms);
+  }
+  function settle() {
+    // run when wanted, sleep when not
+    if (external || !ctx || dead) return;
+    if (wantRun()) { clearTimeout(sleepTimer); sleepTimer = 0; if (ctx.state !== 'running') wake(); }
+    else sleepSoon();
+  }
+  function onState() {
+    if (!ctx || disposed || dead) return;
+    const s = ctx.state;
+    if (s === 'running') { ownSuspend = false; if (!wantRun()) sleepSoon(); return; }
+    if (s === 'closed') return;
+    // 'suspended' or 'interrupted' that we did not ask for: start the next return from silence,
+    // and try once now (it may only take on the next gesture)
+    if (!ownSuspend) { if (ctx.currentTime > 0) fadeIn(); if (wantRun()) wake(); }
+  }
+  function onGesture() { if (wantRun() && ctx && ctx.state !== 'running') wake(); }
   function onVisibility() {
     hidden = document.hidden;
     if (!g) return;
-    try { g.fade.gain.cancelScheduledValues(now()); set(g.fade.gain, hidden ? 0 : 1, hidden ? 0.05 : 0.3); } catch { /* gone */ }
+    if (hidden) {
+      try { const t = now(); g.fade.gain.cancelScheduledValues(t); g.fade.gain.setValueAtTime(g.fade.gain.value, t); g.fade.gain.linearRampToValueAtTime(0, t + 0.06); } catch { /* gone */ }
+      if (!external) sleepSoon();
+    } else if (!external && ctx && ctx.state !== 'running') settle();
+    else { try { g.fade.gain.cancelScheduledValues(now()); set(g.fade.gain, 1, 0.3); } catch { /* gone */ } if (!external) settle(); }
+  }
+  function onPageHide() { gone = true; clearTimeout(sleepTimer); sleepTimer = 0; if (ctx && ctx.state === 'running') { ownSuspend = true; try { ctx.suspend().catch(() => {}); } catch { /* gone */ } } }
+  function onPageShow() { gone = false; hidden = document.hidden; settle(); }
+  function listen() {
+    listenOn(document, 'visibilitychange', onVisibility);
+    listenOn(window, 'pagehide', onPageHide); listenOn(window, 'pageshow', onPageShow);
+    // the gestures that may wake an audio context (touch counts on pointerup/touchend, not pointerdown)
+    for (const type of ['pointerup', 'touchend', 'click', 'keydown', 'mousedown']) listenOn(window, type, onGesture, { capture: true, passive: true });
+    try { ctx.addEventListener('statechange', onState); listeners.push([ctx, 'statechange', onState]); } catch { /* old engine */ }
   }
   function start() {
+    // safe to call straight from a gesture handler: the context is made and resumed before any await
     if (dead || disposed) return Promise.resolve(false);
     try {
       if (!ctx) {
@@ -706,7 +769,7 @@ export function createSound(opts = {}) {
           const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
           if (!AC) { dead = true; return Promise.resolve(false); }
           ctx = new AC();
-          visHandler = onVisibility; document.addEventListener('visibilitychange', visHandler); hidden = document.hidden;
+          hidden = document.hidden; listen();
         }
         const resumed = external || ctx.state === 'running' ? Promise.resolve() : ctx.resume();
         ready = new Promise((r) => setTimeout(r, 0)).then(() => {
@@ -714,24 +777,29 @@ export function createSound(opts = {}) {
           build();
           g.fade.gain.setValueAtTime(0, now());
           g.fade.gain.linearRampToValueAtTime(hidden ? 0 : 1, now() + 2.0);   // arrival: in over about two seconds
+          if (!external && !wantRun()) sleepSoon();   // arrived muted or hidden: build, then sleep
           return true;
         }).catch(() => { dead = true; return false; });
-        return Promise.all([ready, resumed.catch(() => {})]).then(([ok]) => !!ok && !dead && (!!external || ctx.state === 'running'));
+        return Promise.all([ready, resumed.catch(() => {})]).then(([ok]) => !!ok && !dead && (!!external || ctx.state === 'running' || !wantRun()));
       }
       if (external) return ready;
-      const again = ctx.state === 'running' || ctx.state === 'closed' ? Promise.resolve() : ctx.resume();
-      return Promise.all([ready, again.catch(() => {})]).then(([ok]) => !!ok && !dead && ctx.state === 'running');
+      // again (a later gesture): wake it if it should be playing, synchronously
+      const again = wantRun() ? wake() : null;
+      return Promise.all([ready, again || Promise.resolve()]).then(([ok]) => !!ok && !dead && (ctx.state === 'running' || !wantRun()));
     } catch { dead = true; return Promise.resolve(false); }
   }
   function setMuted(m) {
     muted = !!m;
     if (!g || dead) return;
     try { g.mute.gain.cancelScheduledValues(now()); set(g.mute.gain, muted ? 0 : 1, muted ? 0.02 : 0.15); } catch { /* gone */ }
+    if (!external) settle();   // muted: sleep once the ramp has settled; unmuted: wake (inside the click)
   }
   function dispose() {
     if (disposed) return;
     disposed = true; dead = true;
-    if (visHandler) document.removeEventListener('visibilitychange', visHandler);
+    clearTimeout(sleepTimer); sleepTimer = 0;
+    for (const [tgt, type, fn, o] of listeners) { try { tgt.removeEventListener(type, fn, o); } catch { /* gone */ } }
+    listeners = [];
     if (!ctx) return;
     const c = ctx, graph = g;
     try { if (graph) { graph.fade.gain.cancelScheduledValues(c.currentTime); graph.fade.gain.setTargetAtTime(0, c.currentTime, 0.03); } } catch { /* gone */ }
