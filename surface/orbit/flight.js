@@ -3,7 +3,9 @@
 // the nearest surface: slow along the hull, so the city's scale reads; fast in open space, so any
 // world is a short flight). Closing on the ship, the cap looks ahead (as it does for a world), so a
 // fast run at the hull brakes before it. Metal pushes back softly (field.js): you can skim, never
-// pass through; a fast move is taken in steps no longer than the push band near the ship.
+// pass through; a fast move is taken in steps no longer than the push band near the ship. Pressed
+// against metal, the move slides along it (the part into the metal is dropped, and the speed with
+// it), so a run into a post or a wall glides off rather than sticking while the speed reads on.
 // Far out (past the outer worlds) the speed away from the ship is reined in smoothly, so the orrery
 // never falls behind the camera's far plane and home is always a short flight.
 // An autopilot course turns smoothly toward a world, cruises, and slows into its approach.
@@ -26,6 +28,7 @@ export const FLY = {
   outFrom: 110000, outTo: 230000, tauOut: 0.5,   // the outer bound: outward speed eases to nothing
   brakeT: 0.3, brakeFloor: 400,   // never closing on metal faster than its distance / brakeT (above brakeFloor m/s)
   maxSteps: 200,
+  tauSlide: 0.12,   // s: pressed into metal, the speed eases to the part of it along the surface
 };
 const smooth01 = (t) => { const c = t < 0 ? 0 : t > 1 ? 1 : t; return c * c * (3 - 2 * c); };
 
@@ -34,14 +37,14 @@ export function dirOf(yaw, pitch) { return [Math.cos(pitch) * Math.cos(yaw), Mat
 export function createFlight(pose) {
   const s = {
     pos: [...pose.pos], yaw: pose.yaw, pitch: pose.pitch, speed: pose.speed ?? 30, cap: FLY.capMin,
-    yawRate: 0, pitchRate: 0, bank: 0, room: 1e9, vel: [0, 0, 0], apSlug: null, lastSteer: 0, pushed: 0,
+    yawRate: 0, pitchRate: 0, bank: 0, room: 1e9, vel: [0, 0, 0], apSlug: null, lastSteer: 0, pushed: 0, contactN: null,
   };
   function setPose(p) {
     if (p.pos) s.pos = [...p.pos];
     if (p.yaw !== undefined) s.yaw = p.yaw;
     if (p.pitch !== undefined) s.pitch = p.pitch;
     if (p.speed !== undefined) s.speed = p.speed;
-    s.yawRate = 0; s.pitchRate = 0; s.bank = 0;
+    s.yawRate = 0; s.pitchRate = 0; s.bank = 0; s.contactN = null;
   }
   // env: { field, room (m to the nearest surface), target: { pos, R } | null, intent, mode: 'arrival' | 'flight' }
   function update(dt, env) {
@@ -144,7 +147,21 @@ export function createFlight(pose) {
       if (frac > 0) s.speed = Math.min(s.speed, Math.max(FLY.brakeFloor, Math.max(0, here.d) / FLY.brakeT) / frac);
     }
     // ---- move, then metal pushes back
-    s.vel = f.map((v) => v * s.speed);
+    // last frame hit metal (inside the hard band, not the soft skim) and the heading is still into
+    // it: slide along it. Only the part of the heading along the surface moves you, and the speed
+    // eases to that part, so a run straight at a post or a wall stops honestly and a slanted one
+    // glides off. (The field may not see a thin post from beside it, so the hit's own way out is
+    // kept from last frame rather than sampled here.)
+    const dir = [f[0], f[1], f[2]], cn = s.contactN;
+    s.contactN = null;
+    if (cn && env.field) {
+      const fn = f[0] * cn[0] + f[1] * cn[1] + f[2] * cn[2];
+      if (fn < 0) {
+        for (let k = 0; k < 3; k++) dir[k] -= fn * cn[k];
+        s.speed += (s.speed * Math.hypot(dir[0], dir[1], dir[2]) - s.speed) * ease(dt, FLY.tauSlide);
+      }
+    }
+    s.vel = dir.map((v) => v * s.speed);
     s.pushed = 0;
     if (!env.field) { for (let k = 0; k < 3; k++) s.pos[k] += s.vel[k] * dt; return s; }
     // in steps: far from the ship's box one step covers the clear distance; inside it no step is
@@ -154,7 +171,7 @@ export function createFlight(pose) {
     let left = L;
     for (let n = 1; left > 1e-9; n++) {
       const h = n >= FLY.maxSteps ? left : Math.min(left, Math.max(FLY.margin, env.field.clear(s.pos) - FLY.margin));
-      for (let k = 0; k < 3; k++) s.pos[k] += f[k] * h;
+      for (let k = 0; k < 3; k++) s.pos[k] += dir[k] * h;
       left -= h;
       const dts = L > 0 ? dt * (h / L) : dt;
       // two passes, as always; then, if the second pushed, more until the point is out of the metal
@@ -165,10 +182,13 @@ export function createFlight(pose) {
         const push = iter >= 2 ? FLY.hard - fs.d : (FLY.margin - fs.d) * Math.min(1, dts * 6) + Math.max(0, FLY.hard - fs.d);
         for (let k = 0; k < 3; k++) s.pos[k] += fs.n[k] * push;
         s.pushed = Math.max(s.pushed, push);
-        const into = -(f[0] * fs.n[0] + f[1] * fs.n[1] + f[2] * fs.n[2]);
+        const dn = dir[0] * fs.n[0] + dir[1] * fs.n[1] + dir[2] * fs.n[2], into = -dn / (Math.hypot(dir[0], dir[1], dir[2]) || 1);
         if (into > 0 && iter < 2) {
           const k = 1 - Math.min(0.6, into * dts * 2.5);
           s.speed *= k; left *= k;
+          // a hit (not the soft skim): the rest of this frame's move slides along the surface, and
+          // so does the next frame's
+          if (fs.d < FLY.hard) { for (let j = 0; j < 3; j++) dir[j] -= dn * fs.n[j]; s.contactN = [fs.n[0], fs.n[1], fs.n[2]]; }
         }
       }
     }
