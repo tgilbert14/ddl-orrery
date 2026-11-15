@@ -2,9 +2,9 @@
 // a faint dust band, both suns as discs with exponential halos) and one instanced point pass of
 // seeded stars. Both follow the camera, so they read as infinitely far.
 // The dome's three noise fields never change, so they are baked once, on the first frame the dome
-// is drawn (behind the arrival veil), into an equirectangular half-float texture and sampled from
-// there; the band, lanes, knots and nebula are then shaped from those samples per pixel exactly as
-// before, and the suns' discs and halos stay analytic.
+// is drawn (behind the arrival veil), into an equirectangular texture and sampled from there (or,
+// where bakes are off, worked out per pixel); the band, lanes, knots and nebula are then shaped from
+// those samples per pixel exactly as before, and the suns' discs and halos stay analytic.
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec3, positionLocal, normalize, dot, exp, acos, clamp, smoothstep, mix, pow, max, abs,
@@ -64,11 +64,91 @@ export function skyColor(rd) {
   return skyShade(rd, ...skyNoise(rd));
 }
 
-// the baked noise: longitude across, latitude up, half float (16 MB). At 2048 x 1024 the finest
-// octave spans about 4.5 texels at the equator, and the shaped sky differs from the outright one
-// by at most 2/255 in any pixel of the stills (1024 x 512 reached 5/255).
-const BAKE_W = 2048, BAKE_H = 1024;
-function bakedSkyNoise() {
+// ---- the bakes. The sky's noise and the hull's soot and grime never change, so they are rendered
+// once into textures and read back with lookups. How they are stored is chosen once per renderer,
+// from its real limits, on the first build of a material that uses them:
+//   '8bit'  8-bit targets, each value packed as v * k + 0.5 (the default: 11.6 MB in all, and
+//           against half floats no pixel of the stills or of the flown close-ups moves more than 1/255)
+//   'half'  half-float targets, 23.2 MB (only with ?bakes=half, and only where the renderer can draw
+//           into them: on WebGL2 that needs EXT_color_buffer_float or EXT_color_buffer_half_float and a
+//           probe target that comes out complete; WebGPU always can). Otherwise it falls to 8-bit.
+//   'off'   no textures: the noise worked out per pixel, as before the bakes (?bakes=off, or a
+//           renderer whose texture limit is under 2048)
+// Every bake is 2048 or under per side, WebGL2's guaranteed minimum.
+export const BAKE_MAX = 2048;
+const BAKES_Q = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('bakes');
+const modes = new WeakMap();
+// what was chosen, and what the bakes hold (for the test pages)
+export const bakeReport = { mode: null, reason: '', maxTexture: 0, textures: [], bytes: 0 };
+export const bakeTargets = new Map();   // name -> render target, for reading a bake back in tests
+
+function textureLimit(renderer) {
+  const be = renderer.backend;
+  if (be && be.isWebGLBackend) return be.gl.getParameter(be.gl.MAX_TEXTURE_SIZE);
+  return be?.device?.limits?.maxTextureDimension2D ?? 8192;
+}
+
+function halfRenderable(renderer) {
+  const be = renderer.backend;
+  if (!be || !be.isWebGLBackend) return { ok: true, why: 'WebGPU draws into half floats' };
+  const gl = be.gl, ext = be.extensions;
+  if (!ext.has('EXT_color_buffer_float') && !ext.has('EXT_color_buffer_half_float')) return { ok: false, why: 'no float colour buffer extension' };
+  // the extension is not the whole story on every driver: make a tiny target of each kind and ask
+  const fbWas = gl.getParameter(gl.FRAMEBUFFER_BINDING), texWas = gl.getParameter(gl.TEXTURE_BINDING_2D);
+  const fb = gl.createFramebuffer(), tex = [];
+  let ok = true;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  for (const f of [gl.RGBA16F, gl.R16F]) {
+    const t = gl.createTexture(); tex.push(t);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, f, 4, 4);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) ok = false;
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbWas);
+  gl.bindTexture(gl.TEXTURE_2D, texWas);
+  gl.deleteFramebuffer(fb);
+  tex.forEach((t) => gl.deleteTexture(t));
+  return { ok, why: ok ? 'half-float targets complete' : 'half-float target incomplete' };
+}
+
+export function bakeMode(renderer) {
+  if (modes.has(renderer)) return modes.get(renderer);
+  const max = textureLimit(renderer);
+  let mode = '8bit', why = 'default';
+  if (max < BAKE_MAX) { mode = 'off'; why = 'texture limit ' + max; }
+  else if (BAKES_Q === 'off' || BAKES_Q === '8bit') { mode = BAKES_Q; why = '?bakes=' + BAKES_Q; }
+  else if (BAKES_Q === 'half') { const h = halfRenderable(renderer); mode = h.ok ? 'half' : '8bit'; why = '?bakes=half: ' + h.why; }
+  modes.set(renderer, mode);
+  Object.assign(bakeReport, { mode, reason: why, maxTexture: max });
+  if (mode === 'off') { bakeReport.textures = []; bakeReport.bytes = 0; }
+  return mode;
+}
+
+// a baked field: `fn` gives the vec4 values at the target's uv. In 8-bit a value v is stored as
+// v * k + 0.5 (k per field, from the measured range of its noise) and unpacked by read(), which
+// takes a sampled value (or a blend of them).
+export function bakeField(name, mode, fn, w, h, { red = false, k = 0.4 } = {}) {
+  if (w > BAKE_MAX || h > BAKE_MAX) throw new Error(`bake ${name} ${w}x${h} is over ${BAKE_MAX}`);
+  const half = mode === 'half';
+  const node = rtt(half ? fn : Fn(() => fn.mul(k).add(0.5))(), w, h, {
+    type: half ? THREE.HalfFloatType : THREE.UnsignedByteType,
+    format: red ? THREE.RedFormat : THREE.RGBAFormat, autoUpdate: false, depthBuffer: false, generateMipmaps: false,
+  });
+  node.renderTarget.texture.name = name;
+  bakeTargets.set(name, node.renderTarget);
+  const bytes = w * h * (red ? 1 : 4) * (half ? 2 : 1);
+  bakeReport.textures = bakeReport.textures.filter((t) => t.name !== name).concat([{ name, w, h, format: (red ? 'R' : 'RGBA') + (half ? '16F' : '8'), bytes }]);
+  bakeReport.bytes = bakeReport.textures.reduce((a, t) => a + t.bytes, 0);
+  return { node, read: half ? (n) => n : (n) => n.sub(0.5).div(k) };
+}
+
+// the sky's baked noise: longitude across, latitude up. At 2048 x 1024 the finest octave spans about
+// 4.5 texels at the equator, and the shaped sky differs from the outright one by at most 2/255 in any
+// pixel of the stills (1024 x 512 reached 5/255). The three noises span -1.16..1.12, so k = 0.4.
+const SKY_W = 2048, SKY_H = 1024;
+const SKY_K = 0.4;
+function bakedSkyNoise(mode) {
   const bake = Fn(() => {
     const q = uv();
     const lon = q.x.sub(0.5).mul(Math.PI * 2), lat = q.y.sub(0.5).mul(Math.PI);
@@ -76,18 +156,21 @@ function bakedSkyNoise() {
     const [n1, n2, nb] = skyNoise(vec3(cl.mul(cos(lon)), sin(lat), cl.mul(sin(lon))));
     return vec4(n1, n2, nb, 1.0);
   })();
-  const node = rtt(bake, BAKE_W, BAKE_H, { type: THREE.HalfFloatType, autoUpdate: false, depthBuffer: false });
-  node.renderTarget.texture.wrapS = THREE.RepeatWrapping;   // longitude wraps without a seam
-  return node;
+  const f = bakeField('sky', mode, bake, SKY_W, SKY_H, { k: SKY_K });
+  f.node.renderTarget.texture.wrapS = THREE.RepeatWrapping;   // longitude wraps without a seam
+  return f;
 }
 
 export function createSky() {
   const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false });
-  const baked = bakedSkyNoise();
-  mat.colorNode = Fn(() => {
+  const fields = {};
+  mat.colorNode = Fn((builder) => {
+    const mode = bakeMode(builder.renderer);
     const rd = normalize(positionLocal);
-    baked.uvNode = vec2(atan(rd.z, rd.x).div(Math.PI * 2).add(0.5), asin(clamp(rd.y, -1.0, 1.0)).div(Math.PI).add(0.5));
-    const s = baked;
+    if (mode === 'off') return skyColor(rd);
+    const f = fields[mode] ??= bakedSkyNoise(mode);
+    f.node.uvNode = vec2(atan(rd.z, rd.x).div(Math.PI * 2).add(0.5), asin(clamp(rd.y, -1.0, 1.0)).div(Math.PI).add(0.5));
+    const s = f.read(f.node);
     return skyShade(rd, s.x, s.y, s.z);
   })();
   mat.fog = false;
