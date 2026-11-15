@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>The Orrery</title>
+<meta name="description" content="Fly a small golden shuttle around a dead ship the size of a city, and choose one of eleven worlds circling it.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="The Orrery">
+<meta property="og:description" content="A dead ship the size of a city, eleven worlds around it, and a small shuttle to fly between them.">
+<meta property="og:image" content="poster.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Orrery">
+<meta name="twitter:description" content="A dead ship the size of a city, eleven worlds around it, and a small shuttle to fly between them.">
+<meta name="twitter:image" content="poster.jpg">
 <link rel="icon" href="data:,">
 <script type="importmap">
 { "imports": {
@@ -24,13 +33,16 @@
   .ui { position: fixed; z-index: 3; display: flex; gap: 6px; flex-wrap: wrap; }
   #bar { right: 12px; top: 12px; justify-content: flex-end; }
   #home { left: 12px; top: 12px; }
-  /* narrow screens: the bar needs the whole top row, so the way out moves to the bottom left */
-  @media (max-width: 560px) { #home { top: auto; bottom: 12px; } html body #hint { bottom: 62px; } }
+  /* narrow screens: the bar needs the whole top row, so the way out moves to the bottom left, and the
+     fallback messages sit above it */
+  @media (max-width: 560px) { #home { top: auto; bottom: 12px; } html body #hint { bottom: 62px; } #poster p, .nojs { bottom: 58px !important; } }
   .ui button, .ui a, #approach button { font: inherit; font-size: 13px; color: #f4e8d6; background: rgba(20, 13, 9, 0.55); border: 1px solid rgba(244, 232, 214, 0.35);
     border-radius: 999px; padding: 6px 12px; min-height: 34px; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
   .ui button[aria-pressed="true"], .ui button[aria-expanded="true"] { background: rgba(244, 232, 214, 0.86); color: #24170f; }
   .ui a:hover, .ui button:hover { border-color: rgba(244, 232, 214, 0.7); }
+  .ui [hidden], #approach [hidden] { display: none; }   /* the buttons' display would beat the UA's [hidden] */
   button:focus-visible, a:focus-visible { outline: 2px solid #ffd9a0; outline-offset: 2px; }
+  #logTitle:focus { outline: none; }
   /* the world list: real links (they work with no JavaScript and no GPU) */
   #worlds { position: fixed; z-index: 4; right: 12px; top: 56px; margin: 0; padding: 8px; list-style: none; width: 15em; max-width: calc(100% - 24px);
     max-height: calc(100% - 80px); overflow: auto; background: rgba(16, 11, 8, 0.86); border: 1px solid rgba(244, 232, 214, 0.25); border-radius: 10px; }
@@ -42,7 +54,7 @@
   #worlds .tick { margin-left: auto; font-size: 12px; opacity: 0.85; }
   #worlds .tick[hidden] { display: none; }
   body.poster-on #worlds { display: block; left: 12px; right: auto; top: 56px; max-height: calc(100% - 150px); }
-  body.poster-on #hint, body.poster-on #whole, body.poster-on #worldsBtn, body.poster-on #title { display: none; }
+  body.poster-on #hint, body.poster-on #whole, body.poster-on #worldsBtn, body.poster-on #title, body.poster-on #mute { display: none; }
   /* one line that names the place on arrival, then the controls hint */
   #title { position: fixed; z-index: 2; left: 0; right: 0; top: 18%; margin: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.4s ease; }
   #title.on { opacity: 1; }
@@ -51,14 +63,23 @@
   #hint { position: fixed; z-index: 2; left: 50%; bottom: 22px; transform: translateX(-50%); margin: 0; padding: 7px 14px; max-width: calc(100% - 40px);
     text-align: center; background: rgba(20, 13, 9, 0.5); border-radius: 999px; pointer-events: none; transition: opacity 1.6s ease 0.6s; }
   #hint.gone { opacity: 0; }
-  #hint .touch-only { display: none; }
+  #hint .touch-only, #hint .reduced-only { display: none; }
   body.touch #hint .touch-only { display: inline; }
   body.touch #hint .desk-only { display: none; }
+  html.reduced #hint .desk-only, html.reduced #hint .touch-only { display: none; }
+  html.reduced #hint .reduced-only { display: inline; }
   /* a world's name and line, when it is the nearest thing */
-  #plate { position: fixed; z-index: 2; left: 0; right: 0; bottom: 18%; margin: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.2s ease; }
+  /* a soft dark backing (an ellipse that fades out at its edge, and a halo on the letters), so the line
+     holds 4.5:1 over a bright world */
+  #plate { position: fixed; z-index: 2; left: 0; right: 0; bottom: 18%; width: max-content; max-width: calc(100% - 32px); box-sizing: border-box; margin: 0 auto; padding: 12px 36px 14px;
+    text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.2s ease;
+    background: radial-gradient(closest-side, rgba(13, 10, 9, 0.8), rgba(13, 10, 9, 0.74) 62%, rgba(13, 10, 9, 0) 100%);
+    text-shadow: 0 0 2px rgba(13, 10, 9, 0.95), 0 0 8px rgba(13, 10, 9, 0.9), 0 1px 2px rgba(0, 0, 0, 0.8); }
   #plate.on { opacity: 1; }
   #plate b { display: block; font-size: 22px; font-weight: 500; letter-spacing: 0.06em; }
-  #plate span { display: block; margin-top: 2px; font-style: italic; opacity: 0.85; }
+  #plate span { display: block; margin-top: 2px; font-style: italic; }
+  /* reduced motion's approach view: the plate stands clear above Land and Back */
+  body.approach-on #plate { bottom: max(18%, calc(12% + 50px)); }
   /* the course's target: a thin ring on the world, or a pointer at the frame's edge */
   #target { position: fixed; z-index: 2; left: 0; top: 0; width: 0; height: 0; pointer-events: none; --s: 40px; }
   #target[hidden] { display: none; }
@@ -101,10 +122,12 @@
 </script>
 </head>
 <body>
+<h1 class="sr">The Orrery</h1>
 <div id="poster" hidden><p><span class="why"></span> A dead ship the size of a city, and eleven worlds around it. Choose a world from the list.</p></div>
-<div id="stage" aria-label="The Orrery: a small golden shuttle beside a dead ship the size of a city, with eleven worlds around it. Fly with W A S D or the arrow keys, Space to boost; click or tap a world to fly there; M for the whole orrery."></div>
+<div id="stage" role="img" aria-label="A small golden shuttle beside a dead ship the size of a city, with eleven worlds around it" aria-describedby="stageInfo"></div>
+<p id="stageInfo" class="sr">Fly with W A S D or the arrow keys, Space to boost; click or tap a world to fly there; M for the whole orrery. Every world is also in the Worlds list.</p>
 <p id="title" aria-hidden="true"><b>The Orrery</b><span>Eleven worlds, one dead ship.</span></p>
-<p id="hint"><span class="desk-only">W A S D or arrows to fly, Space or Shift to boost. Click a world to fly there; click empty space to steer with the mouse. Hold M for the whole orrery.</span><span class="touch-only">Left thumb steers, right thumb looks. Tap a world to fly there; pinch out for the whole orrery.</span></p>
+<p id="hint"><span class="desk-only">W A S D or arrows to fly, Space or Shift to boost. Click a world to fly there; click empty space to steer with the mouse. Hold M for the whole orrery.</span><span class="touch-only">Left thumb steers, right thumb looks. Tap a world to fly there; pinch out for the whole orrery.</span><span class="reduced-only">Click or tap a world to see it, or open Worlds.</span></p>
 <div id="plate" aria-live="polite"><b></b><span></span></div>
 <div id="target" hidden aria-hidden="true"><i class="ring"></i><i class="arrow"></i></div>
 <div id="dot"></div>
@@ -131,7 +154,7 @@
 </ul>
 <div id="approach" hidden><button type="button" id="land">Land</button><button type="button" id="back">Back</button></div>
 <dialog id="log" aria-labelledby="logTitle">
-  <h2 id="logTitle">Ship's log: the recovered transmission</h2>
+  <h2 id="logTitle" tabindex="-1">Ship's log: the recovered transmission</h2>
   <p class="meta">Desert Data Labs. AZ 184.20, EL −07.14, range unknown.</p>
   <h2>00 Contact. Carrier found.</h2>
   <p>Something dead is keeping time.</p>
@@ -163,7 +186,7 @@
 <div id="flood" aria-hidden="true"></div>
 <div id="veil" aria-hidden="true"></div>
 <pre id="readout" hidden aria-live="off"></pre>
-<noscript><style>#veil,#hint,#whole,#worldsBtn,#logBtn{display:none}#worlds{display:block!important;left:12px;right:auto;top:56px;max-height:calc(100% - 150px)}#poster{display:block!important}</style><p style="position:fixed;left:16px;bottom:16px;z-index:5;margin:0;padding:10px 12px;background:rgba(18,12,8,.8);border-radius:6px">The orbit draws with WebGPU or WebGL and needs JavaScript. Choose a world from the list.</p></noscript>
+<noscript><style>#veil,#hint,#whole,#worldsBtn,#logBtn,#mute{display:none}#worlds{display:block!important;left:12px;right:auto;top:56px;max-height:calc(100% - 150px)}#poster{display:block!important}</style><p class="nojs" style="position:fixed;left:16px;bottom:16px;z-index:5;margin:0;padding:10px 12px;background:rgba(18,12,8,.8);border-radius:6px">The orbit draws with WebGPU or WebGL and needs JavaScript. Choose a world from the list.</p></noscript>
 <script type="module" src="./main.js"></script>
 </body>
 </html>
