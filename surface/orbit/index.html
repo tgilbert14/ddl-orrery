@@ -3,27 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>The Orrery</title>
+<title>The Orrery · a Desert Data Labs experience</title>
 <meta name="description" content="Fly a small golden shuttle around a dead ship the size of a city, and choose one of eleven worlds circling it.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="The Orrery">
 <meta property="og:description" content="A dead ship the size of a city, eleven worlds around it, and a small shuttle to fly between them.">
-<meta property="og:image" content="poster.jpg">
+<meta property="og:image" content="https://tgilbert14.github.io/ddl-orrery/surface/orbit/poster.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="The Orrery">
 <meta name="twitter:description" content="A dead ship the size of a city, eleven worlds around it, and a small shuttle to fly between them.">
-<meta name="twitter:image" content="poster.jpg">
-<link rel="icon" href="data:,">
+<meta name="twitter:image" content="https://tgilbert14.github.io/ddl-orrery/surface/orbit/poster.jpg">
+<meta name="theme-color" content="#0d0a09">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='11' fill='%23f2b45e'/%3E%3Cellipse cx='32' cy='32' rx='27' ry='9' fill='none' stroke='%23f4e8d6' stroke-width='3.5' transform='rotate(-20 32 32)'/%3E%3C/svg%3E">
 <script type="importmap">
 { "imports": {
   "three/webgpu": "../vendor/three-r186/three.webgpu.js",
   "three/tsl": "../vendor/three-r186/three.tsl.js"
 } }
 </script>
+<!-- the renderer and the scene's later modules start downloading with the page, not after main.js asks -->
+<link rel="modulepreload" href="../vendor/three-r186/three.webgpu.js">
+<link rel="modulepreload" href="../vendor/three-r186/three.tsl.js">
+<link rel="modulepreload" href="./stars.js">
+<link rel="modulepreload" href="./shuttle.js">
 <style>
   html, body { margin: 0; height: 100%; background: #0d0a09; color: #efe2cf; overflow: hidden;
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  #stage { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+  #stage { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; }
+  #stage.over { cursor: pointer; }
   #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   body.locked #stage { cursor: none; }
   #poster { position: fixed; inset: 0; z-index: 1; background: #1a110c url(poster.jpg) center / cover no-repeat; }
@@ -36,10 +43,14 @@
   /* narrow screens: the bar needs the whole top row, so the way out moves to the bottom left, and the
      fallback messages sit above it */
   @media (max-width: 560px) { #home { top: auto; bottom: 12px; } html body #hint { bottom: 62px; } #poster p, .nojs { bottom: 58px !important; } }
-  .ui button, .ui a, #approach button { font: inherit; font-size: 13px; color: #f4e8d6; background: rgba(20, 13, 9, 0.55); border: 1px solid rgba(244, 232, 214, 0.35);
-    border-radius: 999px; padding: 6px 12px; min-height: 34px; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
-  .ui button[aria-pressed="true"], .ui button[aria-expanded="true"] { background: rgba(244, 232, 214, 0.86); color: #24170f; }
-  .ui a:hover, .ui button:hover { border-color: rgba(244, 232, 214, 0.7); }
+  .ui button, .ui a, #approach button { font: inherit; font-size: 13px; letter-spacing: 0.02em; color: rgba(244, 232, 214, 0.92); background: rgba(20, 13, 9, 0.5); border: 1px solid rgba(244, 232, 214, 0.26);
+    border-radius: 999px; padding: 6px 13px; min-height: 34px; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; text-decoration: none;
+    -webkit-tap-highlight-color: transparent; transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, opacity 0.5s ease; }
+  .ui button[aria-pressed="true"], .ui button[aria-expanded="true"] { background: rgba(244, 232, 214, 0.16); border-color: rgba(244, 232, 214, 0.78); color: #fff6ea; }
+  .ui a:hover, .ui button:hover, #approach button:hover { border-color: rgba(244, 232, 214, 0.62); color: #fff6ea; background: rgba(20, 13, 9, 0.66); }
+  .ui button:active, #approach button:active { background: rgba(244, 232, 214, 0.22); }
+  /* a phone: the four buttons stay on one row */
+  @media (max-width: 440px) { .ui button, .ui a { padding: 6px 10px; letter-spacing: 0; } #bar { gap: 5px; } }
   .ui [hidden], #approach [hidden] { display: none; }   /* the buttons' display would beat the UA's [hidden] */
   button:focus-visible, a:focus-visible { outline: 2px solid #ffd9a0; outline-offset: 2px; }
   #logTitle:focus { outline: none; }
@@ -56,13 +67,18 @@
   body.poster-on #worlds { display: block; left: 12px; right: auto; top: 56px; max-height: calc(100% - 150px); }
   body.poster-on #hint, body.poster-on #whole, body.poster-on #worldsBtn, body.poster-on #title, body.poster-on #mute { display: none; }
   /* one line that names the place on arrival, then the controls hint */
-  #title { position: fixed; z-index: 2; left: 0; right: 0; top: 18%; margin: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.4s ease; }
-  #title.on { opacity: 1; }
+  /* landscape: below the worlds high in the arrival frame (Velocity sits at 16%); portrait: above them */
+  #title { position: fixed; z-index: 2; left: 0; right: 0; top: 18%; margin: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.9s ease;
+    text-shadow: 0 0 10px rgba(13, 10, 9, 0.85), 0 1px 2px rgba(0, 0, 0, 0.7); }
+  @media (min-aspect-ratio: 1/1) { #title { top: 25%; } }
+  #title.on { opacity: 1; transition-duration: 1.6s; }
   #title b { display: block; font-size: 26px; font-weight: 500; letter-spacing: 0.08em; }
   #title span { display: block; margin-top: 4px; font-size: 14px; opacity: 0.8; }
-  #hint { position: fixed; z-index: 2; left: 50%; bottom: 22px; transform: translateX(-50%); margin: 0; padding: 7px 14px; max-width: calc(100% - 40px);
-    text-align: center; background: rgba(20, 13, 9, 0.5); border-radius: 999px; pointer-events: none; transition: opacity 1.6s ease 0.6s; }
-  #hint.gone { opacity: 0; }
+  /* the hint comes after the title has gone, and goes the moment it has been used */
+  #hint { position: fixed; z-index: 2; left: 50%; bottom: 22px; transform: translateX(-50%); margin: 0; padding: 7px 16px; width: max-content; max-width: calc(100% - 40px); box-sizing: border-box;
+    text-align: center; color: rgba(244, 232, 214, 0.9); background: rgba(20, 13, 9, 0.5); border-radius: 999px; pointer-events: none; transition: opacity 1.4s ease; }
+  #hint.gone { opacity: 0; transition-duration: 0.5s; }
+  body.approach-on #hint { display: none; }
   #hint .touch-only, #hint .reduced-only { display: none; }
   body.touch #hint .touch-only { display: inline; }
   body.touch #hint .desk-only { display: none; }
@@ -81,7 +97,8 @@
   /* reduced motion's approach view: the plate stands clear above Land and Back */
   body.approach-on #plate { bottom: max(18%, calc(12% + 50px)); }
   /* the course's target: a thin ring on the world, or a pointer at the frame's edge */
-  #target { position: fixed; z-index: 2; left: 0; top: 0; width: 0; height: 0; pointer-events: none; --s: 40px; }
+  #target { position: fixed; z-index: 2; left: 0; top: 0; width: 0; height: 0; pointer-events: none; --s: 40px; transition: opacity 0.8s ease; }
+  #target.quiet { opacity: 0; }   /* the world has named itself: the ring has done its work */
   #target[hidden] { display: none; }
   #target .ring { position: absolute; left: calc(var(--s) / -2); top: calc(var(--s) / -2); width: var(--s); height: var(--s); border-radius: 50%;
     border: 1px solid rgba(255, 236, 210, 0.7); box-shadow: 0 0 0 1px rgba(20, 13, 9, 0.35); }
@@ -102,6 +119,8 @@
   #flood { position: fixed; inset: 0; z-index: 7; pointer-events: none; opacity: 0; }
   #fade { position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0; background: #0d0a09; transition: opacity 0.2s linear; }
   #fade.on { opacity: 1; }
+  /* the descent: the chrome steps back as the flood comes up */
+  body.descending .ui, body.descending #target, body.descending #hint, body.descending #title { opacity: 0; transition: opacity 0.4s ease; pointer-events: none; }
   /* reduced motion: a world's fixed approach view, with Land and Back */
   #approach { position: fixed; z-index: 4; left: 50%; bottom: 12%; transform: translateX(-50%); display: flex; gap: 8px; }
   #approach[hidden] { display: none; }
@@ -115,7 +134,7 @@
   dialog button { font: inherit; color: #24170f; background: #f4e8d6; border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   html.reduced #veil { transition: opacity 0.4s linear, visibility 0s linear 0.4s; }
-  @media (prefers-reduced-motion: reduce) { #veil { transition: opacity 0.4s linear, visibility 0s linear 0.4s; } #title, #plate, #hint { transition-duration: 0.3s; } }
+  @media (prefers-reduced-motion: reduce) { #veil { transition: opacity 0.4s linear, visibility 0s linear 0.4s; } #title, #title.on, #plate, #hint, #hint.gone, #target { transition-duration: 0.3s; } }
 </style>
 <script>
   if (new URLSearchParams(location.search).get('reduced') === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('reduced');
@@ -126,13 +145,14 @@
 <div id="poster" hidden><p><span class="why"></span> A dead ship the size of a city, and eleven worlds around it. Choose a world from the list.</p></div>
 <div id="stage" role="img" aria-label="A small golden shuttle beside a dead ship the size of a city, with eleven worlds around it" aria-describedby="stageInfo"></div>
 <p id="stageInfo" class="sr">Fly with W A S D or the arrow keys, Space to boost; click or tap a world to fly there; M for the whole orrery. Every world is also in the Worlds list.</p>
+<p id="stageInfoReduced" class="sr">The view holds still. Click or tap a world, or choose one from the Worlds list, to see it up close; then Land to visit it, or Back to return to this view.</p>
 <p id="title" aria-hidden="true"><b>The Orrery</b><span>Eleven worlds, one dead ship.</span></p>
-<p id="hint"><span class="desk-only">W A S D or arrows to fly, Space or Shift to boost. Click a world to fly there; click empty space to steer with the mouse. Hold M for the whole orrery.</span><span class="touch-only">Left thumb steers, right thumb looks. Tap a world to fly there; pinch out for the whole orrery.</span><span class="reduced-only">Click or tap a world to see it, or open Worlds.</span></p>
+<p id="hint" class="gone"><span class="desk-only">W A S D to fly, Space to boost. Click a world to go there. Hold M for the whole orrery.</span><span class="touch-only">Left thumb flies, right thumb looks. Tap a world to go there.</span><span class="reduced-only">Click or tap a world to see it, or open Worlds.</span></p>
 <div id="plate" aria-live="polite"><b></b><span></span></div>
 <div id="target" hidden aria-hidden="true"><i class="ring"></i><i class="arrow"></i></div>
 <div id="dot"></div>
 <div id="stick"><i></i></div>
-<nav class="ui" id="home" aria-label="Leave the orbit"><a href="../../">Classic hub</a></nav>
+<nav class="ui" id="home" aria-label="Leave the orbit"><a href="../../?classic">Classic hub</a></nav>
 <div class="ui" id="bar">
   <button type="button" id="mute" aria-pressed="false">Sound on</button>
   <button type="button" id="whole" aria-pressed="false">Whole orrery</button>
