@@ -53,7 +53,7 @@ export const ORBIT_MIX = {
   heart: 0.22,        // a rare heartbeat (very close)
   reply: 0.05,        // the 196 -> 185 answer from inside (mostly reverb)
   cluster: 0.02,      // space between: the low cluster
-  shimmer: 0.018,     // ... the metallic shimmer
+  shimmer: 0.013,     // ... the metallic shimmer
   far: 0.05,          // ... a far event (ping, carrier, breath)
   drone: 0.07,        // a world's drone at its threshold
   texture: 0.11,      // ... its signature events at the threshold
@@ -212,7 +212,7 @@ export function createSound(opts = {}) {
     // a faint metallic shimmer: inharmonic high partials drifting in and out, mostly in the cave
     const shG = ctx.createGain(); shG.gain.value = 0; shG.connect(mix);
     const shS = ctx.createGain(); shS.gain.value = 1.5; shG.connect(shS); shS.connect(verb);
-    for (const f of [3117, 4729, 6311, 8893]) {
+    for (const f of [1171, 1723, 2389, 3307]) {   // lowered (owner: the ringing was "a little too high pitch sometimes")
       const o = ctx.createOscillator(); o.frequency.value = f; const og = ctx.createGain(); og.gain.value = 0;
       const lfo = ctx.createOscillator(); lfo.frequency.value = 0.03 + rnd() * 0.05; const ld = ctx.createGain(); ld.gain.value = 0.25;
       lfo.connect(ld); ld.connect(og.gain); o.connect(og); og.connect(shG); o.start(); lfo.start(); sources.push(o, lfo); count(4);
@@ -312,6 +312,10 @@ export function createSound(opts = {}) {
   }
   // a tone that may bend, under an envelope
   function toneEv(when, { type = 'sine', f0, f1 = f0, a = 0.01, d = 1, peak = 0.05, pan = 0, dry = 0.6, wet = 0.6, detune = 0, bendT = null, dest = null }) {
+    // the owner: "make the ringing part a little lower.. or when its higher pitch, make it last
+    // shorter": above 700 Hz a tone's decay, and its share of the long reverb, shrink with its pitch
+    const hk = Math.max(f0, f1) > 700 ? Math.max(0.3, 700 / Math.max(f0, f1)) : 1;
+    d *= hk; wet *= 0.4 + 0.6 * hk; if (bendT != null) bendT *= hk;
     const o = ctx.createOscillator(); o.type = type; o.detune.value = detune;
     o.frequency.setValueAtTime(f0, when);
     if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, when + (bendT ?? a + d));
@@ -338,7 +342,7 @@ export function createSound(opts = {}) {
     } else if (k === 'ticks') {
       const n = 3 + Math.floor(ev() * 5);
       let t = when;
-      for (let i = 0; i < n; i++) { toneEv(t, { f0: 2400 + ev() * 3000, a: 0.002, d: 0.05, peak: L * 0.22, pan: pan + (ev() - 0.5) * 0.3, dry: 0.4, wet: 1 }); t += 0.12 + ev() * 0.6; }
+      for (let i = 0; i < n; i++) { toneEv(t, { f0: 1300 + ev() * 1500, a: 0.002, d: 0.05, peak: L * 0.22, pan: pan + (ev() - 0.5) * 0.3, dry: 0.4, wet: 1 }); t += 0.12 + ev() * 0.6; }
     } else {
       // a distant heavy clank: a dull hit and inharmonic partials with a long tail
       noiseEv(when, { buf: g.brown, type: 'lowpass', f0: 260, f1: 90, q: 0.7, a: 0.006, d: 0.5, peak: L * 2.2, pan, dry: 0.3, wet: 1 });
@@ -358,12 +362,12 @@ export function createSound(opts = {}) {
     const L = ORBIT_MIX.systems, pan = (ev() - 0.5) * 1.4;
     if (kind === 'chirp') {
       // telemetry: blips on three pitches, uneven gaps, and it stops mid-pattern
-      const fs = [1760, 2217, 2637].map((f) => f * (ev() < 0.5 ? 1 : 0.5)), n = 5 + Math.floor(ev() * 10);
+      const fs = [880, 1109, 1319].map((f) => f * (ev() < 0.5 ? 1 : 0.5)), n = 5 + Math.floor(ev() * 10);
       let t = when;
       for (let i = 0; i < n; i++) { toneEv(t, { f0: fs[Math.floor(ev() * 3)], a: 0.004, d: 0.04 + ev() * 0.04, peak: L * 0.18, pan, dry: 0.45, wet: 0.7 }); t += 0.05 + ev() * 0.26; }
     } else if (kind === 'relay') {
       const n = 4 + Math.floor(ev() * 7); let t = when;
-      for (let i = 0; i < n; i++) { noiseEv(t, { type: 'highpass', f0: 2200 + ev() * 1500, q: 0.8, a: 0.002, d: 0.025, peak: L * 0.35, pan, dry: 0.5, wet: 0.6 }); t += 0.08 + ev() * 0.45; }
+      for (let i = 0; i < n; i++) { noiseEv(t, { type: 'highpass', f0: 1400 + ev() * 900, q: 0.8, a: 0.002, d: 0.025, peak: L * 0.35, pan, dry: 0.5, wet: 0.6 }); t += 0.08 + ev() * 0.45; }
     } else if (kind === 'buzz') {
       // a far electrical buzz that flickers on and dies
       const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 110 * (1 + (ev() - 0.5) * 0.01);
@@ -377,7 +381,7 @@ export function createSound(opts = {}) {
       release([o, bp, e, ...out.nodes], t + 0.8);
     } else if (kind === 'whistle') {
       // air through a dead duct: a faint tone that appears for a few seconds and bends away
-      const f = 700 + ev() * 800, dur = 3 + ev() * 3;
+      const f = 380 + ev() * 420, dur = 3 + ev() * 3;
       toneEv(when, { f0: f, f1: f * (ev() < 0.5 ? 0.86 : 1.12), bendT: dur, a: 1.4, d: dur, peak: ORBIT_MIX.whistle, pan, dry: 0.4, wet: 1 });
     } else if (kind === 'stutter') {
       // the air stutters: the room's level flutters for a moment
@@ -404,12 +408,12 @@ export function createSound(opts = {}) {
     const k = pick(['ping', 'carrier', 'voice'].filter((x) => x !== st.lastFar)); st.lastFar = k;
     const pan = (ev() - 0.5) * 1.6, L = ORBIT_MIX.far;
     if (k === 'ping') {
-      toneEv(when, { f0: semi(880, [0, 3, 7][Math.floor(ev() * 3)]), a: 0.005, d: 3.5, peak: L * 0.35, pan, dry: 0.15, wet: 1 });
+      toneEv(when, { f0: semi(440, [0, 3, 7][Math.floor(ev() * 3)]), a: 0.005, d: 3.5, peak: L * 0.35, pan, dry: 0.15, wet: 1 });
     } else if (k === 'carrier') {
       // a dead radio: a carrier that wavers and breaks up in noise
       const dur = 0.5 + ev() * 0.6;
-      toneEv(when, { type: 'square', f0: 1400 + ev() * 300, f1: 1380, a: 0.02, d: dur, peak: L * 0.05, pan, dry: 0.3, wet: 0.9 });
-      noiseEv(when, { f0: 2500, q: 2, a: 0.02, hold: dur * 0.4, d: dur, peak: L * 0.25, pan, dry: 0.3, wet: 0.9 });
+      toneEv(when, { type: 'square', f0: 820 + ev() * 180, f1: 800, a: 0.02, d: dur, peak: L * 0.05, pan, dry: 0.3, wet: 0.9 });
+      noiseEv(when, { f0: 1600, q: 2, a: 0.02, hold: dur * 0.4, d: dur, peak: L * 0.25, pan, dry: 0.3, wet: 0.9 });
     } else {
       // almost a voice: noise through two formants sliding (no words)
       const dur = 2 + ev() * 1.2;
@@ -442,7 +446,7 @@ export function createSound(opts = {}) {
       }
       case 'abyssal':    // a slow downward glide, whale-like; or a deep ping
         if (ev() < 0.65) tE(when, { f0: semi(v.root * 3, v.scale[Math.floor(ev() * 4)]), f1: v.root * 1.4, a: 1.0, d: 4, peak: L * 0.35, pan: P(0), dry: 0.3, wet: 1 }), type = 'glide';
-        else tE(when, { f0: v.root * 4, a: 0.004, d: 4, peak: L * 0.3, pan: P(0), dry: 0.2, wet: 1 }), type = 'deep-ping';
+        else tE(when, { f0: v.root * 2, a: 0.004, d: 4, peak: L * 0.3, pan: P(0), dry: 0.2, wet: 1 }), type = 'deep-ping';
         next = 12 + ev() * 14; break;
       case 'arcadia': {  // a half-broken music box: two or three notes, out of tune, slowing
         const n = 2 + Math.floor(ev() * 2); let t = when, gap = 0.35;
@@ -455,7 +459,7 @@ export function createSound(opts = {}) {
         type = 'music-box'; next = 22 + ev() * 26; break;
       }
       case 'aurora': {   // glassy bowed harmonics
-        const f = semi(v.root * 4, v.scale[[0, 2, 4][Math.floor(ev() * 3)]]);
+        const f = semi(v.root * 2, v.scale[[0, 2, 4][Math.floor(ev() * 3)]]);
         tE(when, { f0: f, a: 2.2, d: 5, peak: L * 0.12, pan: P(-0.2), dry: 0.3, wet: 1, detune: -5 });
         tE(when + 0.3, { f0: f * 1.5, a: 2.5, d: 5, peak: L * 0.07, pan: P(0.2), dry: 0.3, wet: 1, detune: 7 });
         type = 'bowed-glass'; next = 9 + ev() * 10; break;
