@@ -1305,7 +1305,10 @@ warpEl.addEventListener('animationend', endWarp);
    shuttle and fires the warp, then the flood's peak hands over to that page
    instead of the in-page scene. The in-page scene stays for deep links
    (#/world/<slug>), the Grand Tour (the autopilot cannot leave this page)
-   and the no-JS brochure. The surface page links home with ../../#/ . */
+   and the no-JS brochure. The surface page's "Return to orbit" goes to the
+   flyable orbit (../orbit/?from=<slug>), not back here; this page is the
+   classic hub now, reached by hash routes or ?classic (the bare root hands
+   off to surface/orbit/ from build.js's head script). */
 const SURFACES = { 'dust-sea': 'surface/walk/?from=orbit' };
 function surfaceFor(slug) {
   return SURFACES[slug] && !(TourController && TourController.running) ? SURFACES[slug] : null;
