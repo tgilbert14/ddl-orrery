@@ -1,7 +1,11 @@
 // The orbit, flown: the shuttle. Arcade and forgiving: the heading turns with a lag and a bank, the
 // speed eases toward a target, and the speed cap comes from how much room there is (the distance to
 // the nearest surface: slow along the hull, so the city's scale reads; fast in open space, so any
-// world is a short flight). Metal pushes back softly (field.js): you can skim, never pass through.
+// world is a short flight). Closing on the ship, the cap looks ahead (as it does for a world), so a
+// fast run at the hull brakes before it. Metal pushes back softly (field.js): you can skim, never
+// pass through; a fast move is taken in steps no longer than the push band near the ship.
+// Far out (past the outer worlds) the speed away from the ship is reined in smoothly, so the orrery
+// never falls behind the camera's far plane and home is always a short flight.
 // An autopilot course turns smoothly toward a world, cruises, and slows into its approach.
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -17,7 +21,13 @@ export const FLY = {
   margin: 16, hard: 3,
   apTurn: 0.85, // autopilot turn rate (rad/s)
   nearK: 0.32,  // the cap's slope near a world (see update)
+  hullAhead: 0.3,             // s: the hull cap's look-ahead on the closing speed
+  aheadFrom: 30, aheadFull: 150,   // m/s of closing speed over which the look-ahead comes in
+  outFrom: 110000, outTo: 230000, tauOut: 0.5,   // the outer bound: outward speed eases to nothing
+  brakeT: 0.3, brakeFloor: 400,   // never closing on metal faster than its distance / brakeT (above brakeFloor m/s)
+  maxSteps: 200,
 };
+const smooth01 = (t) => { const c = t < 0 ? 0 : t > 1 ? 1 : t; return c * c * (3 - 2 * c); };
 
 export function dirOf(yaw, pitch) { return [Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw)]; }
 
@@ -41,6 +51,18 @@ export function createFlight(pose) {
     const capT = clamp(FLY.capMin + FLY.capK * room, FLY.capMin, FLY.capMax);
     s.capRoom = (s.capRoom ?? s.cap) + (capT - (s.capRoom ?? s.cap)) * ease(dt, capT < (s.capRoom ?? s.cap) ? FLY.tauCap : 1.2);
     s.cap = s.capRoom; s.capWorld = Infinity;
+    // the hull, looked ahead: the room left after closing on the metal for hullAhead seconds. It
+    // applies at once (a falling cap does not wait for tauCap), and only while closing fast, so
+    // skimming along the deck keeps the eased cap it always had.
+    const here = env.field ? env.field.sample(s.pos) : null;
+    if (here && here.d < 1e8) {
+      const closing = Math.max(0, -(s.vel[0] * here.n[0] + s.vel[1] * here.n[1] + s.vel[2] * here.n[2]));
+      const w = clamp((closing - FLY.aheadFrom) / (FLY.aheadFull - FLY.aheadFrom), 0, 1);
+      if (w > 0) {
+        const capAhead = clamp(FLY.capMin + FLY.capK * Math.max(0, Math.min(room, here.d) - closing * FLY.hullAhead), FLY.capMin, FLY.capMax);
+        if (capAhead < s.cap) s.cap += (capAhead - s.cap) * w;
+      }
+    }
     // near a world the cap closes faster (its slope falls to nearK inside 2 radii of the surface), so
     // the last two radii down to the air take about four to five seconds: the planet fills the sky
     // first. The world's ceiling applies at once and looks ahead, so a fast arrival brakes into it.
@@ -62,8 +84,8 @@ export function createFlight(pose) {
       const t = env.target.pos;
       let d = [t[0] - s.pos[0], t[1] - s.pos[1], t[2] - s.pos[2]];
       // the ship in the way: lean the course out along the way out of the metal
-      if (env.field) {
-        const fs = env.field.sample(s.pos);
+      if (here) {
+        const fs = here;
         if (fs.d < 700) {
           const dl = Math.hypot(...d), k = ((700 - fs.d) / 700) * 1.6;
           const into = -(d[0] * fs.n[0] + d[1] * fs.n[1] + d[2] * fs.n[2]) / dl;
@@ -102,22 +124,52 @@ export function createFlight(pose) {
       want = it.thrust > 0 ? s.cap * k : it.thrust < 0 ? 0 : (it.touchCruise ? FLY.touchCruise : FLY.idle) * s.cap * (it.boost ? FLY.boost : 1);
       want = Math.min(want, s.capWorld);   // boost never outruns a world's approach
     }
-    const tau = want > s.speed ? FLY.tauUp : (s.speed > s.cap * (it && it.boost ? FLY.boost : 1) ? 0.22 : FLY.tauDown);
-    s.speed += (want - s.speed) * ease(dt, tau);
-    // ---- move, then metal pushes back
     const f = dirOf(s.yaw, s.pitch);
+    // ---- the outer bound: past outFrom the speed away from the ship eases down, to nothing by outTo
+    // (turning back is never held; a course home runs at the full cap)
+    let outCap = Infinity;
+    const R = Math.hypot(s.pos[0], s.pos[1], s.pos[2]);
+    if (R > FLY.outFrom) {
+      const outward = (f[0] * s.pos[0] + f[1] * s.pos[1] + f[2] * s.pos[2]) / R;
+      if (outward > 0) outCap = (FLY.capMax * FLY.boost * (1 - smooth01((R - FLY.outFrom) / (FLY.outTo - FLY.outFrom)))) / outward;
+      want = Math.min(want, outCap);
+    }
+    const tau = want > s.speed ? FLY.tauUp : (s.speed > s.cap * (it && it.boost ? FLY.boost : 1) ? 0.22 : s.speed > outCap ? FLY.tauOut : FLY.tauDown);
+    s.speed += (want - s.speed) * ease(dt, tau);
+    // the last guard on a fast closing: at most brakeT seconds from the metal at this speed (only
+    // above brakeFloor, so flight among the structures never feels it; the look-ahead cap above
+    // normally brakes well before this binds)
+    if (here) {
+      const frac = -(f[0] * here.n[0] + f[1] * here.n[1] + f[2] * here.n[2]);
+      if (frac > 0) s.speed = Math.min(s.speed, Math.max(FLY.brakeFloor, Math.max(0, here.d) / FLY.brakeT) / frac);
+    }
+    // ---- move, then metal pushes back
     s.vel = f.map((v) => v * s.speed);
-    for (let k = 0; k < 3; k++) s.pos[k] += s.vel[k] * dt;
     s.pushed = 0;
-    if (env.field) {
-      for (let iter = 0; iter < 2; iter++) {
+    if (!env.field) { for (let k = 0; k < 3; k++) s.pos[k] += s.vel[k] * dt; return s; }
+    // in steps: far from the ship's box one step covers the clear distance; inside it no step is
+    // longer than the push band, so no structure is skipped between one sample and the next (a slow
+    // move is one step, as it always was)
+    const L = s.speed * dt;
+    let left = L;
+    for (let n = 1; left > 1e-9; n++) {
+      const h = n >= FLY.maxSteps ? left : Math.min(left, Math.max(FLY.margin, env.field.clear(s.pos) - FLY.margin));
+      for (let k = 0; k < 3; k++) s.pos[k] += f[k] * h;
+      left -= h;
+      const dts = L > 0 ? dt * (h / L) : dt;
+      // two passes, as always; then, if the second pushed, more until the point is out of the metal
+      // (a push can carry it from one face into the next)
+      for (let iter = 0; iter < 6; iter++) {
         const fs = env.field.sample(s.pos);
-        if (fs.d >= FLY.margin) break;
-        const push = (FLY.margin - fs.d) * Math.min(1, dt * 6) + Math.max(0, FLY.hard - fs.d);
+        if (fs.d >= FLY.margin || (iter >= 2 && fs.d >= 0)) break;
+        const push = iter >= 2 ? FLY.hard - fs.d : (FLY.margin - fs.d) * Math.min(1, dts * 6) + Math.max(0, FLY.hard - fs.d);
         for (let k = 0; k < 3; k++) s.pos[k] += fs.n[k] * push;
         s.pushed = Math.max(s.pushed, push);
         const into = -(f[0] * fs.n[0] + f[1] * fs.n[1] + f[2] * fs.n[2]);
-        if (into > 0) s.speed *= 1 - Math.min(0.6, into * dt * 2.5);
+        if (into > 0 && iter < 2) {
+          const k = 1 - Math.min(0.6, into * dts * 2.5);
+          s.speed *= k; left *= k;
+        }
       }
     }
     return s;
