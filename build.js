@@ -41,11 +41,12 @@ const page = `<!doctype html>
 /* THE FRONT DOOR: the flyable orbit (surface/orbit/) is the main page now.
    A bare visit to the root goes there at once, before anything paints.
    Never redirected: any hash route (#/, #/world/<slug>, the worlds without a
-   surface still open here) and ?classic (the orbit's "Classic hub" link; hash
+   surface still open here), ?story (the prologue's replay) and ?classic (the
+   orbit's "Classic hub" link; hash
    travel inside the hub keeps it in the URL). No JS: the brochure below. */
 (function () {
   try {
-    if (location.hash || /(?:^|[?&])classic(?:[=&]|$)/.test(location.search.slice(1))) return;
+    if (location.hash || /(?:^|[?&])(?:classic|story)(?:[=&]|$)/.test(location.search.slice(1))) return;
     document.documentElement.style.cssText = 'background:#060a18;visibility:hidden';
     location.replace('surface/orbit/' + location.search);
     /* the rest of this page turns into inert text, so the hub never parses,
