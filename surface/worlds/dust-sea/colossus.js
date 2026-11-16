@@ -7,19 +7,26 @@
 // round it. No face, eyes, mouth, segments, rim all round, or round top.
 // (The playbook's "no other creatures" rule is lifted by the owner for this one colossus only.)
 //
+// By day it is felt and heard, never seen (the owner's lead, 16 Nov): no body, no veil, no dome and no
+// shadow are drawn, blended out by the same sun height the shading uses (seen = 1 - day weight); the
+// hush, the swell and its low dust, the sound, the ground wave, the camera and the Pilgrim stay.
+//
 // Beats (seconds at scale 1; ?colossus=fast runs them at 4x):
 //   hush     0-12   the wind ducks, the Pilgrim's hood turns to the bearing, a sub-rumble rises
 //   swell   12-35   a swell runs a curved 600 m path toward the breach rolling low sheets of sand; it
 //                   ends in a 300 m funnel that sinks over its last 6 s
-//   rise    35-55   the column climbs at H/19 m/s to 700-800 m, on the line of the low sun, sand
-//                   pouring off its downwind flank; its shadow's front shows on the far crests from
-//                   42 s, crosses the mid-ground in about 6 s and the near slope in about 2.5 s
-//   call    55-68   it sways (a 24 s period) and sheds three times the sand; the call arrives d/343 s
-//                   after 57 s
+//   rise    35-55   the column climbs at H/19 m/s to 700-800 m, on the line of the low sun, out of torn
+//                   dust and sand falling off its head, sand pouring off its downwind flank; its
+//                   shadow's front shows on the far crests from 42 s and slows as it comes: the last
+//                   60 m to the Pilgrim take 6 s (it arrives at 59 s); the eclipse eases in over 4 s
+//   call    55-68   it sways (a 24 s period, eased out in the fall) and sheds more sand; the call
+//                   arrives d/343 s after 57 s
 //   fall    68-82   it keels over to the side it leans, across the view, and dives into the sand over
-//                   10 s (impact near 79 s); a dome of sand 1.3 km wide and 380 m high rises in 6 s and
-//                   surges outward for 18 s, dark at its core and lit along its top, the body sinking
-//                   under its core; the boom and a small shake arrive d/343 s later, the Pilgrim braces
+//                   10 s (impact near 79 s); the veil round it eases into a dome of sand 1.4 km wide and
+//                   up to 330 m high (a run of uneven heaps) over 3 s, grown in 6 s, surging outward for
+//                   18 s, dark at its core and lit where it is thin on its sunward side; the body fades
+//                   into it over 2.5 s; a ground wave runs out at 120 m/s; the boom and a small shake
+//                   arrive d/343 s later, the Pilgrim braces at the wave
 //   settle  82-110  the dome drifts downwind and thins, the sun comes back, the wind returns, the
 //                   funnel's scar heals
 // The first comes 5 to 8 minutes after the page is ready, then every 12 to 18 minutes (seeded).
@@ -31,8 +38,11 @@
 // ridged noise round the ring, stretched 400 m along it, slow uneven shoulders, one heavy shoulder, an
 // axis kinked up to 0.2 R, a slanted, cleft top) is fixed to the body from the head down, and so are
 // its normals, which each frame only turns with the ring. Its spine is computed in JavaScript and the
-// tube written only when it is drawn. The falling sand is one instanced Sprite of streaks (turned along
-// their motion on screen, lit per streak in the vertex stage). The dome (and before the fall, the veil
+// tube written only when it is drawn. Its top is torn into dust by real alpha measured from the head,
+// its outline frays by the ring's roundness, its lower third is lost in a skirt of dust and haze; it
+// has no depth of its own (nothing is cut out along a hard line, nothing is dithered). The falling
+// sand is one instanced Sprite of streaks (turned along their motion on screen, lit per streak in the
+// vertex stage), shed on the side toward the eye, faded out when let go. The dome (and before the fall, the veil
 // of dust round the body) is one half-ellipsoid mesh whose shader takes the view ray's chord through
 // it as its depth. The ground gets the swell, the funnel, the scar and the shadow (closed forms, one
 // branch on CU.on); the shadow takes the shadow sun's direct light, most of the fill and most of the
@@ -42,7 +52,7 @@
 
 import * as THREE from 'three/webgpu';
 import { Fn, If, uniform, vec2, vec3, vec4, float, clamp, smoothstep, max, min, mix, abs, exp, pow, dot, length, normalize, sqrt, select,
-  uv, cameraPosition, instancedDynamicBufferAttribute, mx_noise_float, positionWorld, normalLocal, attribute, sin, cos, acos, vertexStage, Discard, interleavedGradientNoise, screenCoordinate } from 'three/tsl';
+  uv, cameraPosition, instancedDynamicBufferAttribute, mx_noise_float, positionWorld, normalLocal, attribute, sin, cos, acos, vertexStage } from 'three/tsl';
 import { G, DEG, CAM, SKY } from './params.js';
 import { height } from './height.js';
 
@@ -68,13 +78,19 @@ export const COL = {
   funnel: 150,
   // the shadow's front, as its distance from the visitor (s from the hush, m): it shows first on the
   // far lit crests, crosses the mid-ground in about 6 s and climbs the last near slope in about 2.5 s
-  reach: [[38, 1700], [42, 800], [44, 450], [50, 40], [52.5, 0], [54.5, -60], [58, -400]],
-  // the dome: full width, height, the height grown in 6 s, the width surging out over 18 s
-  dome: { w: 1300, h: 380, grow: 6, surge: 18, k: 0.006 },
+  // (slowing as it comes: the last 60 m to the Pilgrim take 6 s, so from the start pose, a near crest
+  // 49 m off, it is seen crossing the ground to the feet for about 5 s; its terminator is `edge` m wide)
+  reach: [[38, 1700], [42, 800], [44, 450], [47, 200], [50, 110], [53, 60], [59, 0], [61, -60], [64, -400]], edge: 25,
+  // the dome: full width, height, the height grown in 6 s, the width surging out over 18 s; `blend`:
+  // the veil round the body eases into it over this many seconds from the impact (nothing pops)
+  dome: { w: 1400, h: 330, grow: 6, surge: 18, k: 0.006, blend: 3 },
   // the veil of its own dust round the body before the fall: half width, height (times the exposed
-  // length), density, and how much more by day
-  veil: { w: 420, h: 1.1, dens: 0.09, day: 0.45 },
-  wave: 120,
+  // length), density; skirt: how much denser it is low, and how high (m) that low part reaches
+  veil: { w: 480, h: 0.95, dens: 0.1, skirt: 2.2, skirtH: 160 },
+  // the ground wave: its speed (m/s), its height (m) and width (m) as a travelling ridge on the sand
+  wave: 120, waveAmp: 1.0, waveW: 26,
+  // from the impact the body fades into its dust over this many seconds (the dome then goes over it)
+  bodyFade: 2.5,
   // beat times (s from the hush); cry: the call leaves it (heard d/343 s later)
   T: { swell: 12, swellEnd: 29, funnelEnd: 35, rise: 35, call: 55, cry: 57, fall: 68, impact: 78, settle: 82, back: 88, end: 110 },
   strike: { min: 0.45, max: 1.5, match: 0.35, delay: [6, 10] },
@@ -86,6 +102,7 @@ const V3 = () => new THREE.Vector3(), V4 = () => new THREE.Vector4();
 export const CU = {
   on: uniform(0),
   org: uniform(V3()),        // the visitor: x, ground, z
+  org2: uniform(V4()),       // x: the radius round the visitor all in the shadow's core (m; 0 none)
   B: uniform(V4()),          // breach x, ground y, z, funnel 0..1
   swA: uniform(V4()),        // swell tail x, z, head x, z
   swB: uniform(V4()),        // amp, half width, plume glow, scar
@@ -93,6 +110,7 @@ export const CU = {
   shL: uniform(V4()),        // the shadow sun's direction (xyz), strength
   shP: uniform(V4()),        // the shadow: disc diameter (rad), the front's reach from the base (m), which sun (0, 1), unused
   ring: uniform(V4()),       // a staff strike's shiver: x, z, radius, amount
+  wv: uniform(V4()),         // the ground wave from the impact: x, z, radius, amount
   dust: uniform(V3()),       // the sand's colour in the air
   bodyAmb: uniform(V3()),    // body: its one dark value
   body: uniform(V4()),       // body: sunward lobe gain, day (Lambert) weight, develop 0..1 (reduced motion), haze darkening
@@ -101,7 +119,7 @@ export const CU = {
   cardTint: uniform(V3()),   // the sand's tint (ochre by day)
   dome: uniform(V4()),       // the dome: centre x, y, z, grown 0..1
   domeR: uniform(V4()),      // half width, height, density 0..1, drift time
-  tw: uniform(V4()),         // day weight, ember weight, how much of the sun it covers from the eye, unused
+  tw: uniform(V4()),         // day weight, ember weight, how much of the sun it covers from the eye, veil (0) or dome (1)
   slant: uniform(V4()),      // its top's slanted break: across x, z (signed to the low side), the base x, z
 };
 
@@ -129,7 +147,7 @@ export function shadowAt(P) {
   };
   const s = max(one(CU.s0, CU.s1), one(CU.s1, CU.s2)).toVar();
   const dB = length(P.xz.sub(CU.B.xz));
-  return s.mul(float(1.0).sub(smoothstep(CU.shP.y.sub(12.0), CU.shP.y, dB))).mul(CU.shL.w);
+  return s.mul(float(1.0).sub(smoothstep(CU.shP.y.sub(COL.edge), CU.shP.y, dB))).mul(CU.shL.w);
 }
 // the dome: the ray ro + rd t (t >= 0) through the half-ellipsoid; returns (chord, entry, exit)
 function domeChord(ro, rd) {
@@ -179,6 +197,20 @@ function groundHook({ col, ro, rd, dist, lit }) {
       const sc = float(1.0).sub(smoothstep(COL.funnel * 0.6, COL.funnel * 1.4, rB)).mul(CU.swB.w).mul(far);
       col.mulAssign(float(1.0).sub(sc.mul(0.3)));
     });
+    // the ground wave from the impact: a low ridge running out over the dunes at 120 m/s, lit on its
+    // sunward face, with a breath of dust on it (by day it is all there is to see of the fall)
+    If(CU.wv.w.greaterThan(0.001), () => {
+      const toW = P.xz.sub(CU.wv.xy).toVar();
+      const rW = length(toW).toVar();
+      const x = rW.sub(CU.wv.z).div(COL.waveW).toVar();
+      If(abs(x).lessThan(3.0), () => {
+        const h = exp(x.mul(x).negate()).toVar();
+        const slope = x.mul(-2.0).mul(h).mul(COL.waveAmp / COL.waveW);
+        const lt = clamp(dot(toW.div(max(rW, 1.0)), sunH).mul(slope).mul(-6.0), -0.35, 0.5);
+        col.mulAssign(float(1.0).add(lt.mul(CU.wv.w)));
+        col.addAssign(CU.dust.mul(h.mul(CU.wv.w).mul(0.12)));
+      });
+    });
     // the shadow, each only inside a cheap bound (the band behind it, away from the sun): the body's
     // takes the shadow sun's direct light off the sand (lit sand falls to the dunes' own shade) and the
     // glow round the sun it stands in, the brightest of the sky light on shaded sand; the dome's, a
@@ -187,7 +219,9 @@ function groundHook({ col, ro, rd, dist, lit }) {
       const sb = float(0.0).toVar(), sd = float(0.0).toVar();
       const rel = P.xz.sub(CU.B.xz).toVar();
       const along = dot(rel, sunH).negate(), lat = abs(rel.x.mul(sunH.y).sub(rel.y.mul(sunH.x)));
-      If(CU.shL.w.greaterThan(0.001).and(along.greaterThan(-200.0)).and(lat.lessThan(max(along, 0.0).mul(CU.shP.x).add(COL.Rbase * 2.8))), () => { sb.assign(shadowAt(P)); });
+      // (round the visitor, inside a radius the script found all in the core, it is the full shadow)
+      If(length(P.xz.sub(CU.org.xz)).lessThan(CU.org2.x), () => { sb.assign(CU.shL.w); })
+        .ElseIf(CU.shL.w.greaterThan(0.001).and(along.greaterThan(-200.0)).and(lat.lessThan(max(along, 0.0).mul(CU.shP.x).add(COL.Rbase * 2.8))), () => { sb.assign(shadowAt(P)); });
       If(CU.shP.w.greaterThan(0.001), () => {
         const relD = P.xz.sub(CU.dome.xz).toVar();
         const latD = abs(relD.x.mul(sunH.y).sub(relD.y.mul(sunH.x)));
@@ -247,6 +281,10 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     inShadow: 0, ecl: 0, rings: 0, calls: 0, booms: 0, lift: 0, brace: 0, waveAt: null,
     strikes: [], clock: 0, strikeRing: null, lastStrike: null,
     shK: 0, shL: null, disc: [1.5 * DEG, 0.45 * DEG], figK: 0.85, dome: null, reach: 0, timeW: { day: 0, ember: 0 },
+    // seen: 1 - the day weight (by day it is felt and heard, never seen); ecl1, occ1: the first stage of
+    // their easing; focus: the centre of what is happening (the camera turns there); cutTo: under
+    // reduced motion, the id of the cut that turns the view to it (0: none)
+    seen: 1, ecl1: 0, occE: 0, occ1: 0, focus: null, cutTo: 0, cutN: 0, veilAt: null,
   };
   const jitter = (rnd() * 2 - 1) * COL.jitter;   // the old search's offset from the sun line
   const sideSeed = rnd() < 0.5 ? -1 : 1;          // which side of the sun it stands on (seeded)
@@ -278,6 +316,20 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     }
     return m;
   }
+  // how many rows of dunes the eye sees between itself and a point this far on this bearing (a row: a
+  // run of ground in sight that begins past 150 m and ends before the point): two or more read as
+  // kilometres; one near crest and then the thing reads as 100 m
+  function rowsTo(eye, b, d) {
+    const c = Math.cos(b), sn = Math.sin(b);
+    let maxA = -1e9, vis = false, rows = 0;
+    for (let s = 20; s <= d - 150; s += 8) {
+      const a = (height(eye[0] + c * s, eye[2] + sn * s) - eye[1]) / s, v = a > maxA;
+      if (v) maxA = a;
+      if (v && !vis && s > 150) rows++;
+      vis = v;
+    }
+    return rows;
+  }
   function place(o = {}) {
     const E = st.env || { x: 0, z: 0, ground: height(0, 0), cam: [0, height(0, 0) + 1.7, 0], yaw: 0 };
     // (the camera's eye: in third person it stands behind and above the Pilgrim; never under 2.5 m)
@@ -290,7 +342,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
       const x = E.x + Math.cos(b) * d, z = E.z + Math.sin(b) * d, gy = height(x, z);
       const top = clearance(eye, [x, gy + 120, z]);
       const base = clearance(eye, [x, gy + 2, z], 300);
-      return { b, d, x, z, gy, top, base };
+      return { b, d, x, z, gy, top, base, rows: rowsTo(eye, b, d) };
     };
     let p = null, onSun = false;
     const aim0 = sun.bearing + sideSeed * COL.sunOff * DEG;
@@ -300,31 +352,45 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     // motion the camera never turns, so it stands inside the frame the visitor has: on the sun's line
     // when that is in frame, else as near it as the frame allows.
     let tries = [];
+    st.cutTo = 0;
+    const onLine = () => { for (let k = 0; k * COL.sunStep <= COL.sunMax; k++) tries.push(aim0 + sideSeed * k * COL.sunStep * DEG); };
     if (o.bearing === undefined) {
+      const lineOk = !st.called || Math.abs(wrap(aim0 - facing)) <= 90 * DEG;
       if (reduced) {
         const asp = typeof window !== 'undefined' && window.innerHeight ? window.innerWidth / window.innerHeight : 16 / 9;
         const vf = (asp < 1 ? CAM.vfovPortrait : CAM.vfov) * DEG;
         // (its axis kept within 60% of the half field of view: the follow camera settles a little after)
         const half = 0.6 * Math.atan(Math.tan(vf / 2) * asp);
-        span = Math.min(span, half);
-        const off = Math.max(-half, Math.min(half, wrap(aim0 - facing)));
-        for (let k = 0; k * COL.sunStep <= COL.sunMax; k++) {
-          const toward = Math.sign(off) || 1;
-          tries.push(facing + off - toward * k * COL.sunStep * DEG);
+        const third = !E.view || E.view === 'third';
+        if (Math.abs(wrap(aim0 - facing)) <= half || (third && lineOk)) {
+          // on the sun's line; when that is outside the frame (a phone held upright), the view cuts to
+          // it once at the hush (cross-faded): it stands across the sun, never beside it
+          onLine();
+          if (Math.abs(wrap(aim0 - facing)) > half) st.cutTo = ++st.cutN;
+        } else {
+          // (first person, or a call facing away: inside the frame the visitor has)
+          span = Math.min(span, half);
+          const off = Math.max(-half, Math.min(half, wrap(aim0 - facing)));
+          for (let k = 0; k * COL.sunStep <= COL.sunMax; k++) {
+            const toward = Math.sign(off) || 1;
+            tries.push(facing + off - toward * k * COL.sunStep * DEG);
+          }
         }
-      } else if (!st.called || Math.abs(wrap(aim0 - facing)) <= 90 * DEG) {
-        for (let k = 0; k * COL.sunStep <= COL.sunMax; k++) tries.push(aim0 + sideSeed * k * COL.sunStep * DEG);
-      }
+      } else if (lineOk) onLine();
     }
-    // (a second pass lets a crest hide up to 80 m more of it: better on the sun's line and more hidden
-    // than off it in plain view)
-    for (const need of [0, -80]) {
+    // (first, within 3 degrees of the line, a place with two rows of dunes or more in sight between;
+    // then the nearest clear bearing; a last pass lets a crest hide up to 80 m more of it: better on the
+    // sun's line and more hidden than off it in plain view)
+    const cache = new Map();
+    const candAt = (b, d) => { const key = b.toFixed(5) + ':' + d; if (!cache.has(key)) cache.set(key, cand(b, d)); return cache.get(key); };
+    for (const [need, rowsMin, within] of [[0, 2, 3 * DEG], [0, 0, 99], [-80, 0, 99]]) {
       for (const b of tries) {
+        if (Math.abs(wrap(b - aim0)) > within) continue;
         let best = null;
         for (const d of dists) {
-          const c = cand(b, d);
-          c.score = (c.base < 0 ? -40 : 0) + Math.abs(d - 1800) * 0.004;
-          if (c.top > need && (!best || c.score < best.score)) best = c;
+          const c = candAt(b, d);
+          c.score = (c.base < 0 ? -40 : 0) + Math.abs(d - 1800) * 0.004 - Math.min(c.rows, 3) * 15;
+          if (c.top > need && c.rows >= rowsMin && (!best || c.score < best.score)) best = c;
         }
         if (best) { p = best; onSun = Math.abs(wrap(b - sun.bearing)) < 3 * DEG; break; }
       }
@@ -345,7 +411,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
       p = best || fallback;
     }
     st.placedOnce = true;
-    st.sightline = { clear: p.top > 0, top: Math.round(p.top), baseHidden: p.base < 0, onSun };
+    st.sightline = { clear: p.top > 0, top: Math.round(p.top), baseHidden: p.base < 0, onSun, rows: p.rows === undefined ? rowsTo(eye, p.b, p.d) : p.rows, cut: st.cutTo > 0 };
     st.bearing = p.b; st.dist = p.d; st.B = [p.x, p.gy, p.z];
     st.H = lerp(COL.H[0], COL.H[1], rnd());
     st.sunB = sun.bearing;
@@ -363,6 +429,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     st.figK = 0.85 * (0.25 + 0.75 * dl(st.shK) / (dl(0) + dl(1) + 1e-6));
     st.placed = true;
     st.impactAt = null; st.impactP = null; st.cut = false; st.waveAt = null; st.dome = null; st.frozen = null;
+    st.focus = [p.x, p.z]; st.veilAt = null;
   }
 
   // ---- the body's profile: fixed to the body from the head down (seeded, made once per rising)
@@ -477,7 +544,8 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
       st.develop = 1;
     }
     // a slow sway from the call (a period of 24 s; none under reduced motion)
-    st.sway = !reduced && t > T.call && t < T.fall + 2 ? 0.05 * Math.sin((t - T.call) * 2 * Math.PI / 24) * sstep(T.call, T.call + 4, t) : 0;
+    // (eased out over the fall's first 2 s: it never steps)
+    st.sway = !reduced && t > T.call && t < T.fall + 2 ? 0.05 * Math.sin((t - T.call) * 2 * Math.PI / 24) * sstep(T.call, T.call + 4, t) * (1 - sstep(T.fall, T.fall + 2, t)) : 0;
     // the fall: it arcs over to the side it leans, across the view, accelerating, over 10 s, and dives:
     // from 4 s in it slides down into the sand; it keeps its dark value until the dome's core covers it
     // (under reduced motion: a cut to the dome at its peak, 0.4 s into the fall)
@@ -511,6 +579,8 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
   }
   function impact(x, z) {
     st.impactAt = st.tAbs; st.impactP = [x, height(x, z), z];
+    // (the veil round the body as it was: the dome grows out of it over COL.dome.blend s)
+    st.veilAt = { C: st.B.slice(), h: Math.max(st.hcur * COL.veil.h, 4) };
     const E = st.env; st.impactD = E ? Math.hypot(x - E.x, z - E.z) : st.dist;
     st.waveAt = reduced ? null : st.impactAt + st.impactD / COL.wave;
     st.dome = { C: st.impactP.slice(), g: 0, w: 0.6, dens: 0, u: 0 };
@@ -518,7 +588,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
 
   function prepare({ how, phase, bearing, dist } = {}) {
     if (!st.placed || how === 'start' || bearing !== undefined) place({ bearing, dist });
-    st.sink = 0; st.sinkI = 0; st.dive = 0; st.impactAt = null; st.impactP = null; st.dome = null; st.cut = false; st.fallPhi = 0; st.frozen = null;
+    st.sink = 0; st.sinkI = 0; st.dive = 0; st.impactAt = null; st.impactP = null; st.dome = null; st.cut = false; st.fallPhi = 0; st.frozen = null; st.veilAt = null;
     if (how === 'skip' && phase) st.tAbs = CUM[phase];
   }
 
@@ -529,9 +599,11 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     if (t <= K[0][0]) return 0;
     let x = K[K.length - 1][1] - (t - K[K.length - 1][0]) * 80;
     for (let i = 0; i < K.length - 1; i++) if (t < K[i + 1][0]) { const u = (t - K[i][0]) / (K[i + 1][0] - K[i][0]); x = lerp(K[i][1], K[i + 1][1], u); break; }
-    return Math.max(0, D - x);
+    // (and its terminator's width on top, so the front's middle is where the schedule says)
+    return Math.max(0, D - x + COL.edge * 0.5);
   }
-  const shadowStrength = () => (st.impactAt !== null ? 1 - sstep(st.impactAt + 2, st.impactAt + 7, st.tAbs) : 1) * (st.hcur > 1 ? 1 : 0) * (reduced ? sstep(COL.T.rise, COL.T.rise + 6, st.tAbs) : 1);
+  // (by day none of it: no body, so no shadow; blended by the same sun height the shading uses)
+  const shadowStrength = () => (st.impactAt !== null ? 1 - sstep(st.impactAt + 2, st.impactAt + 7, st.tAbs) : 1) * (st.hcur > 1 ? 1 : 0) * (reduced ? sstep(COL.T.rise, COL.T.rise + 6, st.tAbs) : 1) * st.seen;
   // the spine's three points for the shadow (base at the dune line, middle, head) and their radii
   // (from the fall on, the shadow stays where the column stood: the sand it sheds holds the dark until
   // the dome takes it)
@@ -563,7 +635,27 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
       best = Math.max(best, 1 - sstep(W - soft / 2, W + soft / 2, d), 0.5 * (1 - sstep(W, 2.2 * W + soft, d)));
     }
     const dB = Math.hypot(P[0] - st.B[0], P[2] - st.B[2]), R = reachNow();
-    return best * (reach ? 1 - sstep(R - 12, R, dB) : 1) * shadowStrength();
+    return best * (reach ? 1 - sstep(R - COL.edge, R, dB) : 1) * shadowStrength();
+  }
+  // how much of the sun the body covers from the eye: the sun's ray within 1.3 radii of the spine (or
+  // of the torn dust over its head) covers it, fading out by 2.4 (the disc never shows through)
+  function occJS(P) {
+    const sp = shadowSpine();
+    if (!sp || !st.shL) return 0;
+    const L = st.shL, H = sp[2], M = sp[1], dh = [H[0] - M[0], H[1] - M[1], H[2] - M[2]], lh = Math.hypot(...dh) || 1;
+    const top = [H[0] + dh[0] / lh * 70, H[1] + dh[1] / lh * 70, H[2] + dh[2] / lh * 70, H[3]];
+    let best = 0;
+    for (const [A, Bp] of [[sp[0], sp[1]], [sp[1], sp[2]], [sp[2], top]]) {
+      const d1 = [Bp[0] - A[0], Bp[1] - A[1], Bp[2] - A[2]], r = [A[0] - P[0], A[1] - P[1], A[2] - P[2]];
+      const dt3 = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+      const a = Math.max(dt3(d1, d1), 1e-3), b = dt3(d1, L), c = dt3(d1, r), f = dt3(L, r);
+      const s0 = clamp01((b * f - c) / Math.max(a - b * b, 1e-4));
+      const t = Math.max(b * s0 + f, 0), s = clamp01((t * b - c) / a);
+      const d = Math.hypot(A[0] + d1[0] * s - P[0] - L[0] * t, A[1] + d1[1] * s - P[1] - L[1] * t, A[2] + d1[2] * s - P[2] - L[2] * t);
+      const W = lerp(A[3], Bp[3], s);
+      best = Math.max(best, 1 - sstep(1.3 * W, 2.4 * W, d));
+    }
+    return best * shadowStrength();
   }
   // the dome's depth along a ray (the same as the shader's, without its noise)
   function domeTauJS(o, d) {
@@ -576,13 +668,15 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     const tp = (D.C[1] - 20 - o[1]) / (Math.abs(d[1]) < 1e-5 ? 1e-5 : d[1]);
     if (d[1] > 0) t0 = Math.max(t0, tp); else if (d[1] < 0) t1 = Math.min(t1, tp);
     t0 = Math.max(t0, 0);
-    return Math.max(t1 - t0, 0) * (disc / a) * COL.dome.k * D.dens;
+    return Math.max(t1 - t0, 0) * (disc / a) * COL.dome.k * D.dens * st.seen;
   }
 
   function update(dt, P) {
     const out = {};
     st.clock += dt;
     if (P.env) st.env = P.env;
+    // the day weight, from the same sun height the shading uses (uniforms() sets the shaders' copy)
+    if (st.env && st.env.suns) st.seen = 1 - sstep(0.12, 0.3, Math.max(st.env.suns[0][1], st.env.suns[1][1]));
     // a strike's shiver, whether or not anything comes
     if (st.strikeRing) {
       const u = st.clock - st.strikeRing.t;
@@ -605,13 +699,43 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
       st.domeAt = st.dome && st.shL ? 1 - Math.exp(-domeTauJS(at, st.shL)) : 0;
       e = Math.max(e, st.domeAt);
       if (s > 0.5 && st.inShadow <= 0.5) st.rings++;
-      // (the light comes back slowly, never in a flash: at most a quarter of the way a second)
-      st.inShadow = s; st.ecl = e >= st.ecl ? e : Math.max(e, st.ecl - dt * 0.25);
-      // how much of the sun it covers from the eye (the air in front of it is in its shadow)
+      // (eased in two stages, over about 4 s as it comes and longer as it goes: the glow round the sun,
+      // the lantern and the disc never step; the ground's own front is drawn per pixel)
+      st.inShadow = s;
+      const k1 = 1 - Math.exp(-dt / (e > st.ecl1 ? 1.1 : 2.2));
+      st.ecl1 += (e - st.ecl1) * k1;
+      st.ecl += (st.ecl1 - st.ecl) * (1 - Math.exp(-dt / (st.ecl1 > st.ecl ? 1.1 : 2.2)));
+      // how much of the sun it covers from the eye (the air in front of it is in its shadow): the disc
+      // never shows through the body or its dissolving top
       const c = st.env.cam || [st.env.x, st.env.ground + 2, st.env.z];
-      let o = shadowJS(c, false);
+      let o = occJS(c);
       if (st.dome && st.shL) o = Math.max(o, 1 - Math.exp(-domeTauJS(c, st.shL)));
       st.occ = o;
+      st.occ1 += (o - st.occ1) * (1 - Math.exp(-dt / 0.35));
+      st.occE += (st.occ1 - st.occE) * (1 - Math.exp(-dt / 0.35));
+    }
+    // the radius round the visitor that is all in the shadow's core (the ground shader skips its closed
+    // form there): sampled on rings every 10 frames, kept 10 m short; none while the front is near
+    if (st.env && ((st.clock * 60) | 0) % 10 === 0) {
+      let rc = 0;
+      if (st.inShadow > 0.999 && !reduced) {
+        for (const r of [15, 30, 50, 80, 120, 170]) {
+          let ok = true;
+          for (let k = 0; k < 12 && ok; k++) { const a = k * Math.PI / 6; ok = shadowJS([st.env.x + Math.cos(a) * r, st.env.ground, st.env.z + Math.sin(a) * r]) > 0.9995 * shadowStrength(); }
+          if (!ok) break;
+          rc = r;
+        }
+      }
+      st.coreR = Math.max(0, rc - 10);
+    }
+    // the centre of what is happening, for the camera and the hood: the base as it rises, between the
+    // base and the head as it falls, the dome's centre once it is down (eased, about 1.5 s)
+    if (st.focus) {
+      let fx = st.B[0], fz = st.B[2];
+      if (st.dome) { fx = st.dome.C[0]; fz = st.dome.C[2]; }
+      else if (st.tAbs > COL.T.fall && st.head) { const k = 0.5 * sstep(COL.T.fall, COL.T.impact, st.tAbs); fx = lerp(st.B[0], st.head[0], k); fz = lerp(st.B[2], st.head[2], k); }
+      const kf = 1 - Math.exp(-dt / 1.5);
+      st.focus = [st.focus[0] + (fx - st.focus[0]) * kf, st.focus[1] + (fz - st.focus[1]) * kf];
     }
     // the camera's lift (the view raised a little; the boom keeps its length): eased in over the
     // first seconds, out over the settle's first 6 s
@@ -626,6 +750,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
   function uniforms(base, at) {
     CU.on.value = 1;
     CU.org.value.set(at.x, at.ground, at.z);
+    CU.org2.value.x = st.impactAt === null && st.tAbs > COL.T.rise ? st.coreR || 0 : 0;
     const t = st.tAbs, T = COL.T;
     const fu = sstep(T.swellEnd, T.funnelEnd, t) * (1 - sstep(T.settle, T.end - 4, t));
     CU.B.value.set(st.B[0], st.B[1], st.B[2], fu);
@@ -644,15 +769,27 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     if (sp) { CU.s0.value.set(...sp[0]); CU.s1.value.set(...sp[1]); CU.s2.value.set(...sp[2]); }
     CU.shL.value.set(st.shL[0], st.shL[1], st.shL[2], sp ? shadowStrength() : 0);
     CU.shP.value.set(st.disc[st.shK] * 2, st.reach, st.shK, st.domeAt || 0);
-    // the dome
-    const D = st.dome;
-    if (D) { CU.dome.value.set(D.C[0], D.C[1], D.C[2], D.g > 0 ? 1 : 0); CU.domeR.value.set(COL.dome.w / 2 * D.w, Math.max(COL.dome.h * D.g, 4), D.dens, D.u); }
-    else if (st.hcur > 1 && st.bodyOn) {
-      // before the fall the same volume is the veil of its own dust round it (thin: it hazes the body
-      // and, by day, yellows the sky round it); no shadow of its own
-      const v = COL.veil, k = v.dens * lerp(1, v.day, sstep(0.12, 0.3, Math.max(base.sun1Dir[1], base.sun2Dir[1]))) * (reduced ? st.develop * 2 : 1);
-      CU.dome.value.set(st.B[0], st.B[1], st.B[2], 1); CU.domeR.value.set(v.w, Math.max(st.hcur * v.h, 4), k * sstep(0, 150, st.hcur), t);
+    // the dome. Before the fall the same volume is the veil of its own dust round the body (thin, and
+    // denser low: a wide skirt of dust and haze its foot is lost in); from the impact the veil eases into
+    // the dome over COL.dome.blend s (centre, size, density and look), so nothing pops. By day neither
+    // is drawn (its density times seen). The noise's clock runs on through both.
+    const D = st.dome, v = COL.veil, seen = st.seen;
+    const veilK = v.dens * (reduced ? st.develop * 2 : 1) * sstep(0, 150, st.hcur);
+    if (D) {
+      const k = reduced ? 1 : sstep(0, COL.dome.blend, D.u), Va = st.veilAt || { C: st.B, h: 4 };
+      const C = [0, 1, 2].map((i) => lerp(Va.C[i], D.C[i], k));
+      CU.dome.value.set(C[0], C[1], C[2], 1);
+      CU.domeR.value.set(lerp(v.w, COL.dome.w / 2 * D.w, k), lerp(Va.h, Math.max(COL.dome.h * D.g, 4), k), lerp(veilK, D.dens, k) * seen, reduced ? 0 : t);
+      CU.tw.value.w = k;
+    } else if (st.hcur > 1 && st.bodyOn) {
+      CU.dome.value.set(st.B[0], st.B[1], st.B[2], 1); CU.domeR.value.set(v.w, Math.max(st.hcur * v.h, 4), veilK * seen, reduced ? 0 : t);
+      CU.tw.value.w = 0;
     } else CU.dome.value.w = 0;
+    // the ground wave: from the impact out over the dunes, fading as it goes (none under reduced motion)
+    if (st.impactP && !reduced) {
+      const r = (t - st.impactAt) * COL.wave;
+      CU.wv.value.set(st.impactP[0], st.impactP[2], r, sstep(0, 60, r) * (1 - sstep(st.impactD + 200, st.impactD + 600, r)) * lerp(0.6, 1.0, 1 - seen));
+    } else CU.wv.value.w = 0;
     // colours from the light that is around
     const amb = base.ambSky, hz = base.horizon;
     const sand = [0.62, 0.42, 0.24];
@@ -671,10 +808,11 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     CU.bodyAmb.value.set(...[0, 1, 2].map((i) => lerp(night[i], day[i], dayW)));
     const own = lerp(lerp(BODY.haze.dusk, BODY.haze.ember, emberW), BODY.haze.day, dayW);
     CU.body.value.set(BODY.lobe * (1 - dayW) * (1 - 0.6 * emberW), dayW, st.develop, own);
-    CU.tw.value.set(dayW, emberW, st.occ || 0, 0);
+    CU.tw.value.x = dayW; CU.tw.value.y = emberW; CU.tw.value.z = st.occE || 0;
     CU.slant.value.set(st.across[0] * st.leanSide, st.across[1] * st.leanSide, st.B[0], st.B[2]);
     CU.look.value.set(BODY.glow, BODY.top, st.figK, st.ecl);
-    CU.card.value.set(BODY.cardFwd * (1 - 0.667 * emberW) * (1 - 0.5 * dayW), lerp(1, 0.95, dayW), own, 0);
+    const fadeB = st.impactAt !== null && !reduced ? 1 - sstep(st.impactAt, st.impactAt + COL.bodyFade, t) : 1;
+    CU.card.value.set(BODY.cardFwd * (1 - 0.667 * emberW) * (1 - 0.5 * dayW), lerp(1, 0.95, dayW), own, st.seen * fadeB);
     CU.cardTint.value.set(lerp(1, 1.0, dayW), lerp(1, 0.86, dayW), lerp(1, 0.66, dayW));
   }
   // the sky, through the time's uniforms: the shadow sun's disc goes, times ecl (the body hides it),
@@ -684,16 +822,18 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
   function modify(name, v) {
     const k = st.shK + 1;
     if (name === 'uSun1Sky' || name === 'uSun2Sky') st.disc[+name[4] - 1] = v[3];
-    const e = st.ecl;
-    if (!(e > 0)) return v;
-    if (name === 'uSun' + k + 'Sky') return [v[0], v[1], v[2] * (1 - e), v[3]];
+    const e = st.ecl, dk = Math.max(e, st.occE || 0);
+    if (!(dk > 0)) return v;
+    // (the disc goes when the body covers it from the eye, or its shadow covers the visitor)
+    if (name === 'uSun' + k + 'Sky') return [v[0], v[1], v[2] * (1 - dk) ** 3, v[3]];
     if (name === 'uSun' + k + 'Glow') return [v[0], v[1] * (1 - 0.6 * e), v[2], v[3]];
     return v;
   }
   function release() {
-    CU.on.value = 0; CU.shL.value.w = 0; CU.swB.value.set(0, 0, 0, 0); CU.B.value.w = 0; CU.dome.value.w = 0;
+    CU.on.value = 0; CU.shL.value.w = 0; CU.org2.value.x = 0; st.coreR = 0; CU.swB.value.set(0, 0, 0, 0); CU.B.value.w = 0; CU.dome.value.w = 0;
     st.placed = false; st.lift = 0; st.brace = 0; st.hcur = 0; st.bodyOn = 0; st.called = false; st.frozen = null;
     st.ecl = 0; st.occ = 0; st.domeAt = 0; st.inShadow = 0; st.dome = null; st.impactP = null;
+    st.ecl1 = 0; st.occ1 = 0; st.occE = 0; st.veilAt = null; CU.wv.value.w = 0; CU.tw.value.w = 0;
   }
 
   // the wind: ducked from the hush to the settle (the drift dies), and back. The lantern's pool:
@@ -703,7 +843,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     const duck = sstep(0, 6, t) * (1 - sstep(T.settle, T.back, t));
     // (the pool held to its radius and at most 1.3 times calm: the world is turned down, not the lamp)
     const em = st.timeW ? st.timeW.ember : 0;
-    return { strength: 0.12, gust: 0.2, mix: 0.85 * duck, figure: { k: 0, lamp: Math.min(0.3, (0.6 - 0.35 * em) * e), lampT: 1 } };
+    return { strength: 0.12, gust: 0.2, mix: 0.85 * duck, figure: { k: 0, lamp: Math.min(0.42, (0.75 - 0.4 * em) * e), lampT: 1 } };
   }
   function camera() {
     const t = st.tAbs, T = COL.T;
@@ -711,14 +851,17 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     const shake = shakeAt !== null ? (1 - sstep(0, 1, t - shakeAt)) * (t > shakeAt ? 1 : 0) : 0;
     return {
       amount: 0, lift: st.lift,
-      toward: t > 2 && t < T.settle ? [st.B[0], st.B[2], COL.phases.indexOf(st.phase)] : null,
+      // (the centre of what is happening: the base, then between base and head, then the dome)
+      toward: t > 2 && t < T.back && st.focus ? [st.focus[0], st.focus[1], COL.phases.indexOf(st.phase)] : null,
       shake,
+      // (reduced motion: placed on the sun's line outside the frame, the view cuts to it at the hush)
+      cutTo: reduced && st.cutTo && t > 0.5 && t < T.settle ? [st.B[0], st.B[2], st.cutTo] : null,
     };
   }
   function trace() { return { healMul: st.tAbs < COL.T.settle ? 3 : 1 }; }
   function figure() {
     const t = st.tAbs;
-    return { look: t > 1 && t < COL.T.back ? [st.B[0], st.B[2]] : null, brace: st.brace };
+    return { look: t > 1 && t < COL.T.back && st.focus ? [st.focus[0], st.focus[1]] : null, brace: st.brace };
   }
 
   // the staff strike: three in time make the call
@@ -771,6 +914,8 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     get st() { return st; },
     // the DOM line when it begins (main.js announces a live event's line once)
     announce: () => describe(st),
+    // (its line goes before anything of it stands in the sky)
+    lineDone: () => st.tAbs > COL.T.rise - 4,
     // (scripts: hide the meshes, project points; set by the graphics)
     api: { look: (cmd, arg) => (cmd === 'shadow' ? arg.map((p) => Math.round(shadowJS(p) * 1000) / 1000) : self.look ? self.look(cmd, arg) : null) },
   };
@@ -827,63 +972,84 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
 
   // ---- the body: a tube on the spine (its normals turned from the profile's, not recomputed)
   const nv = NR * (NS + 1);
-  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), hAt = new Float32Array(nv);
+  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), hAt = new Float32Array(nv * 2), cAt = new Float32Array(nv * 3);
   const idx = [];
   for (let i = 0; i < NR - 1; i++) for (let j = 0; j < NS; j++) {
     const a = i * (NS + 1) + j, b = a + NS + 1;
     idx.push(a, a + 1, b, a + 1, b + 1, b);
   }
   const geo = new THREE.BufferGeometry();
-  const pA = new THREE.BufferAttribute(pos, 3), nA = new THREE.BufferAttribute(nrm, 3), hA = new THREE.BufferAttribute(hAt, 1);
-  for (const A of [pA, nA, hA]) A.setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute('position', pA); geo.setAttribute('normal', nA); geo.setAttribute('aH', hA);
+  const pA = new THREE.BufferAttribute(pos, 3), nA = new THREE.BufferAttribute(nrm, 3), hA = new THREE.BufferAttribute(hAt, 2), cA = new THREE.BufferAttribute(cAt, 3);
+  for (const A of [pA, nA, hA, cA]) A.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', pA); geo.setAttribute('normal', nA); geo.setAttribute('aH', hA); geo.setAttribute('aC', cA);
   geo.setIndex(idx);
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1);
-  const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.FrontSide, transparent: true, depthWrite: true });
-  const aH = attribute('aH', 'float');
+  // aH: x, the height up the exposed length (0 at the dune line, 1 at the head); y, the metres from the
+  // head over its full height (fixed to the body: the same torn top as it rises)
+  const aH = attribute('aH', 'vec2');
+  // aC: the centre of the ring a vertex is on (the outline frays by the ring's own roundness, not the
+  // flutes' creases: a crease turned from the eye would fray as a thin line inside it)
+  const aC = attribute('aC', 'vec3');
+  // how much of it is there at a point (shared by the depth pass and the colour): its top torn into dust
+  // from the head down to about 40% of its height, the core (facing the eye) solid before its flanks, so
+  // the first thing seen is torn dust with the dark mass inside it and never a round top; its outline
+  // fraying where the surface turns from the eye, through fibres and tears running down it. All real
+  // alpha (no dither, no depth)
+  const shape = (P, n, V, full) => {
+    const ndv = max(dot(normalize(P.sub(aC)), V), 0.0).toVar();
+    // (torn at two scales, a little longer than wide: tatters, never a comb of fingers)
+    // (the depth pass, which only needs where it is nearly all there, takes the large tears alone)
+    let torn = mx_noise_float(vec3(P.x.div(45.0), P.y.div(65.0), P.z.div(45.0)).add(9.0)).mul(0.36);
+    if (full) torn = torn.add(mx_noise_float(vec3(P.x.div(16.0), P.y.div(22.0), P.z.div(16.0)).add(3.0)).mul(0.14));
+    torn = torn.add(0.5).toVar();
+    const sH = aH.y;
+    // (along a slant across it: its top is broken off at an angle)
+    const sl = P.x.sub(CU.slant.z).mul(CU.slant.x).add(P.z.sub(CU.slant.w).mul(CU.slant.y)).div(260.0);
+    let topV = sH.div(CU.look.y).add(sl.mul(0.15)).add(torn.sub(0.5).mul(0.5)).add(ndv.sub(0.55).mul(0.7));
+    let frayV = ndv.add(torn.sub(0.5).mul(0.3));
+    let fib = null;
+    if (full) {
+      fib = mx_noise_float(vec3(P.x.mul(0.09), P.y.mul(0.003), P.z.mul(0.09)).add(5.0)).mul(0.5).add(0.5).toVar();
+      frayV = frayV.add(fib.sub(0.5).mul(0.22));
+    }
+    const aTop = smoothstep(0.55, 1.15, topV);
+    const fray = smoothstep(0.04, 0.62, frayV);
+    return { a: aTop.mul(fray).mul(CU.card.w), ndv, torn, fib };
+  };
+  // (the haze over it, per vertex: it changes slowly over the body at its distance)
+  const bodyHazeV = vertexStage(Fn(() => hazeOf(positionWorld, float(0.0), CU.look.x, CU.body.w))());
+  const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.FrontSide, transparent: true, depthWrite: false });
   mat.fragmentNode = Fn(() => {
     const P = positionWorld.toVar();
     const V = normalize(cameraPosition.sub(P)).toVar();
     const n = normalize(normalLocal).toVar();
-    const ndv = max(dot(n, V), 0.0).toVar();
-    const h = clamp(aH, 0.0, 1.0).toVar();
-    // streaks running down it (nothing across: no tiers, no rings)
-    const streak = mx_noise_float(vec3(P.x.mul(0.05), P.y.mul(0.005), P.z.mul(0.05))).mul(0.5).add(0.5).toVar();
-    const streak2 = mx_noise_float(vec3(P.x.mul(0.16), P.y.mul(0.018), P.z.mul(0.16)).add(3.0)).mul(0.5).add(0.5).toVar();
-    // one dark value, a little uneven
-    const col = CU.bodyAmb.mul(streak.mul(0.5).add(0.75)).toVar();
-    // by day a pale hide in full sun: a lit side and a shaded side
-    const lam = (L, C) => C.mul(max(dot(n, L), 0.0)).mul(smoothstep(-0.03, 0.03, L.y));
-    const dayC = U.uSand.mul(CU.cardTint).mul(CU.cardTint).mul(0.2).mul(lam(U.uSun1Dir, U.uSun1Col).add(lam(U.uSun2Dir, U.uSun2Col)).add(ambD(0.22)).add(U.uAmbGround.mul(0.1)))
-      .mul(streak2.mul(0.3).add(0.85));
-    col.assign(mix(col, dayC, CU.body.y));
-    // a thin, broken lobe on the sunward flank only (no rim all round)
+    const S = shape(P, n, V, true);
+    const ndv = S.ndv, fib = S.fib, torn = S.torn;
+    const h = clamp(aH.x, 0.0, 1.0).toVar();
+    // one dark value, a little uneven along streaks running down it (its fibres; nothing across)
+    const col = CU.bodyAmb.mul(fib.mul(0.5).add(0.75)).toVar();
+    // the haze at its distance, the air's and its own dust's (its colour: about the sky behind it)
+    const hz = vec4(bodyHazeV).toVar();
+    // a thin, broken lobe on the sunward flank only (no rim all round), never brighter than 0.8 of the
+    // air behind it (no lit fin)
     const L = keyL();
-    const fib = mx_noise_float(vec3(P.x.mul(0.09), P.y.mul(0.003), P.z.mul(0.09)).add(5.0)).mul(0.5).add(0.5).toVar();
     const edge = pow(float(1.0).sub(ndv), 3.0);
     const toward = smoothstep(0.1, 0.6, dot(n, L));
     const fwd = pow(max(dot(V.negate(), L), 0.0), 3.0);
-    col.addAssign(keyC().mul(edge.mul(toward).mul(smoothstep(0.6, 0.9, fib)).mul(fwd).mul(CU.body.x).mul(0.25)));
-    // its lowest 15% lost in its own dust
-    col.assign(mix(col, CU.dust.mul(0.45), float(1.0).sub(smoothstep(0.0, 0.16, h)).mul(0.75)));
-    // the haze at its distance, the air's and its own dust's; under reduced motion it develops out of
-    // that haze and holds half way
-    const hz = hazeOf(P, float(0.0), CU.look.x, CU.body.w).toVar();
-    const fa = float(1.0).sub(float(1.0).sub(hz.w).mul(CU.body.z));
+    const lobe = keyC().mul(edge.mul(toward).mul(smoothstep(0.6, 0.9, fib)).mul(fwd).mul(CU.body.x).mul(0.25));
+    col.assign(min(col.add(lobe.mul(0.5)), max(col, hz.xyz.mul(0.45))));
+    // its lower part lost in a skirt of its own dust and the haze (a ragged top about 40% up): no
+    // clean foot or flank, and the air between reads as kilometres
+    const skirt = float(1.0).sub(smoothstep(0.03, 0.33, h.add(torn.sub(0.5).mul(0.14)).add(fib.sub(0.5).mul(0.1))));
+    col.assign(mix(col, CU.dust.mul(0.5), skirt.mul(0.35)));
+    // under reduced motion it develops out of the haze and holds half way
+    const fa = float(1.0).sub(float(1.0).sub(hz.w).mul(CU.body.z)).toVar();
+    fa.assign(float(1.0).sub(float(1.0).sub(fa).mul(float(1.0).sub(skirt.mul(0.62)))));
     col.assign(mix(col, hz.xyz, fa));
-    // its top dissolves into the air (alpha, not a colour), through streaks
-    const lowN = mx_noise_float(vec3(P.x.mul(0.011), P.y.mul(0.004), P.z.mul(0.011)).add(11.0)).mul(0.5).add(0.5);
-    // and its outline frays into the sand streaming off it: where the surface turns away from the eye
-    // it thins along fibres running down it (no clean edge, no round top)
-    const fray = max(smoothstep(0.0, 0.2, ndv.sub(0.06).add(fib.sub(0.5).mul(0.3))), CU.body.y.mul(0.8));
-    // (along a slant across it: its top is broken off at an angle, never rounded, never fingers)
-    const sl = P.x.sub(CU.slant.z).mul(CU.slant.x).add(P.z.sub(CU.slant.w).mul(CU.slant.y)).div(260.0);
-    const a = float(1.0).sub(smoothstep(CU.look.y, CU.look.y.add(0.4), h.add(sl.mul(0.22)).add(lowN.sub(0.5).mul(0.3)).add(fib.sub(0.5).mul(0.1))));
-    // (the fray is dithered against the frame, not blended: blended, the folds of its flutes would
-    // show through each other)
-    Discard(fray.lessThan(interleavedGradientNoise(screenCoordinate.xy)));
-    return vec4(finish(col), a);
+    return vec4(finish(col), S.a.mul(float(1.0).sub(skirt.mul(0.35))));
   })();
+  // (no depth of its own: nothing drawn after it is ever cut out along a hard line, and its folds blend
+  // over each other, dark on dark; its sand is shed on the side toward the eye, so little falls behind it)
   const body = new THREE.Mesh(geo, mat);
   body.visible = false; body.renderOrder = 1;
   scene.add(body);
@@ -898,17 +1064,17 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
       const ud = u[0] * t[0] + u[1] * t[1] + u[2] * t[2];
       u = [u[0] - t[0] * ud, u[1] - t[1] * ud, u[2] - t[2] * ud]; const ul = Math.hypot(...u) || 1; u = u.map((x) => x / ul);
       const v = [t[1] * u[2] - t[2] * u[1], t[2] * u[0] - t[0] * u[2], t[0] * u[1] - t[1] * u[0]];
-      const r = Pr.R[i], hh = (ex - Pr.s[i]) / Math.max(ex, 1);
+      const r = Pr.R[i], hh = (ex - Pr.s[i]) / Math.max(ex, 1), sh = Pr.s[i] / st.H;
       for (let j = 0; j <= NS; j++) {
         const jj = j % NS, ang = (jj / NS) * Math.PI * 2, c = Math.cos(ang), s = Math.sin(ang);
         const m = i * (NS + 1) + j, rr = r * Pr.k[m], k3 = m * 3;
         pos[k3] = p[0] + (u[0] * c + v[0] * s) * rr; pos[k3 + 1] = p[1] + (u[1] * c + v[1] * s) * rr; pos[k3 + 2] = p[2] + (u[2] * c + v[2] * s) * rr;
         const a = NL[k3], b = NL[k3 + 1], d = NL[k3 + 2];
         nrm[k3] = u[0] * a + v[0] * b + t[0] * d; nrm[k3 + 1] = u[1] * a + v[1] * b + t[1] * d; nrm[k3 + 2] = u[2] * a + v[2] * b + t[2] * d;
-        hAt[m] = hh;
+        hAt[m * 2] = hh; hAt[m * 2 + 1] = sh; cAt[k3] = p[0]; cAt[k3 + 1] = p[1]; cAt[k3 + 2] = p[2];
       }
     }
-    pA.needsUpdate = true; nA.needsUpdate = true; hA.needsUpdate = true;
+    pA.needsUpdate = true; nA.needsUpdate = true; hA.needsUpdate = true; cA.needsUpdate = true;
     const m = S[NR >> 1];
     geo.boundingSphere.center.set(m[0], m[1], m[2]); geo.boundingSphere.radius = (COL.H[1] + COL.bury) / 2 + COL.Rbase * 2 + 80;
   }
@@ -918,6 +1084,15 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
   // reaching a point through the sand between it and the sun (a rim all along its top, shafts of
   // shadow through it), by day a pale lit top
   const dgeo = new THREE.SphereGeometry(1, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  // (the haze over it, per vertex: taken where the view ray passes the volume's centre, and for the dome
+  // at one height, 40% up it, so the low air's denser haze does not light its foot and leave its top the
+  // darkest part; the veil takes the full haze of its distance, the dome a little less)
+  const domeHazeV = vertexStage(Fn(() => {
+    const ro = cameraPosition, rd = normalize(positionWorld.sub(ro)).toVar(), Cn = CU.dome.xyz, m = CU.tw.w;
+    const M = ro.add(rd.mul(max(dot(Cn.sub(ro), rd), 1.0))).toVar();
+    const Mh = mix(M, vec3(M.x, Cn.y.add(CU.domeR.y.mul(0.4)), M.z), m);
+    return hazeOf(Mh, float(0.0), CU.look.x, mix(float(1.0), float(0.62), m));
+  })());
   const dmat = new THREE.MeshBasicNodeMaterial({ side: THREE.FrontSide, transparent: true, depthWrite: false });
   dmat.fragmentNode = Fn(() => {
     const ro = cameraPosition, rd = normalize(positionWorld.sub(ro)).toVar();
@@ -926,18 +1101,36 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     const Cn = CU.dome.xyz, rad = vec3(CU.domeR.x, CU.domeR.y, CU.domeR.x);
     const drift = vec3(WX, 0.0, WZ).mul(CU.domeR.w.mul(4.0)).add(vec3(0.0, CU.domeR.w.mul(-6.0), 0.0));
     const Ms = M.sub(drift).toVar();
-    const warp = vec3(mx_noise_float(Ms.div(900.0)), 0.0, mx_noise_float(Ms.div(900.0).add(5.0))).mul(160.0);
+    // m: 0 the veil round the body, 1 the dome (eased between at the impact); the veil, thin and large on
+    // screen, skips the warp and the shafts
+    const m = CU.tw.w;
+    const warp = vec3(0.0).toVar();
+    // (eased in with m, so the veil's pattern never jumps as it becomes the dome)
+    If(m.greaterThan(0.001), () => { warp.assign(vec3(mx_noise_float(Ms.div(900.0)), 0.0, mx_noise_float(Ms.div(900.0).add(5.0))).mul(m.mul(160.0))); });
     const big = mx_noise_float(Ms.add(warp).mul(vec3(1.0 / 420.0, 1.0 / 260.0, 1.0 / 420.0))).mul(0.5).add(0.5).toVar();
     const fall = mx_noise_float(vec3(Ms.x.div(48.0), Ms.y.div(420.0), Ms.z.div(48.0))).mul(0.5).add(0.5).toVar();
     // denser low (it is falling back), the noise only shaping it (never a threshold)
     const yN = max(M.y.sub(Cn.y), 0.0).div(rad.y).toVar();
     const low = exp(yN.mul(-1.3)).mul(0.75).add(0.4);
     const dn = big.mul(1.6).add(0.4).mul(fall.mul(0.6).add(0.7)).mul(low).toVar();
+    // the veil: a wide low skirt of dust and haze its foot is lost in
+    dn.mulAssign(float(1.0).add(exp(M.y.sub(Cn.y).div(-COL.veil.skirtH)).mul(COL.veil.skirt).mul(float(1.0).sub(m))));
+    // the dome: low and irregular, its top a run of uneven heaps (the local height, from a broad octave
+    // across the ground), nothing of the ellipsoid's outline left
+    // (only worked out for the dome: the veil skips it)
+    If(m.greaterThan(0.001), () => {
+      const hf = clamp(mx_noise_float(vec3(Ms.x.div(300.0), 2.7, Ms.z.div(300.0))).mul(0.6).add(0.6)
+        .add(mx_noise_float(vec3(Ms.x.div(110.0), 6.1, Ms.z.div(110.0))).mul(0.2)), 0.22, 1.0).toVar();
+      dn.mulAssign(mix(float(1.0), float(1.0).sub(smoothstep(hf.mul(0.6), hf, yN)), m));
+    });
     // its edge wanders with the big octave (smoothly: nothing is cut out), so the outline is never the
-    // ellipsoid's
-    const edgeK = smoothstep(0.0, 0.7, q.w.add(big.sub(0.5).mul(0.35)).add(fall.sub(0.5).mul(0.15)));
+    // ellipsoid's; a narrow fringe, not a uniform fuzz (and no streaks in it: they read as spikes)
+    const edgeK = smoothstep(0.0, mix(float(0.7), float(0.32), m), q.w.add(big.sub(0.5).mul(0.5)));
     const tau = q.x.mul(COL.dome.k).mul(dn).mul(edgeK).mul(CU.domeR.z).mul(CU.tw.x.mul(0.4).add(1.0)).toVar();
     const a = float(1.0).sub(exp(tau.negate()));
+    // how thin the sand is along the view (its edges and heaps) and where its surface faces the sun
+    const thin = exp(tau.mul(-0.9)).toVar();
+    const nE = normalize(ro.add(rd.mul(q.y)).sub(Cn).div(rad.mul(rad))).toVar();
     // the light at M through the sand toward the sun (its exit distance times the density there)
     const sun = (L, C) => {
       const up = smoothstep(-0.03, 0.04, L.y);
@@ -945,24 +1138,33 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
       const att = exp(lq.z.mul(COL.dome.k * 2.5).mul(dn).negate());
       // shafts: the light broken across its path by the sand's streaks
       const perp = M.sub(L.mul(dot(M, L)));
-      const shaft = smoothstep(0.25, 0.75, mx_noise_float(perp.div(110.0).add(vec3(0.0, CU.domeR.w.mul(0.05), 0.0))).mul(0.5).add(0.5)).mul(0.65).add(0.35);
+      const shaft = float(0.68).toVar();
+      If(m.greaterThan(0.001), () => { shaft.assign(mix(float(0.68), smoothstep(0.25, 0.75, mx_noise_float(perp.div(110.0).add(vec3(0.0, CU.domeR.w.mul(0.05), 0.0))).mul(0.5).add(0.5)).mul(0.65).add(0.35), m)); });
       const fwd = pow(max(dot(rd, L), 0.0), 4.0).mul(CU.card.x).mul(4.0).add(0.1);
-      const night = fwd.mul(att).mul(shaft);
+      // the dome: its rim lit where the sand is thin and its surface faces the sun (the sun's side and
+      // its heaps' tops), its core dark
+      const sw = smoothstep(-0.3, 0.7, dot(normalize(vec3(nE.x, 0.001, nE.z)), normalize(vec3(L.x, 0.0, L.z)))).mul(0.7).add(max(nE.y, 0.0).mul(0.45));
+      // (where it is thin the light comes in from its sunward surface, not through its depth)
+      const night = fwd.mul(shaft).mul(mix(att, att.mul(0.3).add(thin.mul(float(1.0).sub(thin)).mul(sw).mul(3.2)), m));
       // by day: lit from above, the sunlit side of its surface pale
-      const nE = normalize(ro.add(rd.mul(q.y)).sub(Cn).div(rad.mul(rad)));
       const day = max(dot(nE, L), 0.0).mul(1.8).add(0.3).mul(mix(float(0.5), float(1.0), smoothstep(0.0, 0.7, yN)));
       return C.mul(up).mul(mix(night, day, CU.tw.x));
     };
-    const light = sun(U.uSun1Dir, U.uSun1Col).add(sun(U.uSun2Dir, U.uSun2Col)).add(ambD(0.35)).add(U.uAmbGround.mul(0.2));
+    // (a sun below the horizon is skipped)
+    const light = ambD(0.35).add(U.uAmbGround.mul(0.2)).mul(mix(float(1.0), thin.mul(0.6).add(0.4), m)).toVar();
+    If(U.uSun1Dir.y.greaterThan(-0.03), () => { light.addAssign(sun(U.uSun1Dir, U.uSun1Col)); });
+    If(U.uSun2Dir.y.greaterThan(-0.03), () => { light.addAssign(sun(U.uSun2Dir, U.uSun2Col)); });
     const c0 = U.uSand.mul(CU.cardTint).mul(mix(float(0.55), float(1.0), CU.tw.x)).mul(light);
     // (by day the dust is the pale of sunlit sand, not its deep ochre)
     const c = mix(c0, vec3(dot(c0, vec3(0.3333))).mul(vec3(1.08, 1.0, 0.86)), CU.tw.x.mul(0.45)).toVar();
-    const hz = hazeOf(M, float(0.0), CU.look.x, float(0.62)).toVar();
+    const hz = vec4(domeHazeV).toVar();
     c.assign(mix(c, hz.xyz, hz.w));
+    // (its lit rim never brighter than the air behind it)
+    c.assign(min(c, hz.xyz.mul(1.05)));
     return vec4(finish(c), a);
   })();
   const dome = new THREE.Mesh(dgeo, dmat);
-  dome.visible = false; dome.renderOrder = 2; dome.frustumCulled = false;
+  dome.visible = false; dome.renderOrder = 2; dome.frustumCulled = false;   // (over the body: it hazes it)
   scene.add(dome);
 
   // ---- the sand: one instanced sprite of streaks
@@ -979,15 +1181,13 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     const q = uv().sub(0.5).mul(2.0).toVar();
     const sheet = float(En.z.lessThan(0.0)).toVar();
     const seed = Dn.w.mul(17.0).toVar();
-    const fib = mx_noise_float(vec3(q.x.mul(0.8).sub(En.w.mul(2.2)), q.y.mul(5.0), seed)).mul(0.5).add(0.5);
-    const fib2 = mx_noise_float(vec3(q.x.mul(1.6).sub(En.w.mul(3.5)), q.y.mul(13.0), seed.add(11.0))).mul(0.5).add(0.5);
-    const grain = mx_noise_float(vec3(q.x.mul(9.0).sub(En.w.mul(6.0)), q.y.mul(30.0), seed.add(23.0))).mul(0.5).add(0.5);
+    const fib = mx_noise_float(vec3(q.x.mul(0.8).sub(En.w.mul(2.2)), q.y.mul(2.6), seed)).mul(0.5).add(0.5);
     const across = exp(q.y.mul(q.y).mul(-3.5));
     const top = q.x.add(0.62).sub(mx_noise_float(vec3(q.y.mul(7.0), seed, 3.0)).mul(0.3)).toVar();
     const streakEnv = smoothstep(0.0, 0.12, top).mul(float(1.0).sub(smoothstep(-0.1, 1.0, q.x)).mul(0.85).add(0.15).mul(float(1.0).sub(smoothstep(0.75, 1.0, q.x))));
     const sheetEnv = float(1.0).sub(smoothstep(0.35, 1.0, abs(q.x))).mul(exp(q.y.mul(q.y).mul(-2.5)));
     const env = mix(streakEnv.mul(across), sheetEnv, sheet);
-    const d = env.mul(fib.mul(0.65).add(fib2.mul(0.45)).mul(grain.mul(0.5).add(0.75)).add(0.03)).toVar();
+    const d = env.mul(fib.mul(1.05).add(0.03)).toVar();
     // faded into the ground at its foot (the card's offset turned to world up)
     const off = q.x.mul(Dn.x.mul(0.5)).mul(sin(En.y)).add(q.y.mul(Dn.y.mul(0.5)).mul(cos(En.y)));
     const wy = Pn.y.add(off);
@@ -1020,7 +1220,7 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     const f = fogLite(cameraPosition, rd, d).mul(CU.card.z);
     const lit = alb.mul(keyC()).mul(fwd).mul(float(1.0).sub(f));
     const sky = skyLite(rd).toVar();
-    return min(lit, max(sky.mul(0.85).sub(alb.mul(0.2)), vec3(0.0)));
+    return min(lit, max(sky.mul(0.6).sub(alb.mul(0.2)), vec3(0.0)));
   });
   const coreV = vertexStage(shadeCore()), rimV = vertexStage(shadeRim());
   smat.colorNode = Fn(() => {
@@ -1028,6 +1228,7 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     return finish(coreV.add(rimV.mul(thin)));
   })();
   const sprite = new THREE.Sprite(smat);
+  // (drawn after the body)
   sprite.count = POOL; sprite.frustumCulled = false; sprite.renderOrder = 3; sprite.visible = false;
   scene.add(sprite);
 
@@ -1038,12 +1239,15 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     if (ps.length >= POOL) { let k = 0; for (let i = 1; i < ps.length; i++) if (ps[i].age / ps[i].life > ps[k].age / ps[k].life) k = i; ps.splice(k, 1); }
     ps.push({ age: 0, seed: rnd(), drag: 0, thick: 1, len: 3, hint: [0, -1, 0], ...o });
   }
+  // a grain let go fades out over dur s from now (never by shortening its life: its fade would jump)
+  // (once let go, a later letting-go leaves its fade as it is)
+  const letGo = (p, dur) => { if (p.goAt === undefined) { p.goAt = p.age; p.goDur = dur; } };
   let cutDone = null;
   function shedBody() {
     // at the impact (the cut, under reduced motion) the sand still falling off the body thins out
     if (st.impactAt === null || cutDone === st.impactAt) return;
     cutDone = st.impactAt;
-    for (const p of ps) if (p.fromBody) p.life = Math.min(p.life, p.age + (reduced ? 0.05 : 5));
+    for (const p of ps) if (p.fromBody) { if (reduced) p.life = Math.min(p.life, p.age + 0.05); else letGo(p, 5); }
   }
   const DOWN = [0, -1, 0], WIND = [WX, 0, WZ];
   const windA = Math.atan2(WZ, WX);
@@ -1072,47 +1276,70 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
           size: 22 + 14 * rnd(), len: 4 + 2 * rnd(), grow: 1.6, life: 10, alpha: 0.5, thick: 1.2, gy: g - 6 });
       }
     }
+    // the rise: the first thing seen is torn dust and sand falling off its head, the dark mass inside it
+    if (st.bodyOn && st.seen > 0.01 && t > T.rise && t < T.call && st.impactAt === null && !reduced) {
+      acc.crown += dt * 12 * (1 - sstep(T.rise + 10, T.rise + 17, t));
+      const hd = st.head, Pr = st.prof;
+      while (acc.crown > 1 && hd) {
+        acc.crown--;
+        let a = rnd() * Math.PI * 2;
+        const ec = cam ? cam.position : null, ed = ec ? Math.atan2(ec.z - hd[2], ec.x - hd[0]) : 0;
+        { const d = wrap(a - ed); if (Math.cos(d) < -0.1) a = ed + Math.sign(d || 1) * (1.45 + 0.25 * rnd()); }
+        const r = Pr.R[NR - 1] * (0.5 + 0.8 * rnd());
+        const x = hd[0] + Math.cos(a) * r + WX * 20 * rnd(), z = hd[2] + Math.sin(a) * r + WZ * 20 * rnd(), g = height(x, z);
+        spawn({ x, y: hd[1] - 70 + 100 * rnd(), z, vx: WX * (1 + 2 * rnd()), vy: -(7 + 6 * rnd()), vz: WZ * (1 + 2 * rnd()), hint: DOWN,
+          size: 30 + 26 * rnd(), len: 2 + 2 * rnd(), grow: 1.3, life: 5 + 3 * rnd(), alpha: 0.3, thick: 1.3 + 0.6 * rnd(), gy: g, floor: g + 6, fromBody: true });
+      }
+    }
     if (st.bodyOn && st.hcur > 20 && (st.impactAt === null || !reduced)) {
       const S = st.centres, Pr = st.prof, ex = st.hcur;
       const ringAt = (e) => Math.max(0, Math.min(NR - 1, Math.round(NR - 1 - (ex - e) / Pr.ds)));
+      const ec = cam ? cam.position : null, eyeDir = ec ? [ec.x - B[0], ec.z - B[2]] : [-st.away[0], -st.away[1]];
+      { const l = Math.hypot(eyeDir[0], eyeDir[1]) || 1; eyeDir[0] /= l; eyeDir[1] /= l; }
       // the curtains off its downwind flank only: thin streaks falling 10 to 14 m/s; at the call three
       // times as many, in the fall more again (it sheds as it goes over)
-      const rate = t < T.call ? 14 : t < T.fall ? 42 : 60;
-      acc.curtain += dt * rate * (reduced ? 0.35 : 1);
+      const rate = t < T.call ? 11 : t < T.fall ? 16 : 40;
+      acc.curtain += dt * rate * (reduced ? 0.35 : 1) * (st.seen > 0.01 ? 1 : 0);
       while (acc.curtain > 1) {
         acc.curtain--;
         const e = ex * (0.2 + 0.75 * rnd()), i = ringAt(e), p = S[i];
         if (!p) break;
-        const a = windA + (rnd() - 0.5) * 1.9, r = Pr.R[i] * (0.95 + 0.35 * rnd());
+        // (off the flank the wind blows toward, seen from the eye; spread over its near half, never
+        // behind it: having no depth, it would draw one behind it over it)
+        const ed = Math.atan2(eyeDir[1], eyeDir[0]), side = Math.sign(wrap(windA - ed)) || 1;
+        const a = ed + side * (0.35 + 1.25 * rnd());
+        const r = Pr.R[i] * (0.95 + 0.35 * rnd());
         const x = p[0] + Math.cos(a) * r + WX * 25 * rnd(), z = p[2] + Math.sin(a) * r + WZ * 25 * rnd(), g = height(x, z);
-        const over = t > T.fall, vy = over ? 25 + 35 * clamp01((t - T.fall) / 10) : 10 + 4 * rnd(), w = over ? 18 + 50 * rnd() : 30 + 40 * rnd();
+        const over = t > T.fall, vy = over ? 25 + 35 * clamp01((t - T.fall) / 10) : 10 + 4 * rnd(), w = over ? 18 + 40 * rnd() : 22 + 26 * rnd();
         spawn({ x, y: p[1] - Pr.R[i] * Math.min(1, st.fallPhi * 1.5), z, vx: reduced ? 0 : WX * (1 + 2 * rnd()), vy: reduced ? 0 : -vy, vz: reduced ? 0 : WZ * (1 + 2 * rnd()), hint: DOWN,
-          size: w, len: over ? 2 + rnd() : 3 + 3 * rnd(), grow: 1.25, life: reduced ? 16 : over ? 2.5 + 1.5 * rnd() : 10 + 6 * rnd(), alpha: over ? 0.22 + 0.2 * rnd() : 0.5, thick: 1.4 + 0.8 * rnd(), gy: g, floor: g + 6, fromBody: true });
+          size: w, len: over ? 2 + rnd() : 3 + 2 * rnd(), grow: 1.25, life: reduced ? 16 : over ? 2.5 + 1.5 * rnd() : 7 + 4 * rnd(), alpha: over ? 0.2 + 0.18 * rnd() : 0.38, thick: 1.4 + 0.8 * rnd(), gy: g, floor: g + 6, fromBody: true });
       }
       // the skirt: wide low sheets rolling out round its foot, downwind
-      acc.skirt += dt * 2.0;
+      acc.skirt += dt * 0.6;
       while (acc.skirt > 1) {
         acc.skirt--;
         const a = windA + (rnd() - 0.5) * 2.6, r = COL.Rbase * (0.6 + 1.2 * rnd()), x = B[0] + Math.cos(a) * r, z = B[2] + Math.sin(a) * r, g = height(x, z);
         spawn({ x, y: g + 8 + 12 * rnd(), z, vx: reduced ? 0 : WX * 3, vy: 0, vz: reduced ? 0 : WZ * 3, hint: WIND, sheet: true,
-          size: 45 + 30 * rnd(), len: 4 + 2 * rnd(), grow: 1.4, life: 14, alpha: 0.55, thick: 1.4, gy: g - 8, fromBody: true });
+          size: 45 + 30 * rnd(), len: 4 + 2 * rnd(), grow: 1.4, life: 14, alpha: 0.55, thick: 1.4, gy: g - 8, fromBody: true, low: true });
       }
     }
-    // at the impact: a few tall pour-backs falling through the dome (they are gone before the settle)
+    // at the impact by day (no dome is drawn): low sheets of dust rolling out over the far dunes from
+    // where it went down (the tall pour-backs through the dome are gone: they read as spikes)
     if (st.impactAt !== null && last !== st.impactAt) {
       last = st.impactAt;
       const I = st.impactP, A = COL.dome.w / 2;
-      for (let k = 0; k < (reduced ? 0 : 10); k++) {
-        const a = rnd() * Math.PI * 2, r = A * (0.15 + 0.4 * rnd()), x = I[0] + Math.cos(a) * r, z = I[2] + Math.sin(a) * r, g = height(x, z);
-        spawn({ x, y: g + COL.dome.h * (0.5 + 0.3 * rnd()), z, vx: WX * 2, vy: -(11 + 3 * rnd()), vz: WZ * 2, hint: DOWN,
-          size: 20 + 15 * rnd(), len: 5 + 3 * rnd(), grow: 1.3, life: 8, alpha: 0.35, thick: 1.2, gy: g, floor: g + 6, wait: 1 + 2 * rnd() });
+      for (let k = 0; k < (reduced || st.seen > 0.99 ? 0 : 26); k++) {
+        const a = rnd() * Math.PI * 2, r = A * (0.1 + 0.55 * rnd()), x = I[0] + Math.cos(a) * r, z = I[2] + Math.sin(a) * r, g = height(x, z);
+        const out = 6 + 8 * rnd();
+        spawn({ x, y: g + 10 + 20 * rnd(), z, vx: Math.cos(a) * out + WX * 3, vy: 0, vz: Math.sin(a) * out + WZ * 3, hint: WIND, sheet: true, day: true,
+          size: 90 + 70 * rnd(), len: 3 + 2 * rnd(), grow: 1.6, life: 16 + 6 * rnd(), alpha: 0.32, thick: 1.1, gy: g - 10, wait: 0.3 * rnd() });
       }
     }
     // as it goes over, the sand it shed upright is let go (it would hang in the air above it)
-    if (t > T.fall + 1.5 && !st.overGo) { st.overGo = true; for (const p of ps) if (p.fromBody) p.life = Math.min(p.life, p.age + 1.5); }
+    if (t > T.fall + 1.5 && !st.overGo) { st.overGo = true; for (const p of ps) if (p.fromBody && !p.low) letGo(p, 2.5); }
     if (t < T.fall) st.overGo = false;
     // before the settle every grain left in the air is let go (nothing hangs in the sky after)
-    if (t > T.settle - 2 && !st.swept) { st.swept = true; for (const p of ps) if (!p.near) p.life = Math.min(p.life, p.age + 2.5); }
+    if (t > T.settle - 2 && !st.swept) { st.swept = true; for (const p of ps) if (!p.near && !p.day) letGo(p, 3); }
     if (t < T.settle - 2) st.swept = false;
   }
   let cam = null, hide = false;
@@ -1124,7 +1351,8 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(pm);
     sph.center.set(st.B[0] + st.away[0] * 500, st.B[1] + 300, st.B[2] + st.away[1] * 500); sph.radius = 1300 + st.H;
     const inView = frustum.intersectsSphere(sph);
-    body.visible = !hide && !!st.bodyOn && inView && !!st.prof;
+    // (by day it is never drawn: felt and heard only)
+    body.visible = !hide && !!st.bodyOn && inView && !!st.prof && st.seen > 0.002;
     // (the tube is only written when it is drawn)
     if (body.visible) writeBody();
     const D = st.dome;
@@ -1138,10 +1366,10 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
       const p = ps[i];
       if (p.wait > 0) { p.wait -= dt; continue; }
       p.age += dt;
-      if (p.age > p.life) { ps.splice(i, 1); continue; }
+      if (p.age > p.life || (p.goAt !== undefined && p.age > p.goAt + p.goDur)) { ps.splice(i, 1); continue; }
       if (p.drag) { const k = Math.exp(-dt * p.drag); p.vx = p.vx * k + WX * 3 * (1 - k); p.vz = p.vz * k + WZ * 3 * (1 - k); p.vy *= k; }
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-      if (p.floor !== undefined && p.y < p.floor) { p.y = p.floor; p.vy = -0.6; p.vx = 0; p.vz = 0; p.life = Math.min(p.life, p.age + 1.2); }
+      if (p.floor !== undefined && p.y < p.floor) { p.y = p.floor; p.vy = -0.6; p.vx = 0; p.vz = 0; letGo(p, 1.2); }
     }
     live = 0;
     const pa = posA.array, da = datA.array, ea = extA.array;
@@ -1155,7 +1383,11 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
       if (p.wait > 0 || hide) continue;
       if (!inView && !p.near) continue;
       const u = p.age / p.life, s = p.size * (1 + (p.grow - 1) * Math.sqrt(u));
-      const a = p.alpha * sstep(0, 0.15, u) * (1 - sstep(0.5, 1, u));
+      // (let go: faded over its own time; by day nothing off the body is seen, the low dust is)
+      const go = p.goAt === undefined ? 1 : 1 - sstep(p.goAt, p.goAt + p.goDur, p.age);
+      const vis = p.day ? 1 - st.seen : p.fromBody && !p.low ? st.seen : 1;
+      let a = p.alpha * sstep(0, 0.15, u) * (1 - sstep(0.5, 1, u)) * go * vis;
+      if (a < 0.002) continue;
       // turned along its motion on screen (or its hint, standing still); a falling streak whose long
       // axis leaves the vertical by more than 20 degrees on screen is not drawn (no fans, no planks)
       const sp = Math.hypot(p.vx, p.vy, p.vz) > 0.5 && !p.sheet;
@@ -1164,7 +1396,7 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
       const sx = (p1[0] - p0[0]) * aspect, sy = p1[1] - p0[1];
       let rot = Math.hypot(sx, sy) > 1e-7 ? Math.atan2(sy, sx) : -Math.PI / 2;
       if (p.sheet) { if (Math.abs(Math.sin(rot)) > 0.5) rot = Math.sign(Math.cos(rot) || 1) > 0 ? 0 : Math.PI; }
-      else if (!p.near && Math.abs(wrap(rot + Math.PI / 2)) > 20 * DEG) continue;
+      else if (!p.near) { const off = Math.abs(wrap(rot + Math.PI / 2)); if (off > 20 * DEG) continue; a *= 1 - sstep(13 * DEG, 20 * DEG, off); }
       // (a falling streak hangs from where it was shed: its ragged top there, its foot below)
       pa[live * 3] = p.x; pa[live * 3 + 1] = p.sheet || p.near ? p.y : p.y - s * p.len * 0.42; pa[live * 3 + 2] = p.z;
       da[live * 4] = s * p.len; da[live * 4 + 1] = s; da[live * 4 + 2] = a; da[live * 4 + 3] = p.seed;

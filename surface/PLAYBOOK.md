@@ -70,6 +70,10 @@ run, and a README section saying what was measured and what was not.
   Dust Sea's colossus. It stays massive (700 to 800 m), far (never nearer than 1.5 km), mostly hidden
   in haze, glare and its own falling sand, and only a dark mass: no face, eyes, mouth, teeth, rim all
   round or countable segments, nothing round on top, nothing horizontal (tiers read as a tower).
+  By day it is felt and heard, never seen (the lead, 16 Nov 2026): no body, veil, dome or shadow is
+  drawn by day, blended out by the same sun-height value the shading uses, so nothing switches at a
+  time-of-day boundary; the hush, the swell and its low dust, the sound, the ground wave, the camera
+  and the figure carry it. A far creature in clear daylight reads as a model however it is drawn.
   It is not a precedent for close creatures on other worlds; a world that wants one asks again. (The owner chose the dim eyes on 13 Nov 2026 from a
   sheet of three; `?eyes=0` removes them.)
 - **Reduced motion** is a designed state: cuts with a short fade, nothing races, nothing shakes.
@@ -199,6 +203,22 @@ the contract) runs every event of a world; the world only describes them.
    something opaque covers it; a dome of sand is one soft volume, never thresholded into heads. Look
    at every time of day, the crest pose, reduced motion and a phone, not only the showcase path, and
    measure cost with real playback and one fixed view.
+   **Lessons from its fourth pass** (a second critic, 5 of 10): every term that changes at a beat must
+   ease (a volume that becomes another blends its centre, size, density and look over seconds; a grain
+   let go fades over its own time, never by shortening its life; a sway eases out; a noise warp that
+   switches on mid-blend jumps); step each beat at 60 fps and check no step changes more than about
+   twice its neighbours. A sun disc behind a dissolving top reads as an eye: take the disc away by what
+   covers it from the eye, not only by the shadow at the visitor. Alpha, not dither, and no depth of its
+   own: a depth pass cuts what is drawn after it along a hard line, so shed its sand on the side toward
+   the eye instead, and budget the sand (without depth every streak's pixels are paid for). Dissolve a
+   top by distance from the head, not by height up what is exposed, or the rise is an egg; fray the
+   outline by the ring's roundness, not the surface normal, or creases fray as lines inside it. A shadow
+   front reads as travelling only if it takes seconds over the visible ground: slow it near the visitor
+   and narrow its terminator. A dome wants an irregular top (its local height from a broad octave), a
+   lit thin rim, a dark core and its haze taken at one height. Aim the camera at the centre of what is
+   happening; under reduced motion cut once to the sun's line rather than stand beside the sun. Prefer a
+   place with rows of dunes in sight; where there are none, a low skirt of haze over its foot carries the
+   distance.
 
 The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
 byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
@@ -292,4 +312,4 @@ Not started. What this session knows that bears on it:
 - (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
   see the walk README, "The storm cleanup".)
 - Not built: brink plumes, the landing and leaving, the shuttle overhead, the caravan tracks, the
-  score. (The colossus is built, 15 Nov 2026, and its look reworked twice, 15 and 16 Nov: see the walk README, "The colossus".)
+  score. (The colossus is built, 15 Nov 2026, and its look reworked three times, 15 and 16 Nov: see the walk README, "The colossus".)

@@ -26,7 +26,10 @@
 //   walk() -> { k, ... } | null            the walker's push (the largest k wins)
 //   camera() -> { boom?, amount, lift?, toward?: [x, z, beat], shake? }   (shortest boom, largest amount;
 //                                          lift 0..1 a raised view (0.06 rad); toward the point to turn to
-//                                          after 3 s without input; shake 0..1 at most 0.3 degrees)
+//                                          after 3 s without input; shake 0..1 at most 0.3 degrees;
+//                                          cutTo [x, z, id]: under reduced motion only, the view cuts to
+//                                          face it once per id, cross-faded)
+//   lineDone?() -> boolean                 its DOM line (announce) is taken down early once true
 //   trace() -> { healMul, clear? }         (healMul multiplied, clear ORed)
 //   figure() -> { look?: [x, z], brace?: 0..1 }
 //   strike?(e) -> boolean | number         a staff strike (only defs with `call`); e.blocked when it
@@ -178,7 +181,8 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
       const c = e.ev.camera();
       if (c) {
         camAmt = c.amount; if (c.boom !== undefined) camBoom = c.boom;
-        return { storm: camAmt, stormBoom: camBoom, lift: c.lift || 0, toward: reduced ? null : c.toward || null, shake: reduced ? 0 : c.shake || 0 };
+        return { storm: camAmt, stormBoom: camBoom, lift: c.lift || 0, toward: reduced ? null : c.toward || null, shake: reduced ? 0 : c.shake || 0,
+          cutTo: reduced ? c.cutTo || null : null };
       }
     }
     return { storm: camAmt, stormBoom: camBoom === Infinity ? 0 : camBoom, lift: 0, toward: null, shake: 0 };

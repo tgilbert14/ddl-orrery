@@ -161,6 +161,10 @@ export function createFollow({ reduced = false } = {}) {
       const d = wrapPi(Math.atan2(f.toward[1] - f.z, f.toward[0] - f.x) - s.yaw);
       s.yaw = wrapPi(s.yaw + clamp(d, -1, 1) * 0.6 * dt);
     }
+    // reduced motion: an event's point the view cuts to, once per id (main.js cross-fades the cut)
+    if (f.cutTo && s.cutOff !== f.cutTo[2] && !s.slideOn) {
+      s.cutOff = f.cutTo[2]; s.yaw = wrapPi(Math.atan2(f.cutTo[1] - f.z, f.cutTo[0] - f.x)); s.cut = true;
+    }
     s.lift += ((f.lift || 0) - s.lift) * (1 - Math.exp(-dt / 1.0));
     if (s.lift < 1e-4 && !f.lift) s.lift = 0;
     s.shake = f.shake || 0;
