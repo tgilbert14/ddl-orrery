@@ -47,7 +47,7 @@ export function createFollow({ reduced = false } = {}) {
   const s = {
     yaw: 0, elev: FOLLOW.elev, L: FOLLOW.boom, Lt: FOLLOW.boom,
     piv: [0, 0, 0], pv: [0, 0, 0], cam: [0, 0, 0], cv: [0, 0, 0],
-    still: 0, sinceLook: 99, init: false, raised: 0, shortened: 0,
+    still: 0, sinceLook: 99, init: false, raised: 0, shortened: 0, lift: 0, shake: 0, towardOff: null,
     look: [0, 0, 0], viewYaw: 0, viewPitch: 0, base: [0, 0, 0],
     sm: 0, cut: false, slideOn: false, slideSide: 1, slideOff: 0, slideElev: 0, sdir: [1, 0], fig: [0, 0, 0], gv: 0, lv: [0, 0],
     air: 0,
@@ -102,7 +102,10 @@ export function createFollow({ reduced = false } = {}) {
   }
 
   // f: { x, z, ground, speed, sliding, running, travelYaw|null, slide: [sx, sz] (m/s), sun: [x, z],
-  // wind: [x, z], airborne 0/1, airHeight (m), storm 0..1, stormBoom (m) }; look: { dx, dy } radians
+  // wind: [x, z], airborne 0/1, airHeight (m), storm 0..1, stormBoom (m), and an event's view (all
+  // optional): lift 0..1 (the boom 3 m longer and the view raised, so the horizon sits low and a far
+  // thing standing over it is framed), toward [x, z, beat] (turn there after 3 s without input; any
+  // input cancels it until the next beat), shake 0..1 (at most 0.3 degrees) }; look: { dx, dy } radians
   function update(dt, f, look) {
     if (!s.init) snap(f);
     // the crest leap (none of it under reduced motion: the camera does as it would without the leap)
@@ -150,7 +153,16 @@ export function createFollow({ reduced = false } = {}) {
         s.slideOff = clamp(s.slideOff + look.dx, -1.4, 1.4);
         s.slideElev = clamp(s.slideElev - look.dy, -0.1, FOLLOW.slideElevMax);
       } else { s.yaw = wrapPi(s.yaw + look.dx); s.elev = clamp(s.elev - look.dy, FOLLOW.elevMin, FOLLOW.elevMax); }
+      if (f.toward) s.towardOff = f.toward[2];
     } else s.sinceLook += dt;
+    // an event's point to look at (not in the slide view; reduced motion never gets one)
+    if (f.toward && s.towardOff !== f.toward[2] && !s.slideOn && s.sinceLook > 3) {
+      const d = wrapPi(Math.atan2(f.toward[1] - f.z, f.toward[0] - f.x) - s.yaw);
+      s.yaw = wrapPi(s.yaw + clamp(d, -1, 1) * 0.6 * dt);
+    }
+    s.lift += ((f.lift || 0) - s.lift) * (1 - Math.exp(-dt / 1.0));
+    if (s.lift < 1e-4 && !f.lift) s.lift = 0;
+    s.shake = f.shake || 0;
     const moving = f.speed > 0.3;
     s.still = moving ? 0 : s.still + dt;
     // swing gently behind a walker who has been moving for a while without the player orbiting
@@ -170,6 +182,7 @@ export function createFollow({ reduced = false } = {}) {
     // stay readable in 8 m of visibility; f.storm is eased by the caller (about 3 s). Also under
     // reduced motion: it is slow, and without it the figure is lost in the dust
     if (f.storm > 0) Lt += (Math.min(Lt, f.stormBoom) - Lt) * f.storm;
+    if (s.lift > 0) Lt += 3 * s.lift;
     s.Lt = Lt;
     const tauL = Lt > s.L ? (airK > 0.1 ? 0.7 : 2.2) : 0.9;
     s.L += (Lt - s.L) * (1 - Math.exp(-dt / tauL));
@@ -236,6 +249,8 @@ export function createFollow({ reduced = false } = {}) {
     const dx = tx - s.cam[0], dy = ty - s.cam[1], dz = tz - s.cam[2];
     s.viewYaw = Math.atan2(dz, dx) - FOLLOW.frameSide * (1 - sm);
     s.viewPitch = clamp(Math.atan2(dy, Math.hypot(dx, dz)) + FOLLOW.frameDown * (1 - sm), FOLLOW.pitchMin + (FOLLOW.slidePitchMin - FOLLOW.pitchMin) * sm, FOLLOW.pitchMax);
+    if (s.lift > 0) s.viewPitch += 0.13 * s.lift * (1 - sm);
+    if (s.shake > 0) { s.shT = (s.shT || 0) + 1; const a = 0.3 * Math.PI / 180 * s.shake; s.viewYaw += a * Math.sin(s.shT * 2.1); s.viewPitch += a * Math.sin(s.shT * 2.9 + 1); }
   }
 
   return {

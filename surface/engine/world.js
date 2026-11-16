@@ -12,8 +12,11 @@
 //                       Pilgrim's own shadow march reads SH, the engine reads CAM, GRID, SHMAP, SKY
 //   times               { TIME_NAMES, timeValues(name), applyBlend(set, a, b, f, groundY), SUN_OVERRIDE }
 //   starts()            { top, third, first, figure }: where a walk starts in each view
-//   graphics()          async: { createMaterials, trace, pour, puffs, air, event } (see main.js
-//                       buildGraphics for what each must provide; pour, air and event may be null)
+//   graphics()          async: { createMaterials, trace, pour, puffs, air, events } (see main.js
+//                       buildGraphics for what each must provide; pour and air may be null).
+//                       events: [def, ...], the things that happen to you, each in its own
+//                       worlds/<slug>/<event>.js; the def and Event contract is the header of
+//                       engine/events.js (a single `event: def` is taken as one named 'storm')
 //   sound()             async: the sound module, or a rejection when the world has none
 export const DEG = Math.PI / 180;
 export let world = null;

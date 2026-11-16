@@ -32,6 +32,10 @@
   #hint { position: fixed; z-index: 2; left: 50%; bottom: 60px; transform: translateX(-50%); margin: 0; padding: 7px 14px; max-width: calc(100% - 40px);
     text-align: center; background: rgba(20, 13, 9, 0.5); border-radius: 999px; pointer-events: none; transition: opacity 1.6s ease 1.2s; }
   #hint.gone { opacity: 0; }
+  #event-line { position: fixed; z-index: 2; left: 50%; top: 18%; transform: translateX(-50%); margin: 0; padding: 7px 14px; max-width: calc(100% - 40px);
+    text-align: center; background: rgba(20, 13, 9, 0.45); border-radius: 999px; pointer-events: none; opacity: 0; transition: opacity 2.4s ease; }
+  #event-line:empty { display: none; }
+  #event-line.on { opacity: 1; transition: opacity 1.2s ease 1s; }
   #hint .touch-only { display: none; }
   body.touch #hint .touch-only { display: inline; }
   body.touch #hint .desk-only { display: none; }
@@ -72,7 +76,8 @@
   <p><span class="why"></span> The Dust Sea at dusk: two suns low over ridge after ridge of sand.</p>
 </div>
 <div id="stage" aria-label="The Dust Sea, a sand planet at dusk. Walk with W A S D or the arrow keys, or click the sand to walk there."></div>
-<p id="hint"><span class="desk-only">Click to turn the camera. W A S D to walk, Shift to run. Click the sand to walk there. V: first person.</span><span class="touch-only">Left thumb walks, right thumb turns the camera. Tap the sand to walk there.</span></p>
+<p id="hint"><span class="desk-only">Click to turn the camera. W A S D to walk, Shift to run. Click the sand to walk there. V: first person.</span><span class="touch-only">Left thumb walks, right thumb turns the camera. Tap the sand to walk there.</span><br><span class="controls">F or Space (long press on touch): strike the staff. Three, in time.</span></p>
+<p id="event-line" aria-live="polite"></p>
 <div id="dot"></div>
 <div class="ui" id="times" role="group" aria-label="Time of day">
   <button type="button" data-time="day" aria-pressed="false">Day</button>

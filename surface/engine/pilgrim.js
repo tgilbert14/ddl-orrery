@@ -431,7 +431,8 @@ export function createPilgrim({ U, shade, scene, reduced = false, fog = null, ey
 
   // ---- one frame. ws: the walker's state; heading (rad); wind: { dir [x, z] world, strength 0..1,
   // gust 0..1 }; t: animation time (s). Returns trace stamps for the staff, hem and drag.
-  function update(dt, ws, { heading, angVel = 0, wind, t, wish = null }) {
+  // act (optional, an event's): { look: [x, z] the hood turns toward, brace: 0..1 staff planted, leaning back }
+  function update(dt, ws, { heading, angVel = 0, wind, t, wish = null, act = null }) {
     const stamps = [];
     const h = heading, fx = Math.cos(h), fz = Math.sin(h), rx = -fz, rz = fx;
     const g = height(ws.x, ws.z);
@@ -499,7 +500,12 @@ export function createPilgrim({ U, shade, scene, reduced = false, fog = null, ey
     // the hood looks where it goes (a little ahead of the turn); idle, it looks about slowly
     let hoodT = 0;
     if (wish && Math.hypot(wish[0], wish[1]) > 0.05) hoodT = Math.max(-0.5, Math.min(0.5, wrapPi(Math.atan2(wish[1], wish[0]) - h) * 0.6));
-    if (!reduced && st.still > 4) hoodT += 0.35 * Math.sin((st.still - 4) * 0.21) * sstep(4, 7, st.still);
+    if (!reduced && st.still > 4 && !(act && act.look)) hoodT += 0.35 * Math.sin((st.still - 4) * 0.21) * sstep(4, 7, st.still);
+    if (act && act.look) hoodT = Math.max(-0.75, Math.min(0.75, wrapPi(Math.atan2(act.look[1] - ws.z, act.look[0] - ws.x) - h) * 0.8));
+    const brace = act && act.brace ? act.brace : 0;
+    if (brace > 0) { leanFT -= 0.1 * brace; st.leanF += (leanFT - st.leanF) * ease(dt || 1e-3, 0.08); }
+    // a strike: the staff thumped down ahead, the lantern jolted
+    if (st.strikeT !== undefined) st.strikeT += dt;
     st.hood += (hoodT - st.hood) * ease(dt || 1e-3, 0.35);
 
     // the wind in the local frame
@@ -557,6 +563,11 @@ export function createPilgrim({ U, shade, scene, reduced = false, fog = null, ey
         stamps.push({ type: 'slide', x0: st.dragLast[0], z0: st.dragLast[1], x1: st.tip.x, z1: st.tip.z, depth: 0.03, width: 0.035, exposure: ws.exposure });
         st.dragLast = [st.tip.x, st.tip.z];
       }
+    } else if (mode === 'stand' && (st.strikeT ?? 9) < 0.45) {
+      // the strike: lifted and thumped down a little ahead
+      const u = st.strikeT, tgt = ahead(0.32, 0.36, tmp2), lift = u < 0.18 ? Math.sin((u / 0.18) * Math.PI / 2) * 0.22 : Math.max(0, 0.22 * (1 - (u - 0.18) / 0.07));
+      approach(tgt.x, height(tgt.x, tgt.z) - 0.04 + lift, tgt.z, 30);
+      st.planted = u > 0.25;
     } else if (!st.planted) {
       const tgt = ahead(0.12, 0.36, tmp2);
       approach(tgt.x, height(tgt.x, tgt.z) - 0.03, tgt.z, 5);
@@ -704,13 +715,21 @@ export function createPilgrim({ U, shade, scene, reduced = false, fog = null, ey
   function reset() { st.init = false; st.hemLast = null; st.dragLast = null; st.feet = 0; st.planted = false; st.still = 0; st.airSm = 0; st.landK = 0; }
 
   // the crest leap's landing: how hard (the crouch's depth), and a jolt to the lantern
+  // the staff strike: returns where the tip comes down (world)
+  function strike() {
+    st.strikeT = 0;
+    st.lampV.y -= 0.5;
+    const h = st.heading || 0;
+    const x = st.x + Math.cos(h) * 0.32 - Math.sin(h) * 0.36, z = st.z + Math.sin(h) * 0.32 + Math.cos(h) * 0.36;
+    return [x, height(x, z), z];
+  }
   function land(e) {
     st.landK = clamp01(0.45 + 0.55 * Math.min(1, Math.abs(e.vy || 0) / 4.5));
     st.lampV.y -= 0.6 * st.landK;
   }
 
   return {
-    update, foot, land, setTime: setTimeName, setVisible, reset, glowMat, glow, uGlow,
+    update, foot, land, strike, setTime: setTimeName, setVisible, reset, glowMat, glow, uGlow,
     get state() { return { x: st.x, y: st.y, z: st.z, heading: st.heading, tip: st.tip.toArray(), planted: st.planted, mode: st.tipMode, lamp: st.lamp.toArray(), hang: st.hang.toArray(), bob: st.bob, sway: st.sway, leanF: st.leanF, still: st.still, air: st.airSm }; },
     triangles,
   };
