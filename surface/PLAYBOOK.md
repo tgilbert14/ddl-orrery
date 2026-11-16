@@ -180,16 +180,25 @@ the contract) runs every event of a world; the world only describes them.
    shadow can take one sun's direct light off the sand (lit sand falls to the dunes' own shade) rather
    than multiply everything. (Multiplying the sand's own shadow terms before it is lit was tried and is
    cheaper, but it moved ten first-person calm pixels by one level even inside a branch on a uniform:
-   the calm shader must not change outside the event's own branch.) To dim the sky (an eclipse), go through `modify()` on the sun's `Glow`,
-   `Sky` (the disc) and `uFill`, as storm.js does: a `sky` hook never runs while another event owns the
-   half-resolution sky pass. And `fog(col, P, lamp)` is also called for the lantern's glass with no
+   the calm shader must not change outside the event's own branch. Inside the branch too: terms written
+   exactly like the sand's own, such as its ambient and fill, were shared by the WebGL2 compiler with
+   the calm path and moved two calm pixels; write the event's copies differently.) To dim the sky (an
+   eclipse), go through `modify()` on the sun's `Sky` (the disc) and at most its tight `Glow`, as
+   storm.js does: a `sky` hook never runs while another event owns the half-resolution sky pass. Never
+   turn the wide glow or `uFill` down over the whole frame; darken the ground inside the shadow in the
+   ground hook instead. And `fog(col, P, lamp)` is also called for the lantern's glass with no
    `lamp`: an event's shadow must leave the glass alone.
-   **Lesson from the colossus's first pass** (the owner failed it on looks): a far creature built as a
-   clean tube with a cap, a uniform rim and its own sprites read as a small model beside the sun. What
-   worked was scale felt through the world: standing exactly on the sun's line so the sun goes out,
-   the shadow (the true sun direction) coming over the dunes to the figure until the lantern is the
-   brightest thing, the haze in front of it darkened as its shadow volume, the top lost in the sky and
-   the foot in its own sand, and a measured look gate (`colossus-work/gates.py`) next to the sheet.
+   **Lessons from the colossus** (the owner failed the first pass on looks, a critic the second): a far
+   creature built as a clean tube with a cap, a uniform rim and its own sprites reads as a small model
+   beside the sun; a dark body in clear air, darker than the dunes in front of it, reads as a statue.
+   What works is scale felt through the world: standing on the sun's line so the disc goes behind it
+   while the glare stays, the full haze of its distance over it (aerial perspective must not reverse),
+   a veil of its own dust round it, its top dissolving by alpha (never a mix to the sky colour), the
+   shadow's front crossing the dunes to the figure while the ground, not the lantern, is turned down.
+   Its sand must only fall, darker than the sky where thick; a fall must keep the body dark until
+   something opaque covers it; a dome of sand is one soft volume, never thresholded into heads. Look
+   at every time of day, the crest pose, reduced motion and a phone, not only the showcase path, and
+   measure cost with real playback and one fixed view.
 
 The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
 byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
@@ -283,4 +292,4 @@ Not started. What this session knows that bears on it:
 - (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
   see the walk README, "The storm cleanup".)
 - Not built: brink plumes, the landing and leaving, the shuttle overhead, the caravan tracks, the
-  score. (The colossus is built, 15 Nov 2026, and its look reworked the same day: see the walk README, "The colossus".)
+  score. (The colossus is built, 15 Nov 2026, and its look reworked twice, 15 and 16 Nov: see the walk README, "The colossus".)

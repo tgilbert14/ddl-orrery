@@ -829,194 +829,208 @@ inside. **The lead should re-time this on a quiet machine** (both backends, `per
 **Not checked:** any phone; the sound has not been heard by a person (the owner to judge, with the sound
 on); the passing's new light at ember was only seen through the reduced-motion seeded stills.
 
-## The colossus, 15 Nov 2026 (look reworked the same day)
+## The colossus, 15 Nov 2026 (look reworked twice, 15 and 16 Nov)
 
 The owner asked for events "like the sand worm but massively updated". This is the hub's worm (the
 2D hub's verb, "call what moves beneath the sand") rebuilt as an event on the director:
 `../worlds/dust-sea/colossus.js`, listed after the storm in `world.js`, with its sound in `sound.js`.
 The playbook's "no other creatures" rule is lifted by the owner for this one colossus only. It is 700
-to 800 m tall, 1.6 to 2.2 km away (never nearer than 1.5 km), and mostly hidden: its top lost in the
-sky, its foot in a skirt of its own sand, its flanks in falling curtains, its face (it has none) in the
-glare of the sun it stands across. No face, eyes, mouth, teeth, segments, rim all round, or round top.
+to 800 m tall, 1.6 to 2.2 km away (never nearer than 1.5 km), and mostly hidden: a dark mass in the
+haze at its distance and inside the glare of the sun it stands across, its top broken off at a slant
+and dissolving into the air, its foot in its own dust, a veil of that dust round it. No face, eyes,
+mouth, teeth, segments, rim all round, or round top.
 
-The first pass failed the owner on looks (mechanics were fine): at dusk a small, smooth, round-topped
-capsule with a clean rim light beside the sun, by day a grey-white smoke pillar, at ember an orange
-blob, a fall of puffy cartoon balls, no shadow reaching the Pilgrim, and a camera lift that left the
-Pilgrim a few pixels tall. This rework follows the lead's brief: scale is felt through what the
-ground, the light and the air do.
+The first pass failed the owner on looks (a small, smooth capsule with a rim light, a grey-white
+smoke pillar by day, an orange blob at ember, a fall of cartoon cumulus balls). The second pass got
+the size, the sun crossing and the lantern beat, and failed an independent look critic (4/10) on
+four frames: a pale striped see-through tent in the fall, a dark cut-out dome by day, three puffs
+for a dome under reduced motion, and a floodlit ember frame; the body also stood in clear air as the
+darkest, crispest thing in the upper frame (a hooded statue), the glare was taken off the whole sky,
+the lantern was turned up instead of the world down, the shadow came as a fade, and the cost ran 1.2
+to 1.5 ms over calm through the fall. This third pass answers that list (16 Nov).
 
 **How to see it.** It comes on its own 5 to 8 minutes after the page is ready, then every 12 to 18
 minutes (seeded; rarer than the storm, and never at the same time: each waits for the other's end and
-60 s of quiet). To see it on purpose: `/surface/walk/?colossus=now` (the hush 6 s after ready, 1.8 km,
-on the line of the low sun when that is within reach of the camera's facing), `?colossus=rise`
-(straight to the rise, for sharing), `?colossus=fast` (4x), `?colossus=off`. Or call it: stand still
-and strike the staff three times in time (F or Space; a 500 ms long press on the right half of a touch
-screen: the left half is the thumb stick and never strikes). The hush starts 6 to 10 s later within
-35 degrees of where the camera faces. The call cools down for 180 s and is refused during the storm
-or its quiet; a refused strike still thuds and rings the sand, and nothing comes. When it begins, a
-polite DOM line says where ("Far to the north, about 1.8 km, something rises from the sand"). The
-compass reads the world's heading degrees as on a map: 0 is north (+x), 90 east (+z), 180 south, 270
-west (so the dusk pale sun at 19 is a little east of north; seed 7 at dusk says "north").
+60 s of quiet). To see it on purpose: `/surface/walk/?colossus=now` (the hush 6 s after ready, 1.8 km),
+`?colossus=rise` (straight to the rise, for sharing), `?colossus=fast` (4x), `?colossus=off`. Or call
+it: stand still and strike the staff three times in time (F or Space; a 500 ms long press on the right
+half of a touch screen: the left half is the thumb stick and never strikes). The hush starts 6 to 10 s
+later. The call cools down for 180 s and is refused during the storm or its quiet; a refused strike
+still thuds and rings the sand, and nothing comes. When it begins, a polite DOM line says where ("Far
+to the north, about 1.8 km, something rises from the sand"). The compass reads the world's heading
+degrees as on a map: 0 is north (+x), 90 east (+z), 180 south, 270 west (so the dusk pale sun at 19 is
+a little east of north; seed 7 at dusk says "north").
 
 **The beats** (seconds from the hush): hush 0 to 12 (the wind ducks 12 dB, the hood turns to it, a
-sub-rumble from its bearing); swell 12 to 35 (a swell runs a curved 600 m path toward the breach
-throwing low sheets of sand, then a 300 m funnel sinks); rise 35 to 55 (it climbs at H/19 m/s, about
-40, the same ridges coming up out of the sand all the way; the sun goes out behind it; its shadow comes
-over the dunes, its front held near the base, then run out and creeping the last 500 m to reach the
-Pilgrim near 48 s and pass under the camera at 12 m/s; the lantern is then the brightest thing on
-screen); call 55 to 68 (a sway with a 24 s period, three times the falling sand; the call leaves it at
-57 s and arrives distance/343 s later); fall 68 to 82 (it arcs over away from the camera over 10 s and
-goes back into its veil and its sand as it goes; the impact near 78 s raises a dome of sand 1.1 km
-wide and 300 m high in 6 s, dark at its core and lit at its torn rim; the shadow stays where the
-column stood until the dome takes it, and the light never comes back in a flash; the boom arrives
-distance/343 s after the impact with a 0.3 degree shake for a second; a ring of crest puffs runs past
-the walker at 120 m/s and the Pilgrim braces); settle 82 to 110 (the dome drifts downwind and thins by
-about 104 s, the sun comes back at most a quarter of the way a second, the wind returns over 6 s, the
-funnel's scar heals). Prints heal 3x faster from the hush to the fall.
+sub-rumble from its bearing, the camera turns to its bearing after 3 s without input); swell 12 to 35
+(a swell runs a curved 600 m path toward the breach rolling low sheets of sand, then a 300 m funnel
+sinks); rise 35 to 55 (it climbs at H/19 m/s, about 40, the same ridges coming up out of the sand all
+the way, sand pouring off its downwind flank; the sun's disc goes behind it; its shadow's front shows on
+the far lit crests from 42 s, crosses the visible mid-ground from 44 to 50 s and climbs the last 40 m to
+the Pilgrim by 52.5 s); call 55 to 68 (a sway with a 24 s period, three times the falling sand; the call
+leaves it at 57 s and arrives distance/343 s later); fall 68 to 82 (it keels over to the side it leans,
+across the view and a little away, its top arcing over first, and from 72 s dives into the sand; it
+keeps its dark value all the way; the impact near 79 s raises a dome of sand 380 m high in 6 s that
+surges out from 0.8 to 1.3 km wide over 18 s, its core over the body as it sinks; the boom arrives
+distance/343 s later with a 0.3 degree shake for a second and the Pilgrim braces); settle 82 to 110
+(the dome drifts downwind and thins by about 106 s, every grain still in the air is let go at 80 s,
+the sun comes back at most a quarter of the way a second, the wind returns over 6 s, the funnel's scar
+heals). Prints heal 3x faster from the hush to the fall.
 
-**Reduced motion** is a designed state: nothing climbs or topples. At the rise the whole body is there
-behind its veil and develops out of it over 6 s; it holds the eclipse with the lantern up; at the fall
-it cuts (the engine's 0.4 s cross-fade) to the dome at its peak, which then thins by fade. No ground
-wave, no shake, no turn of the camera (its yaw never moved in the switches and look runs), and the
-sand stands still where it would fall.
+**Reduced motion** is a designed state: nothing climbs, sways or topples, and the camera never turns.
+It stands inside the frame the visitor has: on the sun's line when that is within 60% of the half
+field of view, else as near it as that allows (about 10 degrees either side in portrait). At the rise
+the whole body is there behind its veil and develops half way out of it over 6 s, and holds there (the
+look the critic picked as the best image of the second pass); its shadow and the lantern's beat come
+with it. At the fall it cuts (the engine's 0.4 s cross-fade) to the dome at its full width and height,
+which then thins by fade. No ground wave, no shake. The third-person view still tilts up 0.06 rad
+(3.4 degrees) over about 3 s at the hush and back at 88 s; yaw and position never move.
+
+**Where it stands.** On the key sun's line (the lowest sun worth standing across: dusk the pale sun at
+19, day the red sun at 206, ember the red sun at 58), 1.2 degrees to a seeded side, stepping out 0.25
+degrees at a time until a JavaScript march over `height()` from the camera finds a clear sightline; a
+crest hiding its base scores -40, and if no bearing within 8 degrees is clear a second pass lets a
+crest hide up to 80 m more of it before giving up the line. A scheduled rising always takes the line
+(the camera turns to it in the hush); a called one takes it when it is within 90 degrees of the facing.
+Only when the line is refused does the old search run (every 5 degrees within the span, scored by the
+angle to the sun line). `state().sightline` says what was found (`onSun`, `baseHidden`).
 
 **How it is built.**
-- *Placement.* If the key sun's bearing (the lowest sun worth standing across: dusk the pale sun at 19,
-  day the red sun at 206, ember the red sun at 58) is within the span of the camera's facing (60
-  degrees, 35 when called), it stands on that line, 1.2 degrees to a seeded side, stepping out 0.25
-  degrees at a time until a JavaScript march over `height()` from the camera finds a clear sightline;
-  a crest hiding its base scores -40. Otherwise the old search (every 5 degrees, scored by the angle
-  to the sun line). `state().sightline` says what was found (`onSun`, `baseHidden`).
 - *The body.* One tube, 64 rings x 48 sides, rigid along its length: the profile is fixed to the body
   from the head down and never animated, so as it rises the same ridges come up out of the sand. The
-  radius runs from 55 m at the head to 120 m at the dune line with slow uneven shoulders (one flank
-  heavier than the other, changing slowly along it), vertical flutes from ridged noise round the ring
-  stretched 400 m along the length, an axis kinked up to 0.2 R, and a tapered head. Nothing
-  horizontal. The spine is computed in JavaScript each frame (straight down below the dune line,
-  curving over in the fall) and the normals recomputed. Shading: one dark value (near black at
-  ember; by day the sand's albedo times 0.45, half-weight Lambert, a mesa); a thin, broken lobe on the
-  sunward flank only; the lowest 15% in its own dust; the haze over it 0.55 of the air's at the base
-  to 0.30 at the top, the haze colour darkened by 0.7 times how much of the sun it covers from the eye
-  (the air in front of it is in its own shadow, so it is dark even before its shadow reaches you);
-  its top third faded into the sky colour through streaky noise.
-- *The sand.* One instanced Sprite of 256 streaks, each turned along its motion on screen (as
-  `puffs.js` does) with fibre noise scrolling down it, opacity 1 - exp(-density), lit by the suns'
-  forward lobe times (1 - density) with ambient 0.3 and 0.2, and haze at half share. Sand in its
-  shadow volume (between it and the eye) loses the sun it hides. Curtains are 2.5 to 6 times longer
-  than wide, falling 10 to 14 m/s off the shoulders and downwind; the skirt, the swell's and the
-  funnel's sand are low wide sheets; the head sheds no crown (it read as a lit fringe on top).
-- *The dome.* One half-ellipsoid mesh at the impact (back faces), whose shader takes the view ray's
-  chord through it with a density 1 - r^2 (soft at its surface), times drifting noise, its skyline
-  torn into heads and gaps and frayed by fine falling streaks; alpha 1 - exp(-tau); colour the dust
-  times (ambient + sun times the forward lobe times exp(-tau)): a dark core and a lit rim. Its edge
-  gets 20 low sheets running out and 8 pour-backs falling in. The 40 dome cards are gone.
-- *The shadow.* The true direction of the sun that lights the ground most (dusk the pale sun, day the
-  high pale sun, so by day it never reaches you); soft by the distance times the sun's drawn disc
-  diameter; a wider, half-dark band for the sand falling round it; a reach holds its front back.
-  On the ground it takes that sun's direct light off the sand (`sunOnSand`, so lit sand falls to the
-  dunes' own shade) and the brightest sky light round the sun (35%); only inside a cheap bound (the
-  band behind it). The dome's shadow is its depth on the sun line at the visitor, out to the edge of
-  its band. The figure darkens by the same shadow through the event's `fog` hook; the lantern's glass
-  (called with no lamp) never does.
-- *The eclipse.* `st.ecl` is the shadow at the visitor (then the dome's depth on the sun line).
-  `modify()` cuts that sun's wide glow 35%, tight glow 90%, disc 100% and the shade fill 60%, each
-  times ecl (the sky is dimmed through the time's uniforms, as storm.js does: no sky-shader terms).
-  The lantern's pool gain is (1 + 3 ecl) / (1 - ecl x the figure's darkening) - 1. `release()` writes
-  calm back.
-- *Engine changes.* `follow.js`: the lift no longer lengthens the boom (it added 3 m to a target
-  already clamped to the current boom, 87 m by the call); the view is raised 0.06 rad. `input.js`: the
-  thumb stick's pointer never long-press strikes. `tsl-material.js`: the event ground hook also gets
-  `lit` (the sand's normal, albedo, both suns' shadow terms, its fog, `sunOnSand`), used only inside
-  the colossus's branch. (Multiplying the sand's own shadow terms before it is lit was tried: cheaper,
-  but it moved ten first-person calm pixels by one level even inside a branch on a uniform.)
+  radius runs from 55 m at the head to 120 m at the dune line with slow uneven shoulders, one heavy
+  shoulder (a bulge on one flank two thirds of the way up), vertical flutes from ridged noise round the
+  ring (about eight round it, deep enough to notch the outline) stretched 400 m along the length, an
+  axis kinked up to 0.2 R, a lean of 7 to 11 degrees across the view, and a top sheared at a slant and
+  split by a cleft. Nothing horizontal. Its normals are taken once from the fixed profile, in each
+  ring's own frame, and only turned with the ring each frame (the second pass recomputed 3,136 vertex
+  normals every frame, about 0.35 ms of JavaScript); the tube is written only when it is drawn; the
+  seam's two columns share one profile and one normal.
+- *Its look.* One dark value (near black at ember); by day a sand-pale ochre hide in full Lambert, so it
+  has a lit side and a shaded side. A thin, broken lobe on the sunward flank only. The lowest 15% in its
+  own dust. Then the full scene haze at its distance (the same fog as the ground at that range, its
+  colour including 35% of the sun's glow), so it sits 15 to 25% under the sky behind it at dusk and
+  ember and goes with the far dunes at its foot (by day the haze is 0.3 of the air's, so it is not a
+  pale ghost). Its top dissolves by real alpha, along a slant across it and two noise scales, from 42%
+  of its height; its outline frays where the surface turns from the eye, dithered against the frame
+  (blended, the folds of its flutes showed through each other as rows of dots).
+- *The veil.* Before the fall the dome's mesh is a thin half-ellipsoid of dust round the body (420 m
+  half width, 1.1 times its exposed height, density 0.09, less by day) with the dome's shader: it hazes
+  the body further, carries vertical streaks of falling sand round it, and by day yellows the sky
+  round it.
+- *The sand.* One instanced Sprite of 384 streaks, each turned along its motion on screen, hanging from
+  where it was shed: a ragged top, a soft long foot, fibres at two scales and a grain scrolling down
+  it. Light per streak in the vertex stage: its core takes the sky's light and a little of the sun's
+  (none inside the body's shadow), its thin parts the sun's forward lobe, capped at 0.85 of the sky
+  behind it (sand never outshines the sky: no flame); the haze as the body's. Curtains only off the
+  downwind flank, 30 to 70 m wide and 3 to 6 times as long, falling 10 to 14 m/s; at the call three
+  times as many; in the fall broader, fainter and falling with it. A falling streak whose long axis
+  leaves the vertical by more than 20 degrees on screen is not drawn; the swell's, the funnel's and the
+  skirt's sand are low horizontal sheets. The crest-puff ground wave and the dome's edge sheets are
+  gone (they left diagonal smears in the sky at the settle); 10 pour-backs fall through the dome.
+- *The dome.* One half-ellipsoid mesh (front faces) at the impact, between the base and where the head
+  came down, whose shader takes the view ray's chord through it as its depth: one warped octave at
+  about 420 m, vertical streaks falling through it, denser low, its edge wandering with the big octave
+  through a smoothstep (no threshold cuts it out); alpha 1 - exp(-tau). Light at the middle of the
+  chord comes through the sand between it and the sun (the exit distance toward the sun times the
+  density there), broken across by shafts, with a forward lobe: a dark core and a light that runs
+  along its whole top. By day the surface is lit from above and pale (the dust's colour pulled 45%
+  toward the sand's grey). The haze over it is 0.62 of the air's at its distance (about 2.3 km), so its
+  core sits about 25 to 30% under the sky. Under reduced motion it is at full size at once.
+- *The shadow.* The true direction of the sun that lights the ground most; soft by the distance times
+  the sun's drawn disc diameter on its flanks; its leading front a 12 m terminator scheduled as above;
+  a wider, half-dark band for the sand falling round it. On the ground it takes off that sun's direct
+  light (`sunOnSand`), 80% of the fill from the bright horizon and 65% of the sky's light, and the haze
+  over shaded ground is a third darker; only inside a cheap bound. The dome's shadow is its depth on the
+  sun line at the visitor, soft at its edge. The figure darkens by the same shadow through the event's
+  `fog` hook; the lantern's glass never does.
+- *The sky.* `st.ecl` is the shadow at the visitor (then the dome's depth on the sun line). `modify()`
+  takes that sun's disc away and 60% of its tight glow (the few degrees round the disc, mostly behind
+  the body), times ecl; the wide glow, the glare over the sky, is left alone, so the body stands inside
+  the glare and nothing over the whole sky dims. `release()` writes calm back.
+- *The lantern.* Its pool is raised at most 1.3 times calm ((0.6 - 0.35 ember) x ecl, capped at 0.3),
+  its radius held; the contrast comes from the ground going dark round it.
+- *Engine changes.* `follow.js`: the lift no longer lengthens the boom; the view is raised 0.06 rad.
+  `input.js`: the thumb stick's pointer never long-press strikes. `tsl-material.js`: the event ground
+  hook also gets `lit` (the sand's normal, albedo, both suns' shadow terms, its fog, `sunOnSand`), used
+  only inside the colossus's branch. The colossus's own copies of the sand's ambient and fill terms are
+  written unlike the sand's (written alike, the WebGL2 compiler shared them with the calm path and two
+  calm pixels moved by one level).
 
-**Measured** (scripts in the work folder `colossus-work/`: `look.mjs` takes each still with a twin
-with the colossus's meshes hidden, `gates.py` measures L1 to L8 on them, `checkpoint.sh`, `final.sh`,
-`finalsheet.sh`; seed 7, `colossus=now`, 1280x720):
-- Look gates (`gates.py`, final stills `final.sh G`):
-  - L1 scale, 60 s, dusk: dark mass 31% of frame height, whole disturbance 46%, foot hidden, Pilgrim
-    18% (day: 35%, 49%, 18%). Pass.
-  - L2 silhouette, dusk: top quarter 7.0% contrast with the sky, mirror IoU 0.75 (at the line), lit
-    edge 7% of the outline (day 4.5%, 0.69, 0%). Pass.
-  - L3 eclipse, dusk: the disc hidden at 52 and 60 s (peak 0.32 and 0.33 against 1.00 at 8 s), the
-    glow within two disc radii down 72% and 73%. Pass. Ember: down 55% and 57%, the disc counted
-    hidden only at 60 s; from this pose the ember sun is already half under the near crest at 8 s
-    (peak 0.21, barely above the sky), so the measure has little to hold. Fail on the number.
-  - L4 money frame, 52 s, dusk start pose: the brightest 8x8 patch is the lantern's pool (0.58, 0.78;
-    the lamp at 0.58, 0.63), the pool 1.89x its 8 s level; ember 2.10x; reduced at 60 s 1.90x. Pass.
-    From the crest the brightest patch is the pool too, but the pool is 1.13x its 8 s level: the
-    sunlit sand there at 8 s is already near white after tone mapping. Fail on the number. The front
-    from the crest at 45/47/49 s: only 49 s shows it on lit sand (the trough between is in its own
-    shade before it comes; it darkens the far lit crests first and reaches the Pilgrim at 48 s).
-    Fail on the measure.
-  - L5 dome, impact + 6 s: dusk the largest mass 28% of frame width (2 parts), 5.1x wider than tall,
-    its rim (the outline above its lowest quarter, which meets the dunes) 1.43x its core; ember 30%,
-    4.7x, 2.29; day 31%, 4.2x. Pass. Its skyline is torn and frayed, not round.
-  - L6 day: the body 25% darker than the sky behind; the dust's chroma 199% of the sand's. Pass.
-  - L7 ember: the mass 0.127 against the sky's 0.318; lit fringe 0% of its area by the measure, but a
-    red smear of lit curtains shows on its sunward flank at the call. Pass on the number.
-  - L8 reduced: every beat a composed still, the camera's yaw 40 at all eight; the 60 s frame passes
-    L3 (glow down 76%) and L4 (1.90x). Pass.
-- Calm stills: all 12 byte-identical to the commit before this rework; seeded storm stills (37 states,
-  both backends): all byte-identical (`calm.mjs`, `stormset.sh`, `cmp.sh`).
+**Measured** (scripts in the work folder `colossus-work/`; seed 7, `colossus=now` at 1.8 km, 1280x720,
+drained 1/30 s steps; `cap.mjs` takes each still with a twin with the meshes hidden, `m.py` measures
+the mask, `lamp.py` the lantern and the ground, `rows.py` the crest's rows; `rows.sh`, `rsheet.sh`):
+- Size, 60 s: the dark mass (15% under the sky) 33% of frame height from the start pose, 37% from the
+  crest; the whole disturbance 37% and 42%; foot hidden; the Pilgrim 18%.
+- Against the sky behind it, 60 s: dusk 0.56 against 0.68 (17% under), crest 16%, ember 0.27 against
+  0.35 (24% under), reduced 16%, day 0.43 against 0.50 (14% under: short of the 25% the second pass
+  asked for).
+- Dome, impact + 6 s: dusk 31% of frame width, 15% of its height, core 29% under the sky; ember 31% and
+  17.5%; day 33% and 20%, the same luma as the sky (a pale mound, not a dark cut-out); reduced 44.5%
+  and 15%. It goes on widening to about 40% by impact + 18 s.
+- The world turned down, not the lamp (start pose, 8 s against 60 s): dusk frame mean 0.438 to 0.352,
+  the ground corner far from the lamp 0.259 to 0.117; ember frame 0.240 to 0.195, corner 0.147 to 0.065
+  (the second pass made ember brighter); crest 0.604 to 0.480, corner 0.590 to 0.127; day unchanged
+  (0.570 to 0.558: by day its shadow never reaches the visitor). At ember the brightest 8x8 patch on
+  screen is the lantern's pool from 52 s on. At dusk the brightest patch is now the glare round the
+  body (0.76 to 0.79), not the pool: keeping the glare (asked for by the critic) and the lantern being
+  the brightest thing on screen (the first brief) do not both hold at dusk.
+- The front from the crest (row means): 45 s darkens the far band, 47 s the next, 49 s the mid-ground
+  rows, 52 s the foot of the near crest, 55 s the crest under the Pilgrim.
+- Calm stills: 12 byte-identical to the commit before the colossus rework; seeded storm stills (37
+  states, both backends): byte-identical (`calm.mjs`, `stormset.sh`, `cmp.sh`).
 - Console sweep (`csweep.mjs`): the colossus at 8x while walking on WebGPU and WebGL2, in third
   person, reduced motion and first person: every beat seen, the console empty in all six; the cross
-  cases (strikes in and after the storm, a storm waiting behind it, a call while cooling) as before.
-- Switches (`switches.mjs`): `now` (hush at 6 s), `rise`, `off`, on both backends; under reduced motion
-  the camera's yaw never moved. Strike (`strike.mjs`): a strike is felt and counted. Touch
-  (`touch.mjs`, synthetic touch pointers held 600 ms): left half 0 strikes, right half 1 (the old
-  `input.js` gave 1 and 1). The synthetic pointers make `setPointerCapture` throw (no real pointer);
-  a finger has not been tried.
-- Backends (M4): dusk WebGPU against WebGL2 at 8, 20, 44, 52, 60, 72, 96 s: 20 s 49.3 dB, 44 s 47.7, 52 s 43.9, 60 s 43.9, 72 s 43.9, 96 s 44.5 (8 s 47.9; day 44.7 to 45.2): all over 40.
-- Cost (`cperf2.mjs`, the old `cperf.mjs` with the calm half taken 5 s after the end so its lift is
-  back to 0, and a dome beat at 86 s; colossus on and off interleaved five times, 1440x900 at DPR 2,
-  four directions; ms over calm, median):
+  cases as before. Every look capture (about 30 runs, both backends) had an empty console.
+- Switches (`switches.mjs`): `now` (hush at 6 s, the line says north), `rise`, `off`, both backends;
+  under reduced motion the camera's yaw never moved. Strike and touch (`strike.mjs`, `touch.mjs`): a
+  strike is felt and counted; synthetic touch held 600 ms, left half 0 strikes, right half 1.
+- Backends: dusk WebGPU against WebGL2 at 20, 44, 52, 60, 72 s, impact + 6 s and 96 s: 49.3, 48.8,
+  46.0, 46.4, 46.4, 47.4, 48.2 dB; day at 44, 52, 60, 96 s: 44.7, 44.6, 44.4, 44.2 dB.
+- Cost (the gate checker's `gate1/cost.mjs`: 1440x900 at DPR 2, dusk, the camera's position at rest
+  and its direction pinned in both halves, the colossus played from its hush at its own pace, each
+  beat 90 drained frames, calm before and after each playthrough; trimmed mean ms over calm, three
+  playthroughs):
 
-  | Beat | WebGPU at / right / back / left45 | WebGL2 at / right / back / left45 |
+  | Beat | WebGPU | WebGL2 |
   |---|---|---|
-  | swell 20 s | -0.1 / -0.1 / -0.1 / -0.1 | -0.2 / -0.2 / -0.1 / -0.1 |
-  | rise 50 s | 0.6 / 0.5 / 0.6 / 0.6 | 0.4 / 0.5 / 0.4 / 0.4 |
-  | call 60 s | 0.7 / 0.5 / 0.5 / 0.6 | 0.5 / 0.5 / 0.5 / 0.5 |
-  | fall 77 s | 0.7 / 0.5 / 0.5 / 0.5 | 0.5 / 0.5 / 0.5 / 0.4 |
-  | the dome, 86 s | 0.7 / 0.5 / 0.6 / 0.6 | 0.6 / 0.5 / 0.5 / 0.5 |
-  | settle 96 s | 1.0 / 0.9 / 0.9 / 0.9 | 0.9 / 0.8 / 0.8 / 0.9 |
+  | swell 20 s | 0.16 | 0.24 |
+  | rise 44 s | 0.64 | 0.54 |
+  | rise 52 s | 0.91 | 0.83 |
+  | call 60 s | 0.92 | 0.88 |
+  | fall 72 s | 0.90 | 0.85 |
+  | fall 79.5 s (the impact) | 0.68 | 0.60 |
+  | the dome, 86 s | 0.41 | 0.41 |
+  | settle 96 s | 0.41 | 0.42 |
 
-  Spreads were 0 to 0.5 ms. The swell's small saving is the raised view (more sky); the rise to the
-  dome beats carry the same lift. The settle at 96 s, with the lift back to 0, is the honest worst:
-  1.0 ms on WebGPU, at the line.
-
-  Before the bounds on the ground's shadow work, the settle at 96 s cost 1.1 to 1.2 ms on WebGPU: a
-  split by switching parts off found about half in the ground hook's shadow (the direct-light
-  subtraction over everything near the visitor) and the rest in the event's graphics; the beats
-  with lift 1 (rise to settle 86) are flattered a little by the raised view's extra sky.
-- Sound (`colsound.mjs`, sound.js untouched; the colossus's own loudest peak, the call): -4.55 dBFS at
-  exposure 0.6 and 0.3, -4.54 at 1.0, -7.47 reduced. On a crest (1.0) the render's overall peak, -3.24
-  in the hiss window, is the calm wind's own, as in the first pass. **Owner to judge with the sound
-  on**; the builder is not the judge of the mix.
-- The clip: `colossus-work/colossus2.mp4`, 40 s from 44 s to 84 s after the hush (the shadow's last
+  Worst beat the call, 0.92 ms on WebGPU and 0.88 on WebGL2 (the second pass: 1.12 and 0.94 at the call,
+  1.45 and 1.22 in the fall); the whole event 0.63 and 0.59 ms; console empty. Most of the saving is the
+  normals no longer recomputed each frame and the sand lit per streak in the vertex stage; the veil of
+  dust round the body costs about 0.3 ms of it back from 52 to 72 s (measured before and after it). Facing away, the body is not
+  written at all.
+- Sound (`colsound.mjs`, sound.js untouched): the colossus's own loudest peak -4.55 dBFS at exposure
+  0.6, -7.47 reduced; at 1.0 the overall peak -3.24 is the calm wind's own. **Owner to judge with the
+  sound on.**
+- The clip: `colossus-work/colossus2.mp4`, 40 s from 44 s to 84 s after the hush (the front's last
   run, the eclipse and the lantern, the call, the fall and the dome), stepped at 30 fps on WebGPU at
-  1280x720 from the start crest at dusk (heading 30), with the sound rendered offline from the very
-  values the page fed its sound module each frame.
+  1280x720 from the start crest at dusk (heading 30), with the sound rendered offline from the values
+  the page fed its sound module each frame.
 
 Contact sheets: `frames/sheet-colossus.jpg` (rows: dusk from the start pose, dusk from the crest,
 ember, day, reduced motion at dusk, WebGL2 dusk, WebGL2 day; columns: 20, 44, 52, 60, 72 s, the
-impact + 6 s, 96 s) and `frames/sheet-colossus-peak.jpg` (54 and 60 s at 1.6 and 2.2 km, every time of
-day, both backends).
+impact + 6 s, 96 s) and `frames/sheet-colossus-peak.jpg` (54 and 60 s at 1.6 and 2.2 km: dusk, ember,
+day, WebGL2 dusk).
 
-**What is still weak, and was not checked.** It reads as a dark, fluted crag with sand streaming off
-it, far off in glare; whether that is eerie enough, or still too much like a rock spire, is the
-owner's call. Its fall reads as a pale pillar of sand collapsing, not a body toppling (from the front,
-toppling away foreshortens). At ember the curtains on the sunward flank catch the red sun as a red
-smear at the call (the forward lobe is a third of dusk's as briefed). The front's last run is hard to
-see from the crest at 45 and 47 s because the trough between is already in its own shade; it shows on
-the far lit crests and then on the crest under the Pilgrim from 49 s. The crest pose's pool cannot
-reach 1.3x its 8 s level in the stills because the 8 s sand there is already near white after tone
-mapping; the lantern and its pool are the brightest patch on screen in every eclipse frame. The
-dome's lowest quarter meets the dunes and is not counted in its rim. At 2.2 km the sightline march can
-push it off the sun line (dusk 1.7 degrees further out, the disc's edge showing and the visitor only
-half in its shadow; ember 12 degrees off, by the old search, so no eclipse at all): the peak sheet
-shows both. Not checked: a phone or a real
-finger, the sound by a person, timing on a quiet machine.
+**What is still weak, and was not checked.** At dusk it reads as a great misty mass in the glare and
+its own dust; whether it reads as a creature or as weather is the owner's call. By day it is a warm
+sandstone column with a dust veil, only 14% under the sky, and its shadow falls on dune faces already
+in their own shade, so nothing on the ground answers it; there is no eclipse by day. The fall reads as
+the column keeling over and sliding under, with a fringe of falling sand under its head; the dome rises
+as a soft lumpy mound with shafts of light, a little like a cloud bank by 96 s. At dusk the glare,
+not the lantern, is the brightest patch on screen. The front crosses the mid-ground trough in about
+2 s from the crest view (the far rows are hazy, the trough is in its own shade before it comes). In
+portrait under reduced motion it stands off the sun's line (the line is out of frame), so the disc
+shows. Not checked: a phone or a real finger, the sound by a person, timing on a quiet machine.
 
 ## Not built yet
 
