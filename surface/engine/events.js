@@ -25,7 +25,7 @@
 //   wind(env) -> { strength, gust, mix, figure? }   env = { lamp: [x,y,z] | null, cam: {x,y,z} | null }
 //   walk() -> { k, ... } | null            the walker's push (the largest k wins)
 //   camera() -> { boom?, amount, lift?, toward?: [x, z, beat], shake? }   (shortest boom, largest amount;
-//                                          lift 0..1 a longer, raised view; toward the point to turn to
+//                                          lift 0..1 a raised view (0.06 rad); toward the point to turn to
 //                                          after 3 s without input; shake 0..1 at most 0.3 degrees)
 //   trace() -> { healMul, clear? }         (healMul multiplied, clear ORed)
 //   figure() -> { look?: [x, z], brace?: 0..1 }
@@ -37,7 +37,8 @@
 //
 // EventGraphics = { ground?(a), sky?(a), skyPass?: { hook, render(cam, force) }, fog?(col, P, lamp),
 //                   particles?({ U, scene }) -> { update(dt, camera), clear(), live }, readout?() }
-//   ground and sky are the material hooks (a = { col, ro, rd, dist, face }); sky is the full-resolution
+//   ground and sky are the material hooks (a = { col, ro, rd, dist, face, lit }; lit: the sand's own light
+//   terms, so a cast shadow can take one sun's direct light off); sky is the full-resolution
 //   path (?skyfull=1), skyPass the half-resolution one; particles is made once the scene holds the
 //   figure (its sprites sort after the Pilgrim's) and updates every frame (it hides itself when off).
 

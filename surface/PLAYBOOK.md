@@ -67,8 +67,9 @@ run, and a README section saying what was measured and what was not.
   Check it: calm stills must be pixel-identical before and after a change.
 - **The figure has no face except two dim amber eyes in the hood, no visible limbs or legs; no text
   in the canvas; no other people or creatures.** One written exception (the owner, 15 Nov 2026): the
-  Dust Sea's colossus. It stays massive (350 to 420 m), far (never nearer than 1.5 km), mostly hidden
-  in its own falling sand, and only silhouette and rim: no face, eyes, teeth or countable segments.
+  Dust Sea's colossus. It stays massive (700 to 800 m), far (never nearer than 1.5 km), mostly hidden
+  in haze, glare and its own falling sand, and only a dark mass: no face, eyes, mouth, teeth, rim all
+  round or countable segments, nothing round on top, nothing horizontal (tiers read as a tower).
   It is not a precedent for close creatures on other worlds; a world that wants one asks again. (The owner chose the dim eyes on 13 Nov 2026 from a
   sheet of three; `?eyes=0` removes them.)
 - **Reduced motion** is a designed state: cuts with a short fade, nothing races, nothing shakes.
@@ -169,11 +170,26 @@ the contract) runs every event of a world; the world only describes them.
    then the motion; then the sound (offline render, peaks at or under -4 dBFS); then timing, the
    sweep, reduced motion and the switches; then a 30 to 40 s clip with sound for the owner.
    Hooks an event can lean on: `figure()` turns the hood and braces the Pilgrim; `camera()` gives
-   `lift` (boom +3 m, the view raised), `toward` (after 3 s without input) and `shake` (0.3 degrees,
+   `lift` (the view raised 0.06 rad; the boom keeps its length, so the figure keeps its size),
+   `toward` (after 3 s without input) and `shake` (0.3 degrees,
    never under reduced motion); `update(dt, P)` gets `P.env` (the visitor, the camera, the suns);
    `?<name>=<phase>` jumps straight to a phase (`?colossus=rise`); `announce()` gives the polite DOM
    line when it begins. Meshes and sprites go in `particles({ U, scene, fns })` (`fns` has the world's
-   `skyColor`, `fogAmount` and `finish`, so they sit in the same haze and tone).
+   `skyColor`, `fogAmount` and `finish`, so they sit in the same haze and tone). The ground hook also
+   gets `lit` (the sand's normal, albedo, both suns' shadow terms, its fog and `sunOnSand`), so a cast
+   shadow can take one sun's direct light off the sand (lit sand falls to the dunes' own shade) rather
+   than multiply everything. (Multiplying the sand's own shadow terms before it is lit was tried and is
+   cheaper, but it moved ten first-person calm pixels by one level even inside a branch on a uniform:
+   the calm shader must not change outside the event's own branch.) To dim the sky (an eclipse), go through `modify()` on the sun's `Glow`,
+   `Sky` (the disc) and `uFill`, as storm.js does: a `sky` hook never runs while another event owns the
+   half-resolution sky pass. And `fog(col, P, lamp)` is also called for the lantern's glass with no
+   `lamp`: an event's shadow must leave the glass alone.
+   **Lesson from the colossus's first pass** (the owner failed it on looks): a far creature built as a
+   clean tube with a cap, a uniform rim and its own sprites read as a small model beside the sun. What
+   worked was scale felt through the world: standing exactly on the sun's line so the sun goes out,
+   the shadow (the true sun direction) coming over the dunes to the figure until the lantern is the
+   brightest thing, the haze in front of it darkened as its shadow volume, the top lost in the sky and
+   the foot in its own sand, and a measured look gate (`colossus-work/gates.py`) next to the sheet.
 
 The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
 byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
@@ -267,4 +283,4 @@ Not started. What this session knows that bears on it:
 - (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
   see the walk README, "The storm cleanup".)
 - Not built: brink plumes, the landing and leaving, the shuttle overhead, the caravan tracks, the
-  score. (The colossus is built, 15 Nov 2026: see the walk README, "The colossus".)
+  score. (The colossus is built, 15 Nov 2026, and its look reworked the same day: see the walk README, "The colossus".)

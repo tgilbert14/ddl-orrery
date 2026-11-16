@@ -664,7 +664,9 @@ export function createTslMaterials(values, opts, shadowTex) {
     });
     // walk slice: the storm front (surface/walk/storm.js), over everything; a branch on a uniform, so
     // with no storm the colour is untouched. The pixel's angular size is taken here, outside any branch.
-    if (WK && WK.event) WK.event({ col, ro, rd, dist, face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar(), ground: true } });
+    if (WK && WK.event) WK.event({ col, ro, rd, dist, face: { vnoise, vnoiseD, domes, px: length(fwidth(rd)).toVar(), ground: true },
+      // (the sand's own light, for an event that takes one sun's direct light away: a cast shadow)
+      lit: { n, V, alb, sh: [sh1, sh2], nm, gAmt, fog, sunOnSand, wrap: U.uWrap, U } });
 
     return vec4(finish(col), 1.0);
   })();

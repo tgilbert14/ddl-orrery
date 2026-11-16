@@ -103,9 +103,10 @@ export function createFollow({ reduced = false } = {}) {
 
   // f: { x, z, ground, speed, sliding, running, travelYaw|null, slide: [sx, sz] (m/s), sun: [x, z],
   // wind: [x, z], airborne 0/1, airHeight (m), storm 0..1, stormBoom (m), and an event's view (all
-  // optional): lift 0..1 (the boom 3 m longer and the view raised, so the horizon sits low and a far
-  // thing standing over it is framed), toward [x, z, beat] (turn there after 3 s without input; any
-  // input cancels it until the next beat), shake 0..1 (at most 0.3 degrees) }; look: { dx, dy } radians
+  // optional): lift 0..1 (the view raised 0.06 rad, so the horizon sits a little lower and a far thing
+  // standing over it is framed; the boom keeps its length, so the figure stays its size), toward
+  // [x, z, beat] (turn there after 3 s without input; any input cancels it until the next beat),
+  // shake 0..1 (at most 0.3 degrees) }; look: { dx, dy } radians
   function update(dt, f, look) {
     if (!s.init) snap(f);
     // the crest leap (none of it under reduced motion: the camera does as it would without the leap)
@@ -182,7 +183,6 @@ export function createFollow({ reduced = false } = {}) {
     // stay readable in 8 m of visibility; f.storm is eased by the caller (about 3 s). Also under
     // reduced motion: it is slow, and without it the figure is lost in the dust
     if (f.storm > 0) Lt += (Math.min(Lt, f.stormBoom) - Lt) * f.storm;
-    if (s.lift > 0) Lt += 3 * s.lift;
     s.Lt = Lt;
     const tauL = Lt > s.L ? (airK > 0.1 ? 0.7 : 2.2) : 0.9;
     s.L += (Lt - s.L) * (1 - Math.exp(-dt / tauL));
@@ -249,7 +249,7 @@ export function createFollow({ reduced = false } = {}) {
     const dx = tx - s.cam[0], dy = ty - s.cam[1], dz = tz - s.cam[2];
     s.viewYaw = Math.atan2(dz, dx) - FOLLOW.frameSide * (1 - sm);
     s.viewPitch = clamp(Math.atan2(dy, Math.hypot(dx, dz)) + FOLLOW.frameDown * (1 - sm), FOLLOW.pitchMin + (FOLLOW.slidePitchMin - FOLLOW.pitchMin) * sm, FOLLOW.pitchMax);
-    if (s.lift > 0) s.viewPitch += 0.13 * s.lift * (1 - sm);
+    if (s.lift > 0) s.viewPitch += 0.06 * s.lift * (1 - sm);
     if (s.shake > 0) { s.shT = (s.shT || 0) + 1; const a = 0.3 * Math.PI / 180 * s.shake; s.viewYaw += a * Math.sin(s.shT * 2.1); s.viewPitch += a * Math.sin(s.shT * 2.9 + 1); }
   }
 
