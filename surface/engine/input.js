@@ -78,8 +78,10 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
     if (e.pointerType === 'touch') {
       const id = e.pointerId;
       const left = e.clientX < window.innerWidth / 2;
-      // (the thumb stick's pointer never strikes: a thumb held still on the stick is not a call)
-      setTimeout(() => { const p = pointers.get(id); if (p && !p.stick && Math.hypot(p.x - p.x0, p.y - p.y0) < LONG_PX) { p.struck = true; strikes++; } }, LONG_MS);
+      // (a touch on the left half, the thumb stick's half, never strikes: a thumb held still on the
+      // stick is not a call, and neither is a second finger resting beside it)
+      if (left) pointers.get(id).noStrike = true;
+      setTimeout(() => { const p = pointers.get(id); if (p && !p.stick && !p.noStrike && Math.hypot(p.x - p.x0, p.y - p.y0) < LONG_PX) { p.struck = true; strikes++; } }, LONG_MS);
       if (left && !stick) {
         const now = performance.now();
         stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, run: now - lastStickEnd < DOUBLE_MS };

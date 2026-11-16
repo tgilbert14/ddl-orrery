@@ -158,7 +158,10 @@ export function createFollow({ reduced = false } = {}) {
     } else s.sinceLook += dt;
     // an event's point to look at (not in the slide view; reduced motion never gets one)
     if (f.toward && s.towardOff !== f.toward[2] && !s.slideOn && s.sinceLook > 3) {
-      const d = wrapPi(Math.atan2(f.toward[1] - f.z, f.toward[0] - f.x) - s.yaw);
+      // (the view is framed frameSide off the figure: turned by that much more, the point is at the
+      // middle of the frame, not 4.5 degrees off it, which on a phone held upright put the dome at 0.63
+      // of the width and cut it at the edge)
+      const d = wrapPi(Math.atan2(f.toward[1] - f.z, f.toward[0] - f.x) + FOLLOW.frameSide - s.yaw);
       s.yaw = wrapPi(s.yaw + clamp(d, -1, 1) * 0.6 * dt);
     }
     // reduced motion: an event's point the view cuts to, once per id (main.js cross-fades the cut)

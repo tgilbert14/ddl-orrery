@@ -30,6 +30,8 @@
 //                                          cutTo [x, z, id]: under reduced motion only, the view cuts to
 //                                          face it once per id, cross-faded)
 //   lineDone?() -> boolean                 its DOM line (announce) is taken down early once true
+//   holdTime?() -> boolean                 while true, a change of the time of day waits before its
+//                                          blend starts (the event eases what is seen of it out first)
 //   trace() -> { healMul, clear? }         (healMul multiplied, clear ORed)
 //   figure() -> { look?: [x, z], brace?: 0..1 }
 //   strike?(e) -> boolean | number         a staff strike (only defs with `call`); e.blocked when it
@@ -268,8 +270,11 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
     });
   }
 
+  // true while the live event asks the time of day's blend to wait (it is easing itself out first)
+  function holdTime() { const e = live(); return !!(e && e.ev.holdTime && e.ev.holdTime()); }
+
   return {
-    update, wind, walk, camera, trace, sound, figure, light, strike,
+    update, wind, walk, camera, trace, sound, figure, light, strike, holdTime,
     list: () => list.map((e) => e.def.name), start, skipTo, hold, state, raw,
     has: (n) => !!byName(n), event: (n) => byName(n)?.ev || null, defs: () => list.map((e) => e.def),
     get live() { const e = live(); return e ? e.def.name : null; },

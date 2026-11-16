@@ -219,6 +219,23 @@ the contract) runs every event of a world; the world only describes them.
    happening; under reduced motion cut once to the sun's line rather than stand beside the sun. Prefer a
    place with rows of dunes in sight; where there are none, a low skirt of haze over its foot carries the
    distance.
+   **Lessons from its fifth pass** (a third critic, 6 of 10): give an event one master presence that
+   multiplies every term that is seen, and when the time of day changes under it, ease it out first and
+   make the time's blend wait (`holdTime()`): an event's look keyed to a time weight that switches at
+   the blend's end shows the wrong look in the new light for the length of the blend and then vanishes.
+   A volume drawn in an ellipsoid shows the ellipsoid (round end caps, a hairline arc, a slit where its
+   base plane meets lower ground): draw it in a bound well outside it, take its depth across its own
+   footprint and its top as a height field where the view ray passes closest, let its density fall from
+   well inside its ends and its top feather as a power of its height, and break the top at several scales
+   with noise that also varies with height (noise only across the ground stands in streaks). Two or three
+   big lobes read as lips, ears or a head: keep the largest octave broad and weak. Under reduced motion
+   never turn the view, not even by a cut: stand it inside the frame the visitor has. Dim a sun's disc only
+   by what covers it from the eye. A cast shadow on ground lit by two suns must take most of both, or the
+   other sun's colour floods it. A shadow's front reads as travelling only where the eye sees the ground it
+   crosses: schedule it by a march of what is in sight. Falling sand in front of a body takes the body's
+   own hazed colour. A thing seen over one near crest reads as near: stand it farther off and larger, and
+   fade it into the haze above the crest line. 2D noise across and up a far body is half the cost of 3D and
+   looks the same from the one side it is seen from.
 
 The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
 byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
@@ -312,4 +329,4 @@ Not started. What this session knows that bears on it:
 - (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
   see the walk README, "The storm cleanup".)
 - Not built: brink plumes, the landing and leaving, the shuttle overhead, the caravan tracks, the
-  score. (The colossus is built, 15 Nov 2026, and its look reworked three times, 15 and 16 Nov: see the walk README, "The colossus".)
+  score. (The colossus is built, 15 Nov 2026, and its look reworked four times, 15 and 16 Nov: see the walk README, "The colossus".)

@@ -68,6 +68,7 @@ export async function start(world) {
   let timeNow = timeValues(startName);  // the time of day on screen (suns 1 and 2)
   let timeFade = null;                  // { to, phase: 'baking' | 'fading', t, map }
   let pendingTime = null;
+  const fpLook = { since: 99, off: null };   // first person: time since input, and the beat it cancelled
 
   const API = (window.__walk = { ready: false, backend: null, error: null, reduced, world, events: { foot: 0, slide: 0, leap: 0, land: 0 }, losses: 0 });
   // the world's events (events.js): the director and every event's state outlive a lost device; made
@@ -378,6 +379,8 @@ export async function start(world) {
   }
   function updateTime(dt) {
     if (!timeFade || timeFade.phase !== 'fading') return;
+    // (a live event may ask the blend to wait while it eases what is seen of it out)
+    if (timeFade.t === 0 && director && director.holdTime()) return;
     timeFade.t += dt;
     const f = Math.min(1, timeFade.t / TIME_FADE), ff = f * f * (3 - 2 * f);
     applyBlend(G.mats.set, timeNow, timeFade.to, ff, ws.ground);
@@ -590,8 +593,11 @@ export async function start(world) {
     let evCut = false;
     if (director) {
       const c = G.camera.position, ce = G.camera.matrixWorld.elements;
+      // (and the time of day: its name, and while it changes, where it is going and how far the blend is)
+      const tf = timeFade && timeFade.phase === 'fading' ? Math.min(1, timeFade.t / TIME_FADE) : 0;
       const r = director.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, cam: [c.x, c.y, c.z], yaw: Math.atan2(-ce[10], -ce[8]), view: viewMode,
-        suns: [timeNow.uSun1Dir, timeNow.uSun2Dir], cols: [timeNow.uSun1Col, timeNow.uSun2Col] });
+        suns: [timeNow.uSun1Dir, timeNow.uSun2Dir], cols: [timeNow.uSun1Col, timeNow.uSun2Col],
+        timeName: timeNow.name, timeTo: timeFade ? timeFade.to.name : null, sunsTo: timeFade ? [timeFade.to.uSun1Dir, timeFade.to.uSun2Dir] : null, timeF: tf * tf * (3 - 2 * tf) });
       announce(); lineCheck();
       if (r.cleared) { G.trace.clear(); G.pour?.clear(); traceC = null; }
       evCut = r.cut;
@@ -599,6 +605,21 @@ export async function start(world) {
     const third = G.pil && viewMode === 'third';
     const ew = third ? null : eventWalk();
     const events = third ? tickThird(dt, intent) : walker.update(dt, ew ? { ...intent, reducedMotion: reduced, ...ew } : { ...intent, reducedMotion: reduced });
+    // first person: an event's centre (camera().toward [x, z, beat, y]) is turned to and framed after 3 s
+    // without input, eased (any input waits for the next beat); never under reduced motion
+    if (!third && director && !G.fig) {
+      const moved = intent.lookX || intent.lookY || intent.fwd || intent.strafe || intent.turn || intent.target;
+      const tw = director.camera().toward;
+      if (moved) { fpLook.since = 0; if (tw) fpLook.off = tw[2]; } else fpLook.since += dt;
+      if (tw && !reduced && fpLook.since > 3 && fpLook.off !== tw[2]) {
+        const d = Math.atan2(Math.sin(Math.atan2(tw[1] - ws.z, tw[0] - ws.x) - ws.yaw), Math.cos(Math.atan2(tw[1] - ws.z, tw[0] - ws.x) - ws.yaw));
+        ws.yaw += Math.max(-1, Math.min(1, d)) * 0.6 * dt;
+        if (tw[3] !== undefined) {
+          const e = walker.eye(), want = Math.atan2(tw[3] - e[1], Math.hypot(tw[0] - e[0], tw[1] - e[2]));
+          ws.pitch += (Math.max(-0.2, Math.min(0.35, want)) - ws.pitch) * (1 - Math.exp(-dt / 1.5));
+        }
+      }
+    }
     for (const e of events) {
       if (!e.noPrint) G.trace.stamp(e);
       // No step sound while sliding: the slide voice carries it, and the sound module's levels assume the two do not overlap.
