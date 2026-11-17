@@ -25,20 +25,25 @@
 // looks through, and tongues of dust run ahead along the ground in the blown dust. Far off, nothing
 // of that is evaluated and the face is as it was.
 //
-// The same function colours the ground and the sky (tsl-material.js opts.walk.storm), and the
+// The same function colours the ground and the sky (tsl-material.js opts.walk.event), and the
 // figure, the lantern and the thrown sand (pilgrim.js, puffs.js: opts.fog), so they agree. When no
 // storm is active the shaders take a branch on a uniform and change nothing.
 //
 // Phases (seconds at scale 1; ?storm=fast runs every phase and the schedule at 4x):
 //   approach 75  the wall rises on the upwind horizon (9 km to 300 m), the drift and the wind grow,
-//                the light goes ochre
-//   arrival   8  it crosses the last 300 m and swallows the visitor
-//   inside   55  visibility about 8.5 m, the suns dim discs, sheets of sand racing past, gusts
-//   passing  25  it thins from the upwind side; downwind the wall leaves across the dunes
-//   after    60  calm, the sand clean; the drift a little stronger, easing to normal
-// The first storm comes 150 to 240 s after the page is ready, then one every 300 to 480 s after the
-// last one ended (seeded by ?seed=N, else random). ?storm=off: never; ?storm=now: the approach
-// starts 8 s after ready. With ?test=1 there is no schedule unless ?storm= asks for one.
+//                the light goes ochre; a low rumble from the wall's bearing rises with it
+//   arrival   8  it crosses the last 300 m and swallows the visitor (a swell and a thud as it hits)
+//   inside   30  visibility about 8.5 m, the suns dim discs, sheets of sand racing past, gusts; every
+//                8 to 15 s a gust hole opens it to 40 to 80 m for about 2 s (the nearest crest, a
+//                bright smear where the sun is)
+//   passing  25  it thins from the upwind side, the trailing face slowing over its last 70 m to the
+//                visitor (10 to 16 s) so the light comes back over seconds; a sun downwind stays
+//                behind the leaving wall, a sun upwind lights it; 3.5 s of near-silence behind it
+//   after    30  calm, the sand clean; the drift a little stronger, easing to normal
+// The first storm comes 60 to 120 s after the page is ready, then one every 300 to 480 s after the
+// last one ended (seeded by ?seed=N, else random); a whole storm is 168 s. ?storm=off: never;
+// ?storm=now: the approach starts 8 s after ready (face upwind, heading about 200, to see the wall
+// come). With ?test=1 there is no schedule unless ?storm= asks for one.
 
 import * as THREE from 'three/webgpu';
 import { Fn, If, uniform, vec2, vec3, vec4, float, clamp, smoothstep, max, min, mix, abs, exp, pow, sqrt, atan, dot, length, normalize, select, step,
@@ -54,8 +59,8 @@ const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
 export const STORM = {
   phases: ['approach', 'arrival', 'inside', 'passing', 'after'],
-  dur: { approach: 75, arrival: 8, inside: 55, passing: 25, after: 60 },
-  firstMin: 150, firstMax: 240, gapMin: 300, gapMax: 480,
+  dur: { approach: 75, arrival: 8, inside: 30, passing: 25, after: 30 },
+  firstMin: 60, firstMax: 120, gapMin: 300, gapMax: 480,
   nowDelay: 8,
   // the body
   D0: 9000,            // the leading face's distance upwind when the approach starts (m)
@@ -91,6 +96,21 @@ export const STORM = {
   boom: 5.0,
   // the trace (prints fill in): heal rate multiplier inside, and in the last 6 s of it
   erase: 15, eraseLast: 40,
+  // the passing: the trailing face's knots [t s, m from the visitor, m/s] (see passTrail)
+  pass: [[0, -520, 50], [10, -70, 12], [16, 0, 12], [25, 420, 38]],
+  // the wall's sound (sound.js STORM_MIX): its rumble inside (all round), and the hush behind the
+  // trailing edge: from hushAt s into the passing (the trailing face at the visitor) for hushHold s,
+  // then the calm wind back over hushBack s
+  sound: { inside: 0.55, hushAt: 16, hushHold: 3.5, hushBack: 4 },
+  // gust holes inside: every gap s (seeded) a gust opens the visibility to vis m, eased in and out
+  // (reduced motion: easeR both ways), and the suns' glow in the dust brightens by smear times
+  holes: { gap: [8, 15], vis: [40, 80], easeIn: 0.5, hold: 1.1, easeOut: 0.7, easeR: 1.0, smear: 4 },
+  // ... and its light: how far into the trailing edge (share of Et) the dust near the eye is lit by
+  // the light coming back, that dust's brightness (share of the light round it), the trailing face's
+  // extra sunlit share for a sun upwind, and the dust blown out low behind the trailing face (per
+  // metre at the face, its e-folding distance, its share seen looking upwind, away from the wall; it
+  // fades over the after's first `fade` seconds)
+  passLit: { reach: 0.4, dust: 0.9, sun: 0.8, face: 2.0, haze: 0.012, lam: 150, up: 0.45, fade: 20 },
 };
 
 // ---------------------------------------------------------------- uniforms (shared by every shader)
@@ -112,10 +132,17 @@ export const SU = {
   horizon: uniform(V3()),         // the clear sky's horizon (aerial haze on a far face)
   sun1: uniform(V3()), sun2: uniform(V3()),           // directions
   halo: uniform(0),               // the lantern's glow in the dust
+  // the passing: the dust near the eye lit by the light that is coming back (rgb, its weight in the
+  // dust's colour); the trailing face's sunlit share per sun (a sun upwind lights it from the front,
+  // x, y), and the dust blown out low behind it (z per metre at the face, w its e-folding distance)
+  litDust: uniform(V4()),
+  hazeSun: uniform(new THREE.Vector2(1.5, 1.5)),   // the suns' forward glow in the blown dust (none from a sun behind the wall downwind)
+  trailLit: uniform(V4()),
   // air.js: the drift's extra strength, and the storm's own fast layer (strength, phase, -)
   air: uniform(V4()),
 };
 SU.geo.value.set(STORM.H, 0, 1, STORM.dc);
+SU.trailLit.value.set(1, 1, 0, 100);
 SU.front.value.set(-1e5, -1e5 - STORM.depth, STORM.El, STORM.Et);
 
 // ---------------------------------------------------------------- the shader side
@@ -215,7 +242,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
       const c = dot(rd, Ld).toVar();
       return C.mul(pow(max(c, 0.0), 8.0).mul(0.6).add(smoothstep(0.9992, 0.9997, c).mul(1.6)));
     };
-    const cIn = SU.medIn.mul(rd.y.mul(0.35).add(0.8)).add(sunGlow(SU.sun1, SU.sunIn1)).add(sunGlow(SU.sun2, SU.sunIn2)).toVar();
+    const cIn = mix(SU.medIn, SU.litDust.xyz, SU.litDust.w).mul(rd.y.mul(0.35).add(0.8)).add(sunGlow(SU.sun1, SU.sunIn1)).add(sunGlow(SU.sun2, SU.sunIn2)).toVar();
     // deep inside (both faces far beyond what can be seen, uniform SU.mode.x): the slab is uniform
     // round the eye, so only the clear pocket and the dust's own colour are needed
     If(SU.mode.x.greaterThan(0.5), () => {
@@ -249,11 +276,14 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
         const lam = select(sg.greaterThan(0.0), SU.haze.y, SU.haze.w);
         const b = sru.div(lam).negate().sub(rd.y.div(STORM.hazeH)).toVar();
         const e0 = min(y0.add(rd.y.mul(tc)).div(STORM.hazeH).negate(), 4.0);
-        const bl = b.mul(len).toVar();
-        const g = select(abs(bl).lessThan(1e-3), len.mul(bl.mul(0.5).add(1.0)), exp(min(bl, 8.0)).sub(1.0).div(select(abs(b).lessThan(1e-9), float(1e-9), b)));
-        const tauH = select(sg.greaterThan(0.0), SU.haze.x, SU.haze.z).mul(exp(e0)).mul(max(g, 0.0)).mul(float(1.0).sub(aS));
-        const cH = SU.hazeCol.add(SU.sunIn1.mul(pow(max(dot(rd, SU.sun1), 0.0), 5.0).mul(1.5))).add(SU.sunIn2.mul(pow(max(dot(rd, SU.sun2), 0.0), 5.0).mul(1.5)));
+        const gOf = (b) => { const bl = b.mul(len).toVar(); return max(select(abs(bl).lessThan(1e-3), len.mul(bl.mul(0.5).add(1.0)), exp(min(bl, 8.0)).sub(1.0).div(select(abs(b).lessThan(1e-9), float(1e-9), b))), 0.0); };
+        const tauH = select(sg.greaterThan(0.0), SU.haze.x, SU.haze.z).mul(gOf(b)).mul(exp(e0)).mul(float(1.0).sub(aS));
+        const cH = SU.hazeCol.add(SU.sunIn1.mul(pow(max(dot(rd, SU.sun1), 0.0), 5.0).mul(SU.hazeSun.x))).add(SU.sunIn2.mul(pow(max(dot(rd, SU.sun2), 0.0), 5.0).mul(SU.hazeSun.y)));
         blend(cH, float(1.0).sub(exp(tauH.negate())));
+        If(sg.lessThan(0.0).and(SU.trailLit.z.greaterThan(0.0)), () => {
+          const tauN = SU.trailLit.z.mul(gOf(sru.div(SU.trailLit.w).negate().sub(rd.y.div(STORM.hazeH)))).mul(exp(e0)).mul(float(1.0).sub(aS)).mul(mix(float(STORM.passLit.up), float(1.0), smoothstep(-0.3, 0.6, ru)));
+          blend(SU.litDust.xyz, float(1.0).sub(exp(tauN.negate())));
+        });
       });
     }).Else(() => {
     const W = vec2(WX, WZ), Pp = vec2(-WZ, WX);
@@ -357,7 +387,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
           return C.mul(max(z.add(wr).div(wr.add(1.0)), 0.0).mul(float(1.0).sub(back.mul(0.55))).mul(0.75).mul(dens.mul(0.5).add(0.5)));
         };
         const red = mix(vec3(0.7, 0.46, 0.32), vec3(1.0), smoothstep(0.0, 260.0, Ye));
-        cWall.assign(SU.wallBase.mul(red).mul(dens).mul(0.57).add(lit(SU.sun1, SU.wallSun1)).add(lit(SU.sun2, SU.wallSun2)));
+        cWall.assign(SU.wallBase.mul(red).mul(dens).mul(0.57).add(lit(SU.sun1, SU.wallSun1.mul(select(fsg.lessThan(0.0), SU.trailLit.x, float(1.0))))).add(lit(SU.sun2, SU.wallSun2.mul(select(fsg.lessThan(0.0), SU.trailLit.y, float(1.0))))));
         const near = float(1.0).sub(smoothstep(300.0, 3000.0, ts));
         const up = smoothstep(0.0, H.mul(0.95), Ye).toVar();
         cWall.assign(cWall.mul(mix(vec3(1.0), mix(vec3(0.3, 0.2, 0.13), vec3(1.0, 0.97, 0.92), mix(up.mul(up), up, nS.mul(0.6))), near)));
@@ -419,7 +449,7 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
         const red = mix(vec3(0.7, 0.46, 0.32), vec3(1.0), smoothstep(0.0, 260.0, Ye));
         const skyLit = N.y.mul(0.35).add(0.65).mul(occ.mul(0.5).add(0.5));
         cWall.assign(SU.wallBase.mul(red).mul(dens).mul(skyLit)
-          .add(lit(SU.sun1, SU.wallSun1)).add(lit(SU.sun2, SU.wallSun2)).mul(form));
+          .add(lit(SU.sun1, SU.wallSun1.mul(select(fsg.lessThan(0.0), SU.trailLit.x, float(1.0))))).add(lit(SU.sun2, SU.wallSun2.mul(select(fsg.lessThan(0.0), SU.trailLit.y, float(1.0))))).mul(form));
         // a near face towers: it goes dark and red from the base up and only its top keeps the light,
         // and the creases between lobes soften (lead's change: up close the pale, evenly lit face
         // read as cracked plaster). A far face on the horizon is unchanged.
@@ -478,15 +508,24 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
     // a haze that lies beyond the slab (the eye inside it, or on its far side) shows only through it
     // (near, the tongues thicken the dust blown out ahead of the leading face, in streaks along it)
     // (one of them is out of reach while the eye is outside the slab on the other side: SU.mode y, z)
-    const tauH = float(0.0).toVar();
+    const tauH = float(0.0).toVar(), tauN = float(0.0).toVar();
     If(SU.mode.z.lessThan(0.5), () => {
       tauH.addAssign(hz(SU.haze.x.mul(tgv.mul(STORM.tongueHaze).add(1.0)), SU.haze.y, lead, 1.0).mul(select(u0.greaterThan(lead), float(1.0), float(1.0).sub(aS))));
     });
     If(SU.mode.y.lessThan(0.5), () => {
       tauH.addAssign(hz(SU.haze.z, SU.haze.w, trail, -1.0).mul(select(u0.lessThan(trail), float(1.0), float(1.0).sub(aS))));
+      // (in the passing, the dust blown out low just behind the trailing face: it lies over the sand
+      // at the foot of the leaving wall, so the dunes there fade into the wall and do not stand
+      // against it as a lit line)
+      If(SU.trailLit.z.greaterThan(0.0), () => {
+        // (thinner looking upwind, away from the wall: the air there has cleared)
+        tauN.assign(hz(SU.trailLit.z, SU.trailLit.w, trail, -1.0).mul(select(u0.lessThan(trail), float(1.0), float(1.0).sub(aS))).mul(mix(float(STORM.passLit.up), float(1.0), smoothstep(-0.3, 0.6, ru))));
+      });
     });
-    const cH = SU.hazeCol.add(SU.sunIn1.mul(pow(max(dot(rd, SU.sun1), 0.0), 5.0).mul(1.5))).add(SU.sunIn2.mul(pow(max(dot(rd, SU.sun2), 0.0), 5.0).mul(1.5)));
+    const cH = SU.hazeCol.add(SU.sunIn1.mul(pow(max(dot(rd, SU.sun1), 0.0), 5.0).mul(SU.hazeSun.x))).add(SU.sunIn2.mul(pow(max(dot(rd, SU.sun2), 0.0), 5.0).mul(SU.hazeSun.y)));
     blend(cH, float(1.0).sub(exp(tauH.negate())));
+    // (the dust low behind the trailing face: lit by the light that is coming back)
+    If(tauN.greaterThan(0.0), () => { blend(SU.litDust.xyz, float(1.0).sub(exp(tauN.negate()))); });
     });
     const L = L0, sig = sig0, DC = DC0, kc = kc0;
 
@@ -509,11 +548,6 @@ export function stormApply(col, { ro, rd, dist, face = null, lamp = null, trans 
 }
 
 // ---------------------------------------------------------------- the state machine (JS)
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-}
-
 // the leading face's distance upwind during the approach and arrival: A e^(-t / tau) - B through
 // (0, D0), (75, Dlast), (83, Dend): it creeps up from the horizon and looms at the end (about 60 m/s
 // over the last 300 m)
@@ -526,6 +560,20 @@ const DFIT = (() => {
   return { tau, A, B: A - D0 };
 })();
 const Dlead = (t) => DFIT.A * Math.exp(-t / DFIT.tau) - DFIT.B;
+
+// the trailing face through the passing (m along the wind from the visitor): from -Et (the eye at
+// the inner end of its soft edge) to 420 m downwind, slowing to about 12 m/s over its last 70 m to the
+// visitor (10 to 16 s), so the light comes back from upwind over several seconds and not in one (the
+// dust is opaque through all but the thinnest few per cent of the ramp). A monotone cubic through
+// STORM.pass ([t, trail, slope] knots), the last slope the after's first speed.
+function passTrail(t) {
+  const K = STORM.pass;
+  let i = 0;
+  while (i < K.length - 2 && t > K[i + 1][0]) i++;
+  const [t0, y0, m0] = K[i], [t1, y1, m1] = K[i + 1], h = t1 - t0, u = clamp01((t - t0) / h);
+  const u2 = u * u, u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * y0 + (u3 - 2 * u2 + u) * h * m0 + (-2 * u3 + 3 * u2) * y1 + (u3 - u2) * h * m1;
+}
 
 // the storm's geometry at phase time (all at scale 1): leading and trailing face (m along the wind,
 // + downwind, from the visitor), wall opacity, top height factor
@@ -543,62 +591,41 @@ function geometry(phase, t) {
     return { lead: trail + STORM.depth, trail, wall: 1, top: 1 };
   }
   if (phase === 'passing') {
-    const trail = lerp(-STORM.Et, 420, t / D.passing);
+    const trail = passTrail(t);
     return { lead: trail + STORM.depth, trail, wall: 1, top: 1 };
   }
   // after: the wall leaves downwind, sinking and fading into the haze over its last 25 s
-  const trail = 420 + 38 * t + 0.6 * t * t;
+  const trail = 420 + 38 * t + 2.3 * t * t;
   return { lead: trail + STORM.depth, trail, wall: 1 - sstep(D.after - 25, D.after, t), top: 1 - 0.55 * sstep(D.after - 30, D.after, t) };
 }
 
-export function createStorm({ reduced = false, seed = null, mode = null, testMode = false } = {}) {
-  const rnd = mulberry32(seed != null ? seed : (Math.random() * 4294967296) >>> 0);
-  const fast = mode === 'fast';
+// The storm as one of the engine's events (surface/engine/events.js): the director there owns the
+// phase clock and the schedule (STORM.phases, STORM.dur, the schedule numbers above); this is what
+// the storm does with them. ctx = { reduced, rnd, mode, testMode }: rnd is the director's stream for
+// the storm (?seed=), drawn once here (the gusts' phase) before the director draws the schedule.
+export function createStorm({ reduced = false, rnd, mode = null } = {}) {
   const st = {
-    phase: 'none', t: 0, scale: fast ? 4 : 1, clock: 0, next: null, hold: false,
+    phase: 'none', t: 0,
     k: 0, pre: 0, after: 0, gust: 0.5, gustT: rnd() * 100, boom: 0, drift: 0, airPh: 0,
-    lead: -1e5, trail: -1e5 - STORM.depth, wall: 0, top: 1, haze: 0, sunCover: [0, 0], cleared: 0, ended: false,
+    hole: 0, holes: [], insides: 0, prevPhase: 'none', impacts: 0, prevLead: -1e5,
+    lead: -1e5, trail: -1e5 - STORM.depth, wall: 0, top: 1, haze: 0, sunCover: [0, 0], sunCoverUp: [0, 0], cleared: 0,
   };
   const off = mode === 'off';
-  function schedule(first) {
-    if (off) { st.next = null; return; }
-    if (testMode && !mode) { st.next = null; return; }
-    if (mode === 'now' && first) { st.next = STORM.nowDelay; return; }
-    const lo = first ? STORM.firstMin : STORM.gapMin, hi = first ? STORM.firstMax : STORM.gapMax;
-    st.next = st.clock + lerp(lo, hi, rnd()) / st.scale;
-  }
-  schedule(true);
+  st.gustT0 = st.gustT;
 
-  function start({ scale } = {}) {
-    if (scale) st.scale = scale;
+  // a start or a skip: the billows' texture finished at once
+  function prepare({ how } = {}) {
     bakeDomes(DOME.N);
-    st.phase = 'approach'; st.t = 0; st.next = null; st.cleared = 0;
-  }
-  function skipTo(phase) {
-    if (phase === 'none') { st.phase = 'none'; st.t = 0; st.ended = true; schedule(false); return; }
-    if (!STORM.phases.includes(phase)) return;
-    bakeDomes(DOME.N);
-    st.phase = phase; st.t = 0; st.next = null;
+    if (how === 'start') st.cleared = 0;
   }
 
-  // one frame. Returns events: { cleared: true } when the inside ends (the caller wipes the trace)
-  function update(dt) {
+  // one frame, live or not (P from the director: { phase, t, left }). Returns { cleared: true } when
+  // the inside ends (the engine wipes the trace)
+  function update(dt, P) {
     const ev = {};
-    st.clock += dt;
     if (!off) bakeDomes(DOME.rows);
-    if (st.phase === 'none') {
-      if (st.next !== null && st.clock >= st.next) start();
-    } else if (!st.hold) {
-      st.t += dt * st.scale;
-      const d = STORM.dur[st.phase];
-      if (st.t >= d) {
-        const i = STORM.phases.indexOf(st.phase);
-        if (st.phase === 'inside') ev.cleared = true;
-        st.t -= d;
-        if (i + 1 < STORM.phases.length) st.phase = STORM.phases[i + 1];
-        else { st.phase = 'none'; st.t = 0; ev.ended = true; schedule(false); }
-      }
-    }
+    st.phase = P.phase; st.t = P.t;
+    if (P.left === 'inside') ev.cleared = true;
     if (ev.cleared) st.cleared++;
     // geometry
     if (st.phase !== 'none') {
@@ -617,6 +644,24 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     st.gustT += dt;
     const gt = st.gustT;
     st.gust = reduced ? 0.5 : clamp01(0.5 + 0.3 * Math.sin(gt * 2 * Math.PI / 4.1) * Math.sin(gt * 2 * Math.PI / 13.7 + 0.8) + 0.22 * Math.sin(gt * 2 * Math.PI / 6.7 + 1.3) + 0.12 * Math.sin(gt * 2 * Math.PI / 3.1 + 0.4));
+    // the gust holes inside: on the way in, this storm's holes are drawn (seeded: the storm's own
+    // stream, so the schedule's draws are untouched); each is a gust over 0.8 that opens the dust
+    st.hole = 0;
+    if (st.phase === 'inside') {
+      if (st.prevPhase !== 'inside') st.holes = drawHoles(st.insides++);
+      const H = STORM.holes, eIn = reduced ? H.easeR : H.easeIn, eOut = reduced ? H.easeR : H.easeOut;
+      for (const h of st.holes) {
+        const u = st.t - h.at;
+        if (u < 0 || u > eIn + H.hold + eOut) continue;
+        const e = u < eIn ? sstep(0, eIn, u) : u < eIn + H.hold ? 1 : 1 - sstep(eIn + H.hold, eIn + H.hold + eOut, u);
+        if (e > st.hole) { st.hole = e; st.holeV = h.V; }
+      }
+      if (!reduced && st.hole > 0) st.gust = Math.max(st.gust, lerp(st.gust, 0.8 + 0.2 * st.hole, sstep(0, 0.3, st.hole)));
+    }
+    st.prevPhase = st.phase;
+    // the wall's arrival (its leading face reaching the visitor), for the sound's impact
+    if (st.phase === 'arrival' && st.prevLead < 0 && st.lead >= 0) st.impacts++;
+    st.prevLead = st.lead;
     if (!reduced) { st.drift += dt; st.airPh += dt * (1 + 1.5 * st.k) * (0.7 + 0.6 * st.gust); }
     // the camera's boom (eased over about 3 s)
     st.boom += (st.k - st.boom) * (1 - Math.exp(-dt / 1.0));
@@ -625,7 +670,16 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
   }
 
   // the visibility now (m): gusts thin and thicken it
-  const visNow = () => STORM.vis * (1 + 0.16 * (st.gust - 0.5) * 2 * (reduced ? 0 : 1));
+  const visNow = () => lerp(STORM.vis * (1 + 0.16 * (st.gust - 0.5) * 2 * (reduced ? 0 : 1)), st.holeV || STORM.vis, st.hole);
+  // this storm's gust holes: every 8 to 15 s of the inside, each opening to 40 to 80 m (seeded from
+  // the gusts' phase, which the director's stream drew once at create, and the storm's count)
+  function drawHoles(n) {
+    let a = (Math.floor(st.gustT0 * 1e6) ^ Math.imul(n + 1, 0x9e3779b1)) >>> 0;
+    const r = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const H = STORM.holes, out = [];
+    for (let at = lerp(H.gap[0], H.gap[1], r()); at < STORM.dur.inside - 3; at += lerp(H.gap[0], H.gap[1], r())) out.push({ at, V: lerp(H.vis[0], H.vis[1], r()) });
+    return out;
+  }
   const sigmaNow = () => { const V = visNow(); return (6 * STORM.dc) / (V * V); };
   // optical depth from the eye to d metres, at the camera (k at the camera)
   function tauAt(d, kc = st.k) {
@@ -662,7 +716,30 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     SU.haze.value.set(STORM.hazeLead, STORM.lamLead, STORM.hazeTrail * (1 - st.after * 0.3), STORM.lamTrail);
     // colours, from the light that is around (the clear-air values of this time of day)
     const s1 = base.sun1Col, s2 = base.sun2Col, d1 = base.sun1Dir, d2 = base.sun2Dir;
+    // is a sun behind the wall (seen from the visitor)? An upwind sun while the wall comes, low
+    // enough to be under its top; and a downwind sun once the slab is over the visitor or past it
+    // (the part of the slab downwind of the visitor stands between them: its trailing face's
+    // distance, under its top, with the leading face's soft ramp on how much of the slab is there)
+    const cover = (d) => {
+      const h = Math.hypot(d[0], d[2]) || 1, along = (d[0] * WX + d[2] * WZ) / h;
+      if (-along > 0.02) {
+        if (st.lead > 0) return 0;
+        const th = -st.lead / -along, y = (d[1] / h) * th;
+        return sstep(-40, 40, STORM.H * st.top - y) * st.wall;
+      }
+      if (along > 0.02 && st.lead > 0) {
+        const near = Math.max(st.trail, 0), th = near / along, y = (d[1] / h) * th;
+        return sstep(-40, 40, STORM.H * st.top - y) * sstep(0, STORM.El, st.lead - near) * st.wall;
+      }
+      return 0;
+    };
+    st.sunCover = [cover(d1), cover(d2)];
+    // (a downwind sun is hidden by the wall in the sky already: its glow in the clear sky stays)
+    st.sunCoverUp = [-(d1[0] * WX + d1[2] * WZ) > 0 ? st.sunCover[0] : 0, -(d2[0] * WX + d2[2] * WZ) > 0 ? st.sunCover[1] : 0];
     const E = [0, 1, 2].map((i) => s1[i] * Math.max(d1[1], 0.04) * 0.8 + s2[i] * Math.max(d2[1], 0.02) * 0.8 + base.ambSky[i] * 0.6 + base.horizon[i] * 0.35);
+    // (the face's own colour and the blown dust: without a sun hidden behind the wall downwind)
+    const cd = [st.sunCover[0] - st.sunCoverUp[0], st.sunCover[1] - st.sunCoverUp[1]];
+    const litD = [0, 1, 2].map((i) => (s1[i] * Math.max(d1[1], 0.04) * 0.8 * (1 - cd[0]) + s2[i] * Math.max(d2[1], 0.02) * 0.8 * (1 - cd[1]) + base.ambSky[i] * 0.6 + base.horizon[i] * 0.35) * [0.62, 0.33, 0.13][i]);
     const dust = [0.62, 0.33, 0.13];
     const lit = E.map((e, i) => e * dust[i]);
     // inside: lit from above through hundreds of metres of dust; a floor so it never goes black
@@ -674,26 +751,36 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     const lu = lum(lit) * 0.24 * STORM.dayGain, oc = STORM.dayOchre, lo = lum(oc);
     const inside = inside0.map((c, i) => lerp(c, (lu * oc[i]) / lo, dayW));
     SU.medIn.value.set(...inside);
-    SU.wallBase.value.set(...lit.map((c, i) => c * 0.42 * [1, 0.9, 0.75][i]));
+    SU.wallBase.value.set(...litD.map((c, i) => c * 0.42 * [1, 0.9, 0.75][i]));
     const onWall = (s, d) => (d[1] > -0.02 ? s.map((c, i) => c * 0.26 * Math.min(1, Math.max(0, (Math.asin(Math.max(-1, Math.min(1, d[1]))) / DEG + 1) / 4)) * [1, 0.62, 0.32][i]) : [0, 0, 0]);
     SU.wallSun1.value.set(...onWall(s1, d1)); SU.wallSun2.value.set(...onWall(s2, d2));
     const dim = (s) => s.map((c, i) => c * 0.05 * [1, 0.7, 0.4][i]);
-    SU.sunIn1.value.set(...dim(s1)); SU.sunIn2.value.set(...dim(s2));
-    SU.hazeCol.value.set(...lit.map((c, i) => c * 0.85 + base.horizon[i] * 0.25));
+    // (a gust hole: the suns' direction a brief bright smear)
+    const sm = 1 + STORM.holes.smear * st.hole;
+    SU.sunIn1.value.set(...dim(s1).map((c) => c * sm)); SU.sunIn2.value.set(...dim(s2).map((c) => c * sm));
+    SU.hazeCol.value.set(...litD.map((c, i) => c * 0.85 + base.horizon[i] * 0.25));
     SU.glowCol.value.set(...lit.map((c, i) => c * [0.5, 0.28, 0.12][i] * 0.6));
     SU.horizon.value.set(...base.horizon);
     SU.sun1.value.set(...d1); SU.sun2.value.set(...d2);
     SU.halo.value = STORM.halo * st.k;
     // the drift: stronger in the approach (to 2.5x) and the after's tail, the storm's fast layer inside
     SU.air.value.set(1.5 * Math.max(st.pre, st.after) + 2.5 * st.k, st.k * (0.7 + 0.5 * st.gust), st.airPh, 0);
-    // is a sun behind the wall (seen from the visitor)? Only an upwind sun, low enough
-    const cover = (d) => {
-      const h = Math.hypot(d[0], d[2]) || 1, toward = -(d[0] * WX + d[2] * WZ) / h;
-      if (st.lead > 0 || toward <= 0.02) return 0;
-      const th = -st.lead / toward, y = (d[1] / h) * th;
-      return sstep(-40, 40, STORM.H * st.top - y) * st.wall;
-    };
-    st.sunCover = [cover(d1), cover(d2)];
+    // the passing (STORM.passLit): the dust near the eye, once the trailing face is within reach, is
+    // thin and lit by the light coming back (not the deep slab's own murk); a sun upwind lights the
+    // trailing face from the front (it is a sunlit wall leaving, not the dark one that came); and dust
+    // blown out low behind the trailing face lies over the sand at its foot
+    const PL = STORM.passLit;
+    // (dust in the air takes a sun's full light, not a surface's share by its height; a sun hidden
+    // behind the wall lights none of it)
+    const lightU = [0, 1, 2].map((i) => (s1[i] * sstep(-0.02, 0.05, d1[1]) * (1 - st.sunCover[0]) + s2[i] * sstep(-0.02, 0.05, d2[1]) * (1 - st.sunCover[1])) * PL.sun + base.ambSky[i] * 0.6 + base.horizon[i] * 0.35);
+    const wIn = 1 - sstep(0, STORM.Et * PL.reach, -st.trail);
+    SU.litDust.value.set(...lightU.map((e, i) => e * dust[i] * PL.dust), wIn);
+    const front = (d) => { const h = Math.hypot(d[0], d[2]) || 1; return 1 + PL.face * clamp01(-(d[0] * WX + d[2] * WZ) / h / 0.3) * sstep(-0.02, 0.07, d[1]); };
+    // (only where a sun lights it: with every sun behind the wall it would only dim the clearing)
+    const sunLit = (lum(s1) * sstep(-0.02, 0.05, d1[1]) * (1 - st.sunCover[0]) + lum(s2) * sstep(-0.02, 0.05, d2[1]) * (1 - st.sunCover[1])) / (lum(s1) * sstep(-0.02, 0.05, d1[1]) + lum(s2) * sstep(-0.02, 0.05, d2[1]) + 1e-6);
+    const nearDust = (st.phase === 'passing' ? 1 : st.phase === 'after' ? 1 - sstep(0, PL.fade, st.t) : 0) * sunLit;
+    SU.trailLit.value.set(front(d1), front(d2), PL.haze * nearDust * st.wall, PL.lam);
+    SU.hazeSun.value.set(1.5 * (1 - st.sunCover[0] + st.sunCoverUp[0]), 1.5 * (1 - st.sunCover[1] + st.sunCoverUp[1]));
   }
 
   // a uniform on its way from the time of day to the shaders: dimmed and tinted by the storm.
@@ -703,11 +790,11 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     const ochre = Math.max(0.55 * pre, 0.35 * aft);
     const m = /^uSun(\d)(Col|Sky|Glow)$/.exec(name);
     if (m) {
-      const n = +m[1], cov = st.sunCover[(n - 1) % 2];
+      const n = +m[1], cov = st.sunCover[(n - 1) % 2], covUp = st.sunCoverUp[(n - 1) % 2];
       const thru = lerp(1, STORM.sunInside, k) * (1 - 0.85 * cov) * (1 - 0.25 * st.haze * (1 - k));
       if (m[2] === 'Col') return v.map((c, i) => c * thru * lerp(1, [1, 0.8, 0.55][i], ochre));
-      if (m[2] === 'Sky') return [v[0], v[1], v[2] * lerp(1, 0.15, k) * (1 - cov), v[3]];
-      return [v[0] * lerp(1, 0.3, k) * (1 - cov), v[1] * lerp(1, 0.3, k) * (1 - cov), v[2], v[3]];
+      if (m[2] === 'Sky') return [v[0], v[1], v[2] * lerp(1, 0.15, k) * (1 - covUp), v[3]];
+      return [v[0] * lerp(1, 0.3, k) * (1 - covUp), v[1] * lerp(1, 0.3, k) * (1 - covUp), v[2], v[3]];
     }
     const med = SU.medIn.value;
     if (name === 'uAmbSky') return v.map((c, i) => lerp(c * lerp(1, [1.05, 0.85, 0.6][i], ochre), med.getComponent(i) * 1.5, k));
@@ -720,23 +807,77 @@ export function createStorm({ reduced = false, seed = null, mode = null, testMod
     return v;
   }
 
+  const wind = () => Math.max(st.k, 0.35 * st.pre * (1 - st.k), 0.25 * st.after);
   return {
-    STORM, update, apply, modify, start, skipTo, tauAt, visNow,
-    setHold(h) { st.hold = !!h; },
-    get active() { return st.phase !== 'none'; },
+    STORM, update, prepare, tauAt, visNow,
+    uniforms: apply,
+    release() { apply(null, null, null); },
+    modify,
     get k() { return st.k; },
-    get boom() { return st.boom; },
-    get phase() { return st.phase; },
-    get state() { return st; },
-    // the walker's, figure's and sound's share of the storm
-    get wind() { return Math.max(st.k, 0.35 * st.pre * (1 - st.k), 0.25 * st.after); },
     get gust() { return st.gust; },
-    get erase() {
-      if (st.phase === 'inside' && st.t > STORM.dur.inside - 6) return STORM.eraseLast;
-      return 1 + (STORM.erase - 1) * st.k;
+    get hole() { return st.hole; },
+    // the figure: the cloak streams hard, the gusts are the storm's, the lantern's pool brighter and its
+    // glow sprite dimmed by the dust between it and the eye (env.lamp, env.cam: positions)
+    wind({ lamp = null, cam = null } = {}) {
+      const sg = st.gust;
+      const lampT = lamp && cam ? Math.exp(-tauAt(Math.hypot(lamp[0] - cam.x, lamp[1] - cam.y, lamp[2] - cam.z))) : 1;
+      return { strength: 1.45 + 0.45 * sg, gust: sg, mix: wind(), figure: { k: st.k, lamp: STORM.lampBoost * st.k, lampT } };
     },
+    // the walker: into the wind slower, nudged downwind (walker.js reads these numbers)
+    walk: () => (st.k > 0 ? { k: st.k, gust: st.gust, ...STORM } : null),
+    // the camera's boom comes in to STORM.boom inside (st.boom: k eased over about 3 s)
+    camera: () => ({ boom: STORM.boom, amount: st.boom }),
+    // prints fill in: fast inside, faster in its last 6 s
+    trace() {
+      if (st.phase === 'inside' && st.t > STORM.dur.inside - 6) return { healMul: STORM.eraseLast };
+      return { healMul: 1 + (STORM.erase - 1) * st.k };
+    },
+    // the sound module's storm (at rest when the storm is not live): the roar, and the wall's own
+    // voice (sound.js: its rumble and bearing, the arrival's count, the hush behind it)
+    sound() {
+      const ph = st.phase, t = st.t, S = STORM.sound;
+      let wall = 0, focus = 1, yaw = (G.windDeg + 180) * DEG, hush = 0;
+      if (ph === 'approach') wall = clamp01(1 + st.lead / STORM.D0);
+      else if (ph === 'arrival') wall = 1;
+      else if (ph === 'inside') { wall = S.inside; focus = 0; }
+      else if (ph === 'passing') {
+        const a = S.hushAt, h = S.hushHold, b = S.hushBack;
+        hush = t < a - 1 ? 0 : t < a ? sstep(a - 1, a, t) : t < a + h ? 1 : 1 - sstep(a + h, a + h + b, t);
+        wall = S.inside * (1 - sstep(0, STORM.dur.passing, t)) * (1 - hush);
+        focus = sstep(0, 8, t); yaw = G.windDeg * DEG;
+      }
+      return { storm: ph !== 'none' ? wind() : 0, stormGust: st.gust, stormWall: wall, stormWallYaw: yaw, stormWallFocus: focus, stormImpact: st.impacts, stormHush: hush };
+    },
+    readout: () => `k ${st.k.toFixed(2)}${st.hole > 0 ? `, hole ${st.hole.toFixed(2)}` : ''}`,
+    state: () => ({ k: Math.round(st.k * 1000) / 1000, hole: Math.round(st.hole * 1000) / 1000 }),
+    raw: () => st,
+    api: { visibility: () => visNow() },
   };
 }
+
+// The storm as the engine's event def (worlds/dust-sea/world.js lists it in graphics().events).
+export const stormDef = {
+  name: 'storm',
+  phases: STORM.phases,
+  dur: STORM.dur,
+  schedule: { firstMin: STORM.firstMin, firstMax: STORM.firstMax, gapMin: STORM.gapMin, gapMax: STORM.gapMax, nowDelay: STORM.nowDelay },
+  call: null,
+  quiet: 60,
+  create: (ctx) => createStorm(ctx),
+  // its hooks in the ground and sky shaders (the same function), the half-resolution pass over the
+  // sky, what it does to the figure's and the puffs' colour, and the sand racing past
+  graphics({ renderer, shade, lamp, reduced, event }) {
+    const ground = (a) => stormApply(a.col, { ...a, lamp });
+    let sand = null;
+    return {
+      ground, sky: ground,
+      skyPass: createStormSky({ renderer, lamp }),
+      fog: stormFog,
+      particles: ({ U, scene }) => (sand = createStormSand({ U, shade, scene, storm: event, reduced })),
+      readout: () => `sand ${sand ? sand.live : 0}`,
+    };
+  },
+};
 
 // ---------------------------------------------------------------- the sand racing past (sprites)
 // Ribbons (long soft streams of sand, a hand's width to a forearm's, slightly curved, their width
@@ -897,7 +1038,8 @@ export function createStormSand({ U, shade, scene, storm, reduced = false }) {
       const T = Math.exp(-storm.tauAt(d));
       const near = p.sheet ? sstep(1.8, 3.8, d) : sstep(0.6, 1.8, d);
       const show = sstep(p.th - 0.3, p.th, gl);
-      let al = p.alpha * T * near * k * show * part * (0.75 + 0.5 * g);
+      // (a gust hole clears the air: the sand thins with it, or its far streams would stand out)
+      let al = p.alpha * T * near * k * show * part * (0.75 + 0.5 * g) * (1 - 0.7 * (storm.hole || 0));
       if (!p.sheet && reduced) al = 0;
       // on screen: stretched along the motion (sheets and ribbons run along the wind)
       const p0 = proj(x, y, z), p1 = proj(x + p.dx * 0.1, y, z + p.dz * 0.1);

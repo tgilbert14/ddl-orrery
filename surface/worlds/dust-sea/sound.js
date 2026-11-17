@@ -11,6 +11,21 @@
 //   frame. storm 0..1 (optional) is the storm front at the listener: the wind rises and darkens into
 //   a roar with slow gust swells (stormGust 0..1, 3 to 8 s), a hiss of sand on top, the steps nearly
 //   gone; all of it eases back as it falls. See STORM_MIX for the measured levels.
+//   The wall itself (all optional): stormWall 0..1 a low rumble from the wall (noise 40 to 120 Hz and
+//   a hum on 55 and 110 Hz with harmonics a laptop can play), panned to its bearing stormWallYaw
+//   (radians, world heading) against listenerYaw (the camera's heading), as much as stormWallFocus
+//   0..1 says (0: all round); stormImpact, a count: each step up is the wall's arrival (a 1.5 s
+//   swell of brown noise and a low thud); stormHush 0..1, the near-silence behind the trailing edge
+//   (the wind bed down 14 dB at 1).
+//   The colossus (colossus.js; all optional, its own bus, its own random stream): colRumble 0..1 a
+//   sub-rumble at 28 to 40 Hz with harmonics at 90 to 180 Hz, panned to colYaw, its amplitude
+//   wavering at 0.8 Hz as much as colAM says; colGrind 0..1 the swell's grind (brown noise and a
+//   granular crackle); colRoar 0..1 the sand pouring off it; colHiss 0..1 the falling sand after the
+//   fall; colDuck 0..1 the wind bed down 12 dB; colPre 0..1 the sub-rumble down 5 dB (held just before
+//   the boom arrives, so the boom stands out); colCall, colBoom, colRing counts: each step up is the
+//   call (a 30 to 55 Hz glide with 110/165/220 Hz partials), the long soft boom, a faint lantern
+//   ring. colReduced: 3 dB lower and no wavering. strike(): the staff, at once (a dry thud and a
+//   crunch of sand). Every delay (sound in air, ground-borne) is colossus.js's.
 //   step(strength 0..1) once per footfall.
 //   land(strength 0..1) once per crest-leap landing (third person; optional for the caller).
 //
@@ -35,7 +50,31 @@ const TAU = Math.PI * 2;
 // the storm at full strength against the calm wind at the same spot: +7.3 dB RMS in a trough
 // (exposure 0.3; its loudest second +9.5 dB over the calm RMS), +5.6 dB (+8.0) at exposure 0.6, +3.2 dB
 // (+5.8) on a crest. Sample peaks stay under -4 dBFS. Nobody has listened to it yet.
+// The wall's own voice (15 Nov 2026; a whole storm rendered offline at 24 kHz with the real storm.js
+// values, against the same render with no storm, exposure 0.6 / 0.3 / 1.0): 30 s into the approach
+// +6.3 / +10.4 / +2.6 dB RMS over the calm at that moment; the arrival's peak -5.2 / -5.7 / -3.4 dBFS
+// (on a crest the calm wind alone peaks at -3.2 in that render); the hush behind the trailing edge
+// -12.4 / -11.6 / -13.1 dB under the calm. Owner to judge with the sound on.
+// The colossus's mix (COL_MIX): measured offline like STORM_MIX (see the walk README, "The colossus").
+// Owner to judge with the sound on.
+export const COL_MIX = {
+  rumble: 0.32, hum: 0.38, // the sub-rumble's noise and its partials at full
+  am: 0.45,                // the 0.8 Hz wavering's depth at colAM 1
+  grind: 0.22, crackle: 0.05,
+  roar: 0.2, hiss: 0.06,
+  duck: 0.25,              // the wind bed's gain at the duck's depth (-12 dB)
+  pre: 0.56,               // the sub-rumble's gain held just before the boom (-5 dB)
+  call: 0.22, boom: 0.40, ring: 0.025,
+  strike: 0.55,            // the staff's thud (the crunch is a landing's grain at this share)
+  reduced: 0.71,           // -3 dB under reduced motion
+};
 export const STORM_MIX = {
+  rumble: 0.5,    // the wall's rumble at full (the noise; the hum is humShare of it), and the
+  humShare: 0.6,  // powers of the wall's nearness (0..1) they rise with: heard early, as a felt rumble
+  rumbleCurve: 0.35, humCurve: 0.7,
+  impact: 0.25,   // the arrival's swell (peak gain) and its thud
+  thud: 0.35,
+  hush: 0.2,      // the wind bed's gain at the hush's depth (-14 dB)
   wind: 0.4,      // the wind's strength at the ears goes up by this share (and by the swells)
   swell: 0.35,    // gust swells: +-this share of that
   dark: 0.42,     // the filters close by this share (a roar, not a whistle)
@@ -229,6 +268,7 @@ export function createSound(opts = {}) {
   const seed = opts.seed != null ? opts.seed >>> 0 : (Math.random() * 4294967296) >>> 0;
   const rnd = mulberry32(seed);                     // wind, gusts, buffers
   const rndStep = mulberry32(seed ^ 0x9e3779b9);   // footsteps: own stream, so steps never shift the wind
+  const rndCol = mulberry32(seed ^ 0x5bd1e995);    // the colossus: its own stream too
 
   let ctx = null;
   let g = null;           // graph handles
@@ -247,6 +287,8 @@ export function createSound(opts = {}) {
     gustB: 1, gustBTarget: 1, gustBTimer: 0,
     sinceParams: 1, stepSide: 1,
     stormIn: 0, storm: 0, stormGust: 0.5,
+    wallIn: 0, wall: 0, wallYaw: 0, wallFocus: 1, listenerYaw: 0, impactN: null, hushIn: 0, hush: 0,
+    col: { rumble: 0, grind: 0, roar: 0, hiss: 0, duck: 0, pre: 0, am: 0, yaw: 0, red: false, call: null, boom: null, ring: null },
   };
 
   function now() { return ctx.currentTime; }
@@ -309,7 +351,10 @@ export function createSound(opts = {}) {
     // level, because they set the peaks. Crest stand at 6 m/s is about -25 dBFS RMS.
     const BED = 0.75, NEAR = 0.56 / BED;
     mix.gain.value = BED;
-    mix.connect(fade); fade.connect(mute); mute.connect(clip); clip.connect(out);
+    // the wind bed goes through `duck` (the storm's hush); the wall's own voices (evBus) do not
+    const duck = ctx.createGain(); duck.gain.value = 1;
+    const evBus = ctx.createGain(); evBus.gain.value = 1;
+    mix.connect(duck); duck.connect(fade); evBus.connect(fade); fade.connect(mute); mute.connect(clip); clip.connect(out);
 
     const { pinkA, pinkM, white, brown } = m;
     const { turbA, turbB, turbH, grain } = m.ctl;
@@ -384,8 +429,55 @@ export function createSound(opts = {}) {
     // Steps arrive here.
     const stepBus = ctx.createGain(); stepBus.gain.value = NEAR; stepBus.connect(mix);
 
+    // The storm wall's rumble: brown noise held to 40 to 120 Hz, and a hum on 55 and 110 Hz with
+    // 165 and 220 Hz above them (a laptop's speakers start about there), panned to the wall.
+    const rnSrc = loopSource(brown, rnd()); sources.push(rnSrc);
+    const rnHp = ctx.createBiquadFilter(); rnHp.type = 'highpass'; rnHp.frequency.value = 40; rnHp.Q.value = 0.7;
+    const rnLp = ctx.createBiquadFilter(); rnLp.type = 'lowpass'; rnLp.frequency.value = 120; rnLp.Q.value = 0.7;
+    const rnLp2 = ctx.createBiquadFilter(); rnLp2.type = 'lowpass'; rnLp2.frequency.value = 160; rnLp2.Q.value = 0.5;
+    const rnV = vca(0);
+    const humV = vca(0);
+    for (const [f, a] of [[55, 1], [110, 0.6], [165, 0.32], [220, 0.22]]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * (1 + 0.003 * (rnd() - 0.5));
+      const og = ctx.createGain(); og.gain.value = a * 0.35;
+      o.connect(og); og.connect(humV); o.start(now()); sources.push(o);
+    }
+    const rumblePan = ctx.createStereoPanner();
+    rnSrc.connect(rnHp); rnHp.connect(rnLp); rnLp.connect(rnLp2); rnLp2.connect(rnV); rnV.connect(rumblePan); humV.connect(rumblePan); rumblePan.connect(evBus);
+
+    // The colossus: the sub-rumble (brown noise held to 25 to 60 Hz and partials on 32, 96, 128, 160 Hz,
+    // with a 0.8 Hz wavering on its gain), the grind (brown 120 to 420 Hz and a crackle of white
+    // noise gated by the grain flutter), the roar of pouring sand, the hiss after; all panned to it.
+    const colPan = ctx.createStereoPanner(); colPan.connect(evBus);
+    const crSrc = loopSource(brown, rndCol()); sources.push(crSrc);
+    const crHp = ctx.createBiquadFilter(); crHp.type = 'highpass'; crHp.frequency.value = 25; crHp.Q.value = 0.7;
+    const crLp = ctx.createBiquadFilter(); crLp.type = 'lowpass'; crLp.frequency.value = 60; crLp.Q.value = 0.7;
+    const crV = vca(0), chV = vca(0), crAm = vca(1);
+    crSrc.connect(crHp); crHp.connect(crLp); crLp.connect(crV);
+    for (const [f, a] of [[32, 1], [96, 0.5], [128, 0.32], [160, 0.22]]) {
+      const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * (1 + 0.004 * (rndCol() - 0.5));
+      const og = ctx.createGain(); og.gain.value = a * 0.35; o2.connect(og); og.connect(chV); o2.start(now()); sources.push(o2);
+    }
+    crV.connect(crAm); chV.connect(crAm); crAm.connect(colPan);
+    const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.8;
+    const lfoD = ctx.createGain(); lfoD.gain.value = 0; lfo.connect(lfoD); lfoD.connect(crAm.gain); lfo.start(now()); sources.push(lfo);
+    const cgSrc = loopSource(brown, rndCol()); sources.push(cgSrc);
+    const cgBp = ctx.createBiquadFilter(); cgBp.type = 'bandpass'; cgBp.frequency.value = 230; cgBp.Q.value = 0.6;
+    const cgV = vca(0); cgSrc.connect(cgBp); cgBp.connect(cgV); cgV.connect(colPan);
+    const ckSrc = loopSource(white, rndCol()); sources.push(ckSrc);
+    const ckBp = ctx.createBiquadFilter(); ckBp.type = 'bandpass'; ckBp.frequency.value = 2600; ckBp.Q.value = 1.2;
+    const ckV = vca(0); const ckDepth = modulate(ckV, grain, rndCol());
+    ckSrc.connect(ckBp); ckBp.connect(ckV); ckV.connect(colPan);
+    const coSrc = loopSource(pinkM, rndCol()); sources.push(coSrc);
+    const coLp = ctx.createBiquadFilter(); coLp.type = 'lowpass'; coLp.frequency.value = 650; coLp.Q.value = 0.5;
+    const coV = vca(0); coSrc.connect(coLp); coLp.connect(coV); coV.connect(colPan);
+    const csSrc = loopSource(white, rndCol()); sources.push(csSrc);
+    const csBp = ctx.createBiquadFilter(); csBp.type = 'bandpass'; csBp.frequency.value = 4200; csBp.Q.value = 0.7;
+    const csV = vca(0); csSrc.connect(csBp); csBp.connect(csV); csV.connect(colPan);
+
     g = {
-      sr, mix, fade, mute, clip, sources, stepBus,
+      colPan, crV, chV, lfoD, cgV, ckV, ckDepth, coV, csV,
+      sr, mix, fade, mute, clip, sources, stepBus, duck, evBus, brown, rnV, humV, rumblePan,
       bodyLp, bodyLp2, bodyV, bodyPan,
       midA, midB, hissLp, hissHp, hissV, hissDepth, hissPan,
       sandBp, sandV, sandDepth, sandPan, slBp, slV, slDepth, sbLp, sbV,
@@ -468,6 +560,29 @@ export function createSound(opts = {}) {
     set(g.sandBp.frequency, lerp(5200 + 2200 * faceN, 3800 + 900 * faceN, S), tau);
     set(g.stepBus.gain, (0.56 / 0.75) * (1 - STORM_MIX.steps * S), 0.3);
     set(g.sandPan.pan, 0.3 * side, tau);
+
+    // The storm wall: its rumble, panned to its bearing; the hush behind its trailing edge
+    const wl = st.wall * (1 - st.hush), rel = st.wallYaw - st.listenerYaw;
+    set(g.rnV.gain, STORM_MIX.rumble * Math.pow(wl, STORM_MIX.rumbleCurve), tau);
+    set(g.humV.gain, STORM_MIX.rumble * STORM_MIX.humShare * Math.pow(wl, STORM_MIX.humCurve), tau);
+    set(g.rumblePan.pan, 0.8 * st.wallFocus * Math.sin(rel), tau);
+    set(g.duck.gain, lerp(1, STORM_MIX.hush, st.hush) * lerp(1, COL_MIX.duck, st.col.duck), 0.25);
+
+    // The colossus: its voices, panned to it
+    {
+      const c = st.col, k = c.red ? COL_MIX.reduced : 1;
+      set(g.colPan.pan, 0.75 * Math.sin(c.yaw - st.listenerYaw), 0.3);
+      // (held down before the boom: fast, 40 ms, so the dip is heard as a breath before it)
+      const pre = lerp(1, COL_MIX.pre, c.pre), pt = c.pre > 0.001 ? 0.04 : tau;
+      set(g.crV.gain, COL_MIX.rumble * k * pre * Math.pow(c.rumble, 0.6), pt);
+      set(g.chV.gain, COL_MIX.hum * k * pre * Math.pow(c.rumble, 0.9), pt);
+      set(g.lfoD.gain, c.red ? 0 : COL_MIX.am * c.am * c.rumble, 0.3);
+      set(g.cgV.gain, COL_MIX.grind * k * c.grind, tau);
+      set(g.ckV.gain, COL_MIX.crackle * k * c.grind, tau);
+      set(g.ckDepth.gain, COL_MIX.crackle * k * c.grind * 0.9, tau);
+      set(g.coV.gain, COL_MIX.roar * k * c.roar, 0.4);
+      set(g.csV.gain, COL_MIX.hiss * k * c.hiss, 0.4);
+    }
 
     // Sliding: rises with it; the smoothed value gives the tail.
     const sl = st.slide;
@@ -556,6 +671,32 @@ export function createSound(opts = {}) {
     // the storm eases in and out over a couple of seconds
     st.storm += (st.stormIn - st.storm) * (1 - Math.exp(-dt / 1.5));
     if (st.storm < 1e-4 && st.stormIn === 0) st.storm = 0;
+    // the wall: its rumble eases, its bearing follows, its arrival fires once per step of the count
+    if (Number.isFinite(state.stormWall)) st.wallIn = clamp(state.stormWall);
+    if (Number.isFinite(state.stormWallYaw)) st.wallYaw = state.stormWallYaw;
+    if (Number.isFinite(state.stormWallFocus)) st.wallFocus = clamp(state.stormWallFocus);
+    if (Number.isFinite(state.listenerYaw)) st.listenerYaw = state.listenerYaw;
+    if (Number.isFinite(state.stormHush)) st.hushIn = clamp(state.stormHush);
+    st.wall += (st.wallIn - st.wall) * (1 - Math.exp(-dt / 0.6));
+    if (st.wall < 1e-4 && st.wallIn === 0) st.wall = 0;
+    st.hush += (st.hushIn - st.hush) * (1 - Math.exp(-dt / 0.15));
+    if (st.hush < 1e-4 && st.hushIn === 0) st.hush = 0;
+    // the colossus: eased levels; one-shots on each step up of their counts
+    const cfire = [];
+    {
+      const c = st.col, ease = (k, v, tau) => { if (Number.isFinite(v)) c[k] += (clamp(v) - c[k]) * (1 - Math.exp(-dt / tau)); if (c[k] < 1e-4 && !(v > 0)) c[k] = 0; };
+      ease('rumble', state.colRumble, 0.8); ease('grind', state.colGrind, 0.4); ease('roar', state.colRoar, 0.8); ease('hiss', state.colHiss, 1.0); ease('duck', state.colDuck, 0.8);
+      c.pre = Number.isFinite(state.colPre) ? clamp(state.colPre) : 0;
+      if (Number.isFinite(state.colAM)) c.am = clamp(state.colAM);
+      if (Number.isFinite(state.colYaw)) c.yaw = state.colYaw;
+      if (state.colReduced !== undefined) c.red = !!state.colReduced;
+      for (const k of ['call', 'boom', 'ring']) {
+        const v = state['col' + k[0].toUpperCase() + k.slice(1)];
+        if (Number.isFinite(v)) { if (c[k] !== null && v > c[k]) cfire.push(k); c[k] = v; }
+      }
+    }
+    let fire = false;
+    if (Number.isFinite(state.stormImpact)) { if (st.impactN !== null && state.stormImpact > st.impactN) fire = true; st.impactN = state.stormImpact; }
 
     // Exposure follows within a quarter second; slide rises fast and tails off slowly.
     st.exp += (st.exposure - st.exp) * (1 - Math.exp(-dt / 0.25));
@@ -570,10 +711,102 @@ export function createSound(opts = {}) {
 
     if (!ctx || !g || dead || disposed) return;
     if (!external && (ctx.state !== 'running' || hidden)) return;
+    if (fire) { try { impact(); } catch (err) { /* silent */ } }
+    for (const k of cfire) { try { colOne(k); } catch (err) { /* silent */ } }
     st.sinceParams += dt;
     if (st.sinceParams < 0.03) return;                    // about 30 parameter updates a second
     st.sinceParams = 0;
     try { applyParams(false); } catch (err) { /* never throw into the render loop */ }
+  }
+
+  // The storm wall's arrival: a 1.5 s swell of brown noise (lowpassed, rising), then a low thud as it
+  // hits, panned to the wall; the swell falls away over a couple of seconds into the storm's roar.
+  function impact() {
+    const t0 = now(), A = STORM_MIX.impact, rise = 1.5;
+    const pan = ctx.createStereoPanner(); pan.pan.value = 0.8 * st.wallFocus * Math.sin(st.wallYaw - st.listenerYaw);
+    pan.connect(g.evBus);
+    const src = ctx.createBufferSource(); src.buffer = g.brown.buf; src.loop = true; src.loopEnd = g.brown.loopEnd;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.6;
+    lp.frequency.setValueAtTime(140, t0); lp.frequency.linearRampToValueAtTime(650, t0 + rise); lp.frequency.setTargetAtTime(220, t0 + rise, 0.8);
+    const v = ctx.createGain();
+    v.gain.setValueAtTime(0.0001, t0); v.gain.exponentialRampToValueAtTime(A, t0 + rise); v.gain.setTargetAtTime(0.0001, t0 + rise, 0.7);
+    src.connect(lp); lp.connect(v); v.connect(pan);
+    src.start(t0, rnd() * 4); src.stop(t0 + rise + 5);
+    // the thud: a sine falling from 70 to 38 Hz, with its second partial for small speakers
+    for (const [mul, a] of [[1, 1], [2, 0.35]]) {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(70 * mul, t0 + rise); o.frequency.exponentialRampToValueAtTime(38 * mul, t0 + rise + 0.6);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0, t0 + rise); og.gain.linearRampToValueAtTime(STORM_MIX.thud * a, t0 + rise + 0.012); og.gain.setTargetAtTime(0, t0 + rise + 0.02, 0.28);
+      o.connect(og); og.connect(pan); o.start(t0 + rise); o.stop(t0 + rise + 2.5);
+      o.onended = () => { try { og.disconnect(); } catch (e) { /* gone */ } };
+    }
+    src.onended = () => { try { pan.disconnect(); } catch (e) { /* gone */ } };
+  }
+
+  // The colossus's one-shots: the call, the boom, the lantern's ring
+  function colOne(kind) {
+    const t0 = now(), c = st.col, k = c.red ? COL_MIX.reduced : 1;
+    const pan = ctx.createStereoPanner(); pan.pan.value = kind === 'ring' ? 0 : 0.75 * Math.sin(c.yaw - st.listenerYaw); pan.connect(g.evBus);
+    const tone = (f0, f1, a, att, hold, rel, type = 'sine') => {
+      const o = ctx.createOscillator(); o.type = type;
+      o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + att + hold);
+      const og = ctx.createGain(); og.gain.setValueAtTime(0.0001, t0); og.gain.exponentialRampToValueAtTime(a, t0 + att);
+      og.gain.setValueAtTime(a, t0 + att + hold); og.gain.exponentialRampToValueAtTime(0.0001, t0 + att + hold + rel);
+      o.connect(og); og.connect(pan); o.start(t0); o.stop(t0 + att + hold + rel + 0.1);
+      return og;
+    };
+    if (kind === 'call') {
+      // a 30 -> 55 Hz glide with its partials, through a slowly opening formant
+      const A = COL_MIX.call * k;
+      const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.Q.value = 2.5;
+      bp.frequency.setValueAtTime(140, t0); bp.frequency.linearRampToValueAtTime(420, t0 + 3); bp.frequency.linearRampToValueAtTime(180, t0 + 6.5);
+      bp.connect(pan);
+      for (const [m, a] of [[1, 1], [110 / 30, 0.5], [165 / 30, 0.32], [220 / 30, 0.22]]) {
+        const o = ctx.createOscillator(); o.type = m === 1 ? 'sine' : 'triangle';
+        o.frequency.setValueAtTime(30 * m, t0); o.frequency.exponentialRampToValueAtTime(55 * m, t0 + 3.2); o.frequency.exponentialRampToValueAtTime(44 * m, t0 + 6.5);
+        const og = ctx.createGain(); og.gain.setValueAtTime(0.0001, t0); og.gain.exponentialRampToValueAtTime(A * a, t0 + 1.8);
+        og.gain.setValueAtTime(A * a, t0 + 4.2); og.gain.exponentialRampToValueAtTime(0.0001, t0 + 7.5);
+        o.connect(og); og.connect(bp); o.start(t0); o.stop(t0 + 7.6);
+      }
+      setTimeout(() => { try { pan.disconnect(); } catch (e) { /* gone */ } }, 9000);
+    } else if (kind === 'boom') {
+      // a long soft boom: brown noise opening over a second and dying over six, a falling sine under it
+      const A = COL_MIX.boom * k;
+      const src = ctx.createBufferSource(); src.buffer = g.brown.buf; src.loop = true; src.loopEnd = g.brown.loopEnd;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5;
+      lp.frequency.setValueAtTime(60, t0); lp.frequency.linearRampToValueAtTime(260, t0 + 1.0); lp.frequency.setTargetAtTime(90, t0 + 1.0, 2.5);
+      const v = ctx.createGain(); v.gain.setValueAtTime(0.0001, t0); v.gain.exponentialRampToValueAtTime(A, t0 + 1.0); v.gain.setTargetAtTime(0.0001, t0 + 1.2, 2.2);
+      src.connect(lp); lp.connect(v); v.connect(pan); src.start(t0, rndCol() * 4); src.stop(t0 + 12);
+      tone(44, 26, A * 0.8, 0.3, 0.4, 4.5); tone(88, 52, A * 0.3, 0.3, 0.3, 3.0);
+      src.onended = () => { try { pan.disconnect(); } catch (e) { /* gone */ } };
+    } else if (kind === 'ring') {
+      const A = COL_MIX.ring * k;
+      for (const [f, a] of [[1318, 1], [1977, 0.5], [2637, 0.25]]) tone(f, f * 0.998, A * a, 0.01, 0.02, 3.2);
+      setTimeout(() => { try { pan.disconnect(); } catch (e) { /* gone */ } }, 4000);
+    }
+  }
+
+  // The staff strike: a dry thud (a sine falling from 90 to 50 Hz and its second partial) and a crunch
+  // of sand (a landing's grains, played a little low), at once.
+  function strike() {
+    if (!ctx || !g || dead || disposed) return;
+    if (!external && (ctx.state !== 'running' || hidden)) return;
+    try {
+      const t0 = now(), A = COL_MIX.strike;
+      for (const [m, a] of [[1, 1], [2, 0.4]]) {
+        const o = ctx.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(90 * m, t0); o.frequency.exponentialRampToValueAtTime(50 * m, t0 + 0.18);
+        const og = ctx.createGain(); og.gain.setValueAtTime(0, t0); og.gain.linearRampToValueAtTime(A * a * 0.5, t0 + 0.006); og.gain.setTargetAtTime(0, t0 + 0.01, 0.09);
+        o.connect(og); og.connect(g.stepBus); o.start(t0); o.stop(t0 + 0.8);
+        o.onended = () => { try { og.disconnect(); } catch (e) { /* gone */ } };
+      }
+      const src = ctx.createBufferSource(); src.buffer = stepBuffer(ctx, rndStep, 0.8, 0); src.playbackRate.value = 0.82;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.5;
+      const v = ctx.createGain(); v.gain.value = A * 0.6;
+      src.connect(lp); lp.connect(v); v.connect(g.stepBus); src.start(t0);
+      src.onended = () => { try { v.disconnect(); } catch (e) { /* gone */ } };
+    } catch (err) { /* silent */ }
   }
 
   function step(strength) {
@@ -663,5 +896,5 @@ export function createSound(opts = {}) {
     dead = true;
   }
 
-  return { start, update, step, land, setMuted, dispose };
+  return { start, update, step, land, strike, setMuted, dispose };
 }

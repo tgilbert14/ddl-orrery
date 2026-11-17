@@ -2,8 +2,8 @@
 // at the top of world.js; the Dust Sea's is surface/worlds/dust-sea/world.js, and surface/walk/ is
 // the page that boots it). WebGPURenderer on WebGPU, or its WebGL2 backend with ?r=webgl2; the poster
 // when neither starts. The world brings the ground, sky, light and shadow bake (createMaterials),
-// the times of day, what the walker leaves behind (trace, pour, puffs), the air and the event that
-// happens to you; this folder brings the walker (walker.js), a ground mesh that follows you without
+// the times of day, what the walker leaves behind (trace, pour, puffs), the air and the events that
+// happen to you (run by events.js); this folder brings the walker (walker.js), a ground mesh that follows you without
 // swimming (clipmap.js), shadows re-baked while you walk (shadows.js), the figure (figure.js,
 // pilgrim.js), the follow camera (follow.js), the controls (input.js), the frame loop, the governor,
 // device loss and the script's handle (window.__walk).
@@ -14,9 +14,9 @@
 // view=first: the first-person walk as it was before the Pilgrim (the default is third person: the
 // Pilgrim, pilgrim.js, followed by a spring camera, follow.js, with sand puffs, puffs.js). V switches
 // between the two at runtime.
-// storm=off|now|fast: the world's event (on the Dust Sea the storm front, storm.js): never; the
-// approach 8 s after ready; every phase and the schedule at 4x. seed=N seeds its schedule. With
-// test=1 there is no schedule unless storm= asks.
+// <event>=off|now|fast, for each of the world's events by name (on the Dust Sea ?storm=, storm.js):
+// never; its first phase a few seconds after ready; every phase and the schedule at 4x. events=off:
+// none of them. seed=N seeds their schedules. With test=1 there is no schedule unless the URL asks.
 // Figure look test (opt-in): figure=a|b|c places a static figure at the end of a 20 m trail and
 // switches to a third-person camera, shot=behind|wide|side (see figure.js). Without figure= nothing
 // below changes.
@@ -24,6 +24,7 @@
 import { setWorld, DEG } from './world.js';
 import { createWalker, raycastGround } from './walker.js';
 import { createInput } from './input.js';
+import { createDirector, createEventGraphics, eventDefs } from './events.js';
 
 export async function start(world) {
   setWorld(world);
@@ -35,6 +36,7 @@ export async function start(world) {
   const reduced = q.get('reduced') === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const showFps = q.get('fps') === '1';
   const testMode = q.get('test') === '1';
+  const soundLog = q.get('soundlog') === '1';
   const forceWebGL = q.get('r') === 'webgl2';
   const polar = q.get('mesh') === 'polar';
   const fixedDpr = /^\d(\.\d+)?$/.test(q.get('dpr') || '') ? Math.min(2, +q.get('dpr')) : null;
@@ -48,7 +50,7 @@ export async function start(world) {
   let viewMode = START_VIEW;
 
   const $ = (id) => document.getElementById(id);
-  const stage = $('stage'), readoutEl = $('readout'), hintEl = $('hint'), posterEl = $('poster');
+  const stage = $('stage'), readoutEl = $('readout'), hintEl = $('hint'), posterEl = $('poster'), eventLineEl = $('event-line');
   if (showFps) readoutEl.hidden = false;
   document.body.classList.toggle('touch', matchMedia('(pointer: coarse)').matches);
 
@@ -68,11 +70,10 @@ export async function start(world) {
   let pendingTime = null;
 
   const API = (window.__walk = { ready: false, backend: null, error: null, reduced, world, events: { foot: 0, slide: 0, leap: 0, land: 0 }, losses: 0 });
-  // the world's event (on the Dust Sea the storm front): its state machine outlives a lost device;
-  // made with the graphics. The engine still calls it the storm throughout.
-  const STORM_MODE = ['off', 'now', 'fast'].includes(q.get('storm')) ? q.get('storm') : null;
+  // the world's events (events.js): the director and every event's state outlive a lost device; made
+  // with the graphics the first time (the defs come with them). ?<name>= is read by the director.
   const SEED = /^\d{1,10}$/.test(q.get('seed') || '') ? +q.get('seed') : null;
-  let storm = null, stormMod = null, stormWas = false;
+  let director = null;
   // third person: the figure's heading (turned toward where it wants to go at a limited rate)
   let figYaw = ws.yaw, figAngVel = 0, animTime = 0;
   let pourKick = 0;   // the crest leap: a landing on a slip face feeds the pour for a moment
@@ -132,9 +133,8 @@ export async function start(world) {
     const air = WG.air || null;
     const { SHMAP } = world.params;
     const figMod = FIGURE ? await import('./figure.js') : null;
-    // the world's event: not in the figure look test
-    stormMod = FIGURE ? null : WG.event || null;
-    if (stormMod && !storm) storm = stormMod.create({ reduced, seed: SEED, mode: STORM_MODE, testMode });
+    // the world's events: not in the figure look test
+    if (!director) director = createDirector({ defs: FIGURE ? [] : eventDefs(WG), seed: SEED, url: q, testMode, reduced, world });
     const pilMod = FIGURE ? null : await import('./pilgrim.js');
     const figShade = figMod ? figMod.createFigureShading() : pilMod ? (await import('./figure.js')).createFigureShading({ fade: true }) : null;
     // view=first keeps the ground's shader as it was: the figure's shadow, contact and lantern pool
@@ -170,8 +170,10 @@ export async function start(world) {
     const trace = traceMod.createTrace(renderer, pour);
     const uCam = clip.createClipUniform();
     const values = { ...timeNow, uGroundY: ws.ground };
-    // the storm over the sky, drawn at half resolution (storm.js); ?skyfull=1 keeps it in the sky shader
-    const stormSky = stormMod && q.get('skyfull') !== '1' ? stormMod.createSky({ renderer, lamp: figShade ? { pos: figShade.uLamp, col: figShade.uLampCol } : null }) : null;
+    // the events' graphics: their hooks in the ground and sky shaders, their sky drawn at half
+    // resolution (?skyfull=1 keeps it in the sky shader), their fog over the figure
+    const EG = createEventGraphics(director, { renderer, shade: figShade, lamp: figShade ? { pos: figShade.uLamp, col: figShade.uLampCol } : null, reduced, skyFull: q.get('skyfull') === '1' });
+    const eventSky = EG.skyPass;
     const mats = createMaterials(values, {
       shadows: 'map', normal: 'analytic', ripples: true,
       walk: {
@@ -180,8 +182,8 @@ export async function start(world) {
         trace: trace.hook,
         air: q.get('air') === '0' || !air ? null : air.airHook,
         ...(groundFig ? { figure: groundFig.groundHook } : {}),
-        ...(stormMod ? { storm: (a) => stormMod.apply(a.col, { ...a, lamp: figShade ? { pos: figShade.uLamp, col: figShade.uLampCol } : null }) } : {}),
-        ...(stormSky ? { stormSky: stormSky.hook } : {}),
+        ...(EG.ground ? { event: EG.ground } : {}),
+        ...(eventSky ? { eventSky: eventSky.hook } : EG.skyFull ? { eventSkyFull: EG.skyFull } : {}),
       },
     }, rtA.texture);
 
@@ -205,17 +207,17 @@ export async function start(world) {
       if (isGPU) await renderer.backend.device.queue.onSubmittedWorkDone();
       else gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     };
-    const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, pour, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod, stormSky,
+    const g = { THREE, renderer, isGPU, mats, scene, sky, ground, camera, shadows, trace, pour, uCam, rtA, rtB, cm, drain, clip, traceMod, shMod, eventSky, EG,
       backend: isGPU ? 'WebGPU (WebGPURenderer, TSL)' : 'WebGL2 (WebGPURenderer, TSL)' };
     if (pilMod) {
-      const fog = stormMod ? stormMod.fog : null;
+      const fog = EG.fog;
       g.pil = pilMod.createPilgrim({ U: mats.uniforms, shade: figShade, scene, reduced, fog, eyes: q.has('eyes') ? Math.max(0, +q.get('eyes') || 0) : 0.22 });
       g.puffs = WG.puffs.createPuffs({ U: mats.uniforms, shade: figShade, scene, fog });
       g.follow = (await import('./follow.js')).createFollow({ reduced });
       g.follow.setYaw(figYaw);
       g.pil.setVisible(viewMode === 'third');
     }
-    if (stormMod) g.sand = stormMod.createParticles({ U: mats.uniforms, shade: figShade, scene, storm, reduced });
+    EG.makeParticles({ U: mats.uniforms, scene, fns: mats.fns });
     if (figMod) {
       g.fig = figMod.createFigure({ kind: FIGURE, U: mats.uniforms, shade: figShade, scene });
       g.persp = camera;
@@ -376,6 +378,8 @@ export async function start(world) {
   }
   function updateTime(dt) {
     if (!timeFade || timeFade.phase !== 'fading') return;
+    // (a live event may ask the blend to wait while it eases what is seen of it out)
+    if (timeFade.t === 0 && director && director.holdTime()) return;
     timeFade.t += dt;
     const f = Math.min(1, timeFade.t / TIME_FADE), ff = f * f * (3 - 2 * f);
     applyBlend(G.mats.set, timeNow, timeFade.to, ff, ws.ground);
@@ -412,19 +416,11 @@ export async function start(world) {
     const w = walker.wind(animTime);
     const gust = Math.max(0, Math.min(1, 0.5 + 0.35 * Math.sin(animTime * 0.37) * Math.sin(animTime * 0.13 + 1.7) + 0.3 * Math.sin(animTime * 1.1 + Math.sin(animTime * 0.29) * 2)));
     const out = { dir: WIND, strength: Math.min(1.1, 0.25 + w.windSpeed / 8), gust, sound: w };
-    if (storm && storm.active) {
-      // the storm front: the cloak streams hard, the gusts are the storm's, the lantern's pool brighter
-      // and its glow sprite dimmed by the dust between it and the eye
-      const sw = storm.wind, sg = storm.gust;
-      out.strength += (1.45 + 0.45 * sg - out.strength) * sw;
-      out.gust += (sg - out.gust) * sw;
-      let lampT = 1;
-      if (G && G.pil) { const l = G.pil.state.lamp, c = G.camera.position; lampT = Math.exp(-storm.tauAt(Math.hypot(l[0] - c.x, l[1] - c.y, l[2] - c.z))); }
-      out.storm = { k: storm.k, lamp: storm.STORM.lampBoost * storm.k, lampT };
-    }
-    return out;
+    // a live event's wind, mixed in (it may stream the cloak, and dim or brighten the lantern)
+    return director ? director.wind(out, G && G.pil ? { lamp: G.pil.state.lamp, cam: G.camera.position } : {}) : out;
   }
-  function stormIntent() { return storm && storm.active && storm.k > 0 ? { k: storm.k, gust: storm.gust, ...storm.STORM } : null; }
+  // a live event's push on the walker (keyed as walker.js takes it), or null
+  function eventWalk() { return director ? director.walk() : null; }
   // place the figure and the camera without advancing time (start, a new pose, a view switch)
   function primeThird() {
     if (!G || !G.pil || viewMode !== 'third') return;
@@ -438,6 +434,40 @@ export async function start(world) {
     else { figYaw = ws.yaw; figAngVel = 0; G.follow.setYaw(ws.yaw); G.follow.state.init = false; G.pil.reset(); G.pil.setVisible(true); primeThird(); }
     if (G.camera.fov !== (window.innerWidth / Math.max(1, window.innerHeight) < 1 ? CAM.vfovPortrait : CAM.vfov)) resize();
     placeCamera();
+  }
+  // the staff strike (F or Space, a long press on touch): only standing. The Pilgrim plants the staff,
+  // the sand takes a ring and a puff, a dry thud; then the world's events hear it (three in time
+  // call the colossus; a strike that cannot call is still felt, and nothing comes)
+  function strike() {
+    if (ws.speed > 0.3 || ws.sliding > 0.1 || ws.airborne) return;
+    API.events.strike = (API.events.strike || 0) + 1;
+    API.lastStrikeFrame = API.frames || 0;
+    const third = G.pil && viewMode === 'third';
+    let tip = [ws.x + Math.cos(ws.yaw) * 0.5, ws.z + Math.sin(ws.yaw) * 0.5];
+    if (third) { const p = G.pil.strike(); tip = [p[0], p[2]]; }
+    const ex = ws.exposure;
+    G.trace.stamp({ type: 'slide', x0: tip[0], z0: tip[1], x1: tip[0], z1: tip[1], depth: 0.05, width: 0.05, exposure: ex });
+    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2, b = a + Math.PI / 5, r = 0.32; G.trace.stamp({ type: 'slide', x0: tip[0] + Math.cos(a) * r, z0: tip[1] + Math.sin(a) * r, x1: tip[0] + Math.cos(b) * r, z1: tip[1] + Math.sin(b) * r, depth: 0.008, width: 0.05, berm: 0.4, exposure: ex }); }
+    if (third && G.puffs) G.puffs.land({ x: tip[0], z: tip[1], vy: 0.6, speed: 0, dirX: Math.cos(ws.yaw), dirZ: Math.sin(ws.yaw), exposure: ex }, windNow());
+    const called = director ? director.strike({ x: tip[0], z: tip[1] }) : false;
+    try { sound?.strike?.(); } catch { /* no sound */ }
+    API.lastStrike = { called };
+  }
+  // a live event's line, once as it begins, in the DOM (polite; nothing in the canvas)
+  let announced = null;
+  function announce() {
+    const n = director.live;
+    if (n === announced) return;
+    announced = n;
+    const ev = n ? director.event(n) : null, line = ev && ev.announce ? ev.announce() : '';
+    if (line && eventLineEl) { eventLineEl.textContent = line; eventLineEl.classList.add('on'); clearTimeout(announce.t); announce.t = setTimeout(() => eventLineEl.classList.remove('on'), 8000); }
+    // while an event is live the controls hint bar is hidden (it comes back when the event ends)
+    if (hintEl) hintEl.classList.toggle('event', !!n);
+  }
+  // the line goes early once the event says so (the colossus: before anything of it stands in the sky)
+  function lineCheck() {
+    const n = director.live, ev = n ? director.event(n) : null;
+    if (ev && ev.lineDone && eventLineEl && eventLineEl.classList.contains('on') && ev.lineDone()) eventLineEl.classList.remove('on');
   }
   function tickThird(dt, intent) {
     const F = G.follow;
@@ -457,11 +487,11 @@ export async function start(world) {
     ws.yaw = figYaw;
     // climbing, the steps are shorter (third person only: the walker's default stride is unchanged)
     // the crest leap is third person only (intent.leap)
-    const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2, leap: true, storm: stormIntent() });
+    const events = walker.update(dt, { wish, run: intent.run, target: intent.target, cancelTarget: intent.cancelTarget, face: true, reducedMotion: reduced, climbStride: 2.2, leap: true, ...eventWalk() });
     ws.yaw = figYaw;
     const wind = windNow();
     for (const e of events) if (e.type === 'land') G.pil.land(e);
-    const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ] });
+    const stamps = G.pil.update(dt, ws, { heading: figYaw, angVel: figAngVel, wind, t: animTime, wish: [ws.wishX, ws.wishZ], act: director ? director.figure() : null });
     for (const st of stamps) G.trace.stamp(st);
     for (const e of events) {
       if (e.type === 'leap') { e.noPrint = true; continue; }
@@ -487,7 +517,7 @@ export async function start(world) {
     const sd = timeNow.uSun1Dir, sh = Math.hypot(sd[0], sd[2]) || 1;
     F.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz), sliding: ws.sliding, running: ws.running, travelYaw: tv,
       slide: [ws.sx, ws.sz], sun: [sd[0] / sh, sd[2] / sh], wind: WIND, airborne: ws.airborne, airHeight: ws.airHeight,
-      storm: storm ? storm.boom : 0, stormBoom: storm ? storm.STORM.boom : 0 }, look);
+      ...(director ? director.camera() : {}) }, look);
     // the slide scar: no prints while sliding, a broad shallow groove with raised edges instead,
     // scaled with the slide speed (first person keeps the walker's own trough)
     const out = [];
@@ -508,7 +538,7 @@ export async function start(world) {
     if (!prevPose.p) return;
     const p = cam.position.clone(), qn = cam.quaternion.clone();
     cam.position.copy(prevPose.p); cam.quaternion.copy(prevPose.q); cam.updateMatrixWorld(true);
-    G.stormSky?.render(cam);
+    G.eventSky?.render(cam);
     G.renderer.render(G.scene, cam);
     if (!fadeEl) {
       fadeEl = document.createElement('canvas');
@@ -526,46 +556,54 @@ export async function start(world) {
     fadeEl.style.opacity = String(fadeT / FADE);
   }
 
-  // the storm front's uniforms, after the time of day has written its own: the light dimmed and
-  // tinted through storm.modify, the shaders' storm uniforms, the sand racing past. When it ends, the
-  // time's own values are written back once.
-  function applyStorm(dt) {
-    if (!storm) return;
-    if (storm.active) {
-      const fading = timeFade && timeFade.phase === 'fading';
-      const f = fading ? Math.min(1, timeFade.t / TIME_FADE) : 0, ff = f * f * (3 - 2 * f), b = fading ? timeFade.to : null;
-      const mixv = (k) => (b ? timeNow[k].map((x, i) => x + (b[k][i] - x) * ff) : timeNow[k]);
-      const base = { sun1Col: mixv('uSun1Col'), sun2Col: mixv('uSun2Col'), sun1Dir: b && ff > 0.5 ? b.uSun1Dir : timeNow.uSun1Dir, sun2Dir: b && ff > 0.5 ? b.uSun2Dir : timeNow.uSun2Dir,
-        ambSky: mixv('uAmbSky'), horizon: mixv('uHorizon') };
-      const c = G.camera.position;
-      storm.apply(base, { x: ws.x, ground: ws.ground, z: ws.z }, [c.x, c.y, c.z]);
-      applyBlend((name, v) => G.mats.set(name, storm.modify(name, v)), timeNow, b, ff, ws.ground);
-      stormWas = true;
-    } else if (stormWas) {
-      storm.apply(null, null, null);
-      if (!(timeFade && timeFade.phase === 'fading')) setAllTime(ws.ground);
-      stormWas = false;
-    }
-    G.sand?.update(dt, G.camera);
+  // a live event's light, after the time of day has written its own: its shaders' uniforms, and the
+  // time's uniforms on their way through its modify (it may dim and tint them). When it ends,
+  // the time's own values are written back once. Then the events' particles (they hide when off).
+  function applyEventLight(dt) {
+    if (!director) return;
+    const fading = timeFade && timeFade.phase === 'fading';
+    const f = fading ? Math.min(1, timeFade.t / TIME_FADE) : 0, ff = f * f * (3 - 2 * f), b = fading ? timeFade.to : null;
+    const c = G.camera.position;
+    director.light({
+      base: () => {
+        const mixv = (k) => (b ? timeNow[k].map((x, i) => x + (b[k][i] - x) * ff) : timeNow[k]);
+        return { sun1Col: mixv('uSun1Col'), sun2Col: mixv('uSun2Col'), sun1Dir: b && ff > 0.5 ? b.uSun1Dir : timeNow.uSun1Dir, sun2Dir: b && ff > 0.5 ? b.uSun2Dir : timeNow.uSun2Dir,
+          ambSky: mixv('uAmbSky'), horizon: mixv('uHorizon') };
+      },
+      at: { x: ws.x, ground: ws.ground, z: ws.z }, cam: [c.x, c.y, c.z],
+      blend: (modify) => applyBlend((name, v) => G.mats.set(name, modify(name, v)), timeNow, b, ff, ws.ground),
+      restore: () => { if (!fading) setAllTime(ws.ground); },
+    });
+    G.EG.particles(dt, G.camera);
   }
 
   function tick(dt) {
     const t0 = performance.now();
     if (G.pil) { if (!prevPose.p) { prevPose.p = G.camera.position.clone(); prevPose.q = G.camera.quaternion.clone(); } else { prevPose.p.copy(G.camera.position); prevPose.q.copy(G.camera.quaternion); } }
     const intent = G.fig && G.fig.state.placed ? {} : input.read();
+    if (intent.strike && !G.fig) strike();
     if (intent.tap) {
       const hit = pick(intent.tap.ndcX, intent.tap.ndcY);
       if (hit) { intent.target = { x: hit.x, z: hit.z }; lastTap = { x: hit.x, z: hit.z }; }
     }
     animTime += dt;
-    // the storm front's clock; when the inside ends every track is gone (the trace and the pour wiped)
-    if (storm) {
-      const sev = storm.update(dt);
-      if (sev.cleared) { G.trace.clear(); G.pour?.clear(); traceC = null; }
+    // the events' clocks; an event may wipe every track (the trace and the pour), or ask for
+    // a cut (cross-faded from the frame before)
+    let evCut = false;
+    if (director) {
+      const c = G.camera.position, ce = G.camera.matrixWorld.elements;
+      // (and the time of day: its name, and while it changes, where it is going and how far the blend is)
+      const tf = timeFade && timeFade.phase === 'fading' ? Math.min(1, timeFade.t / TIME_FADE) : 0;
+      const r = director.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, cam: [c.x, c.y, c.z], yaw: Math.atan2(-ce[10], -ce[8]), view: viewMode,
+        suns: [timeNow.uSun1Dir, timeNow.uSun2Dir], cols: [timeNow.uSun1Col, timeNow.uSun2Col],
+        timeName: timeNow.name, timeTo: timeFade ? timeFade.to.name : null, sunsTo: timeFade ? [timeFade.to.uSun1Dir, timeFade.to.uSun2Dir] : null, timeF: tf * tf * (3 - 2 * tf) });
+      announce(); lineCheck();
+      if (r.cleared) { G.trace.clear(); G.pour?.clear(); traceC = null; }
+      evCut = r.cut;
     }
     const third = G.pil && viewMode === 'third';
-    const si = third ? null : stormIntent();
-    const events = third ? tickThird(dt, intent) : walker.update(dt, si ? { ...intent, reducedMotion: reduced, storm: si } : { ...intent, reducedMotion: reduced });
+    const ew = third ? null : eventWalk();
+    const events = third ? tickThird(dt, intent) : walker.update(dt, ew ? { ...intent, reducedMotion: reduced, ...ew } : { ...intent, reducedMotion: reduced });
     for (const e of events) {
       if (!e.noPrint) G.trace.stamp(e);
       // No step sound while sliding: the slide voice carries it, and the sound module's levels assume the two do not overlap.
@@ -578,6 +616,7 @@ export async function start(world) {
     if (!reduced) simTime += dt;
     placeCamera();
     if (third && G.follow.state.cut) { G.follow.state.cut = false; crossFadeCut(); }
+    else if (evCut) crossFadeCut();
     tickFade(dt);
     if (third) {
       // the key sun for the sand's sprites: whichever of the two is brighter
@@ -585,7 +624,7 @@ export async function start(world) {
       G.puffs.update(dt, ws, windNow(), G.camera, reduced, b1 >= b2 ? timeNow.uSun1Dir : timeNow.uSun2Dir);
     }
     updateTime(dt);
-    applyStorm(dt);
+    applyEventLight(dt);
     const fogBase = ws.ground;
     const f = timeFade && timeFade.phase === 'fading' ? null : timeNow;
     if (f) { G.mats.set('uFog', [f.uFog[0], f.uFog[1], f.uFog[2], fogBase]); G.mats.set('uGroundY', fogBase); }
@@ -595,15 +634,18 @@ export async function start(world) {
     if (pourKick < 0.03) pourKick = 0;
     if (G.pour) G.pour.update(dt, { x: ws.x, z: ws.z, sx: ws.sx, sz: ws.sz, amount: third ? Math.max(ws.sliding, pourKick) : 0, speed: Math.hypot(ws.vx + ws.sx, ws.vz + ws.sz) });
     const tc = traceCentre();
-    G.traceMod.TRACE.healMul = storm && storm.active ? storm.erase : 1;
+    G.traceMod.TRACE.healMul = director ? director.trace().healMul : 1;
     const traceDid = G.trace.update(dt, tc[0], tc[1], !G.fig);
     G.mats.set('uTime', simTime);
-    G.stormSky?.render(G.camera);
+    G.eventSky?.render(G.camera);
     G.renderer.render(G.scene, G.camera);
     try {
       const wnd = walker.wind(simTime);
-      sound?.update({ dt, windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding,
-        storm: storm && storm.active ? storm.wind : 0, stormGust: storm ? storm.gust : 0.5 });
+      const ce = G.camera.matrixWorld.elements;   // the listener faces where the camera does
+      const si = { windSpeed: wnd.windSpeed, windDirRel: wnd.windDirRel, exposure: ws.exposure, walkerSpeed: ws.speed, sliding: ws.sliding, listenerYaw: Math.atan2(-ce[10], -ce[8]),
+        ...(director ? director.sound() : {}) };
+      if (soundLog) API.lastSoundIn = si;   // ?soundlog=1: a script renders the same sound offline
+      sound?.update({ dt, ...si });
     } catch { /* no sound */ }
     const work = performance.now() - t0;
     return { work, bake: bakeDid, trace: traceDid };
@@ -615,6 +657,7 @@ export async function start(world) {
     lastNow = now;
     while (intervals.length && intervals[0][0] < now - 1000) intervals.shift();
     const r = tick(Math.min(dt, 0.1));
+    API.frames = (API.frames || 0) + 1;
     works.push([now, r.work]);
     while (works.length && works[0][0] < now - 1000) works.shift();
     governor(now);
@@ -656,7 +699,7 @@ export async function start(world) {
       `prints: ${API.events.foot} steps, trace passes ${G.trace.passes}`,
       `at ${ws.x.toFixed(1)}, ${ws.z.toFixed(1)}  heading ${(((ws.yaw / DEG) % 360) + 360) % 360 | 0}  ${ws.speed.toFixed(1)} m/s  slope ${ws.slopeDeg.toFixed(0)}  slide ${ws.sliding.toFixed(2)}`,
       timeFade ? `time: ${timeNow.name} -> ${timeFade.to.name} (${timeFade.phase})` : `time: ${timeNow.name}`,
-      storm ? `storm: ${storm.phase}${storm.active ? ` ${storm.state.t.toFixed(0)} s, k ${storm.k.toFixed(2)}, sand ${G.sand ? G.sand.live : 0}` : storm.state.next !== null ? `, next in ${Math.max(0, storm.state.next - storm.state.clock).toFixed(0)} s` : ''}` : 'storm: none',
+      ...(director ? director.readout(G.EG.byName) : []),
     ].join('\n');
   }
 
@@ -689,6 +732,7 @@ export async function start(world) {
 
   async function startGraphics() {
     G = await buildGraphics();
+    if (!API.events.list) eventApi();
     API.backend = G.backend;
     timeFade = null;
     setAllTime(ws.ground);
@@ -699,7 +743,7 @@ export async function start(world) {
     G.trace.update(0, ws.x, ws.z, false, true);   // compiles the trace pass
     G.shadows.warm();                              // compiles the sliced bake
     G.pour?.warm();                                // compiles the pour (third person)
-    G.stormSky?.render(G.camera, true);            // compiles the storm's sky pass
+    G.eventSky?.render(G.camera, true);            // compiles the events' sky passes
     G.renderer.render(G.scene, G.camera);
     await G.drain();
     if (G.fig && !testMode) { hintEl.hidden = true; await figureWalk(); }
@@ -729,11 +773,13 @@ export async function start(world) {
       slideView: G.follow ? r3(G.follow.state.sm) : null, pitchDeg: G.follow ? r3(G.follow.state.viewPitch / DEG) : null } : null,
     figure: G && G.pil ? { headingDeg: r3(((figYaw / DEG) % 360 + 360) % 360), ...G.pil.state } : null,
     puffs: G && G.puffs ? G.puffs.live : null,
-    storm: storm ? { phase: storm.phase, t: r3(storm.state.t), k: r3(storm.k) } : null,
+    storm: director && director.has('storm') ? (({ phase, t, k }) => ({ phase, t: r3(t), k }))(director.state('storm')) : null,
+    events: director ? Object.fromEntries(Object.entries(director.state()).map(([n, v]) => [n, { phase: v.phase, t: r3(v.t) }])) : {},
     frame: frameStats(), dpr, backend: API.backend, running, locked: input.locked, lockRefused: input.lockRefused,
     canvas: G ? [G.renderer.domElement.width, G.renderer.domElement.height] : null, hintGone, sound: sound ? (muted ? 'muted' : 'on') : (soundMod === false ? 'unavailable' : 'not started'),
   });
   API.hold = (intent) => input.hold(intent);
+  API.strike = () => input.strike();
   if (FIGURE) {
     API.figure = {
       walk: () => figureWalk(),
@@ -746,16 +792,34 @@ export async function start(world) {
       info: () => ({ kind: FIGURE, shot: shotName, ...G.fig.state, triangles: G.fig.triangles, lamp: G.fig.lamp }),
     };
   }
-  // the storm front: start({ scale }), state() -> { phase, t, k }, skipTo(phase), hold(bool) (stops the
-  // phase clock: a storm held inside for a timing run), visibility() (m)
-  API.storm = {
-    start: (o = {}) => storm?.start(o),
-    state: () => (storm ? { phase: storm.phase, t: r3(storm.state.t), k: r3(storm.k), next: storm.state.next !== null ? r3(storm.state.next - storm.state.clock) : null } : null),
-    skipTo: (phase) => storm?.skipTo(phase),
-    hold: (h = true) => storm?.setHold(h),
-    visibility: () => (storm ? storm.visNow() : null),
-    raw: () => storm?.state,
-  };
+  // the events, for scripts: __walk.events keeps the step counters (foot, slide, leap, land) and gains
+  // list(), start(name, { scale, at, bearing, dist }), skipTo(name, phase), hold(name, bool) (stops the
+  // phase clock: an event held for a timing run), state(name?). And one wrapper per event by name
+  // (__walk.storm, ...): start(o), state() -> { phase, t, ..., next }, skipTo(phase), hold(bool),
+  // raw() (its state, with the clock's phase, t, scale, next writable), plus the event's own api
+  // (the storm: visibility() in m). Made when the director is (the first graphics).
+  function eventApi() {
+    Object.assign(API.events, {
+      list: () => director.list(),
+      start: (n, o = {}) => director.start(n, o),
+      skipTo: (n, ph) => director.skipTo(n, ph),
+      hold: (n, h = true) => director.hold(n, h),
+      state: (n) => director.state(n),
+    });
+    for (const n of director.list()) {
+      if (n in API && !API[n]?.isEvent) continue;
+      const own = director.event(n)?.api || {};
+      API[n] = {
+        isEvent: true,
+        start: (o = {}) => director.start(n, o),
+        state: () => { const s = director.state(n); return { ...s, t: r3(s.t), next: s.next !== null ? r3(s.next) : null }; },
+        skipTo: (ph) => director.skipTo(n, ph),
+        hold: (h = true) => director.hold(n, h),
+        raw: () => director.raw(n),
+        ...own,
+      };
+    }
+  }
   API.lookOverride = (v) => { lookOv = v; };
   API.cameraOverride = (v) => { camOv = v; if (!v && G) resize(); };
   API.setView = (m) => setView(m);
@@ -779,6 +843,7 @@ export async function start(world) {
     for (let i = 0; i < n; i++) {
       const t0 = performance.now();
       const r = tick(dt);
+      API.frames = (API.frames || 0) + 1;
       if (drain) await G.drain();
       out.ms.push(+(performance.now() - t0).toFixed(3));
       out.bake.push(r.bake === 'slice' ? 1 : r.bake === 'fade' ? 2 : 0);
@@ -788,7 +853,7 @@ export async function start(world) {
     return out;
   };
   // render the current state again (after a pose or a time change) and wait for the GPU
-  API.render = async () => { placeCamera(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); G.stormSky?.render(G.camera); G.renderer.render(G.scene, G.camera); await G.drain(); };
+  API.render = async () => { placeCamera(); const tc = traceCentre(); G.trace.update(0, tc[0], tc[1], false); G.eventSky?.render(G.camera); G.renderer.render(G.scene, G.camera); await G.drain(); };
   API.loseDevice = () => {
     if (!G) return false;
     if (G.isGPU) { const d = G.renderer.backend.device; onDeviceLost({ api: 'WebGPU', reason: 'test' }); try { d.destroy(); } catch { /* gone */ } }
@@ -814,7 +879,7 @@ export async function start(world) {
   };
 
   // the trace map's contents: the largest dent, rim, disturbance and scar anywhere in it, and how many
-  // texels hold anything (the storm's check that the sand is clean)
+  // texels hold anything (the check that an event leaves the sand clean)
   API.traceStats = async () => {
     const T = G.traceMod.TRACE, rt = G.trace.target();
     const d = await G.renderer.readRenderTargetPixelsAsync(rt, 0, 0, T.N, T.N);

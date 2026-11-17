@@ -9,6 +9,9 @@
 // Touch: the left half is a thumb stick that appears where the thumb lands (push and hold twice
 // quickly to run), the right half looks, and a quick tap anywhere walks you to that point.
 // Any other movement input stops a walk-to.
+// The staff strike: F or Space (Space only when no button has focus), or a long press (500 ms, under
+// 12 px of drag) on touch in the right half (the left half's thumb stick never strikes), which sets
+// no walk target. read() gives the frame's count as intent.strike.
 
 const MOVE = { KeyW: [1, 0], ArrowUp: [1, 0], KeyS: [-1, 0], ArrowDown: [-1, 0], KeyA: [0, -1], ArrowLeft: [0, -1], KeyD: [0, 1], ArrowRight: [0, 1] };
 const LOOK_MOUSE = 0.0022;   // rad per CSS px
@@ -19,7 +22,8 @@ const TAP_MS = 280, TAP_PX = 9, DOUBLE_MS = 300;
 export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {}) {
   const keys = new Set();
   let lookX = 0, lookY = 0, turnHeld = 0;
-  let tap = null, cancel = false;
+  let tap = null, cancel = false, strikes = 0;
+  const LONG_MS = 500, LONG_PX = 12;
   let runLatch = false, lastRelease = { code: '', t: 0 };
   let locked = false, lockRefused = false, wantLockAt = 0;
   let stick = null, lookTouch = null, lastStickEnd = 0;
@@ -39,6 +43,7 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
     if (e.code === 'Digit2' || e.code === 'Numpad2') { onTime?.('dusk'); return; }
     if (e.code === 'Digit3' || e.code === 'Numpad3') { onTime?.('ember'); return; }
     if (e.code === 'KeyV' && !e.repeat) { onView?.(); return; }
+    if (e.code === 'KeyF' || e.code === 'Space') { e.preventDefault(); if (!e.repeat) strikes++; return; }
     const isMove = e.code in MOVE;
     if (isMove || e.code === 'KeyQ' || e.code === 'KeyE' || e.code.startsWith('Shift')) {
       if (isMove && !e.repeat && lastRelease.code === e.code && performance.now() - lastRelease.t < DOUBLE_MS) runLatch = true;
@@ -71,10 +76,16 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
     gesture();
     pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: performance.now(), type: e.pointerType, dragged: false });
     if (e.pointerType === 'touch') {
+      const id = e.pointerId;
       const left = e.clientX < window.innerWidth / 2;
+      // (a touch on the left half, the thumb stick's half, never strikes: a thumb held still on the
+      // stick is not a call, and neither is a second finger resting beside it)
+      if (left) pointers.get(id).noStrike = true;
+      setTimeout(() => { const p = pointers.get(id); if (p && !p.stick && !p.noStrike && Math.hypot(p.x - p.x0, p.y - p.y0) < LONG_PX) { p.struck = true; strikes++; } }, LONG_MS);
       if (left && !stick) {
         const now = performance.now();
         stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, run: now - lastStickEnd < DOUBLE_MS };
+        pointers.get(id).stick = true;
       } else if (!left && !lookTouch) lookTouch = { id: e.pointerId, x: e.clientX, y: e.clientY };
       el.setPointerCapture?.(e.pointerId);
     }
@@ -101,7 +112,7 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
     pointers.delete(e.pointerId);
     if (stick && stick.id === e.pointerId) { stick = null; lastStickEnd = performance.now(); }
     if (lookTouch && lookTouch.id === e.pointerId) lookTouch = null;
-    if (!p) return;
+    if (!p || p.struck) return;
     const quick = performance.now() - p.t0 < (p.type === 'touch' ? TAP_MS : 450) && !p.dragged;
     if (!quick) return;
     if (p.type === 'mouse') {
@@ -128,7 +139,8 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
   function read() {
     if (scripted) {
       const s = scripted;
-      const out = { fwd: s.fwd || 0, strafe: s.strafe || 0, run: !!s.run, turn: s.turn || 0, lookX: s.lookX || 0, lookY: s.lookY || 0, tap: s.tap || null, target: s.target || null, cancelTarget: !!s.cancel };
+      const out = { fwd: s.fwd || 0, strafe: s.strafe || 0, run: !!s.run, turn: s.turn || 0, lookX: s.lookX || 0, lookY: s.lookY || 0, tap: s.tap || null, target: s.target || null, cancelTarget: !!s.cancel, strike: strikes };
+      strikes = 0;
       s.lookX = 0; s.lookY = 0; s.tap = null; s.target = null; s.cancel = false;
       return out;
     }
@@ -145,7 +157,8 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
       fwd += -my * k * dead; strafe += mx * k * dead;
       if (stick.run) run = true;
     }
-    const out = { fwd, strafe, run, turn, lookX, lookY, tap, cancelTarget: cancel };
+    const out = { fwd, strafe, run, turn, lookX, lookY, tap, cancelTarget: cancel, strike: strikes };
+    strikes = 0;
     lookX = 0; lookY = 0; tap = null; cancel = false; turnHeld = turn;
     return out;
   }
@@ -156,6 +169,7 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
     get lockRefused() { return lockRefused; },
     get stick() { return stick ? { x0: stick.x0, y0: stick.y0, dx: stick.dx, dy: stick.dy } : null; },
     get moved() { return moved; },
+    strike() { strikes++; },
     hold(intent) { scripted = { ...(scripted || {}), ...intent }; },
     release() { scripted = null; },
     get scripted() { return !!scripted; },

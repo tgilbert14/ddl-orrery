@@ -528,9 +528,9 @@ look along the front and it recedes into the haze both ways.
 |---|---|---|
 | approach | 75 | The wall rises on the upwind horizon (its leading face from 9 km to 300 m, along A e^(-t/62.5 s) - B, so it creeps up and then looms, about 60 m/s at the end). The drift along the ground strengthens (to 2.5x), the wind sound rises, the light goes ochre; at day, when the sun is upwind, the wall swallows the sun and its shadow comes over the sand. |
 | arrival | 8 | It crosses the last 300 m and the soft edge passes over: the far dunes go first (the blown dust ahead of it), then fast darkening. |
-| inside | 55 | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, a glowing ochre at day. The suns are dim glows with a faint disc. Ribbons and sheets of sand race past along the wind (11 m round the camera, about 11 to 24 m/s, densest low), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. |
-| passing | 25 | It thins from the upwind side; light returns from there. Turn downwind and the wall is leaving across the dunes. |
-| after | 60 | Calm. No tracks anywhere. The drift stays stronger (1.5x, easing to normal); the wall sinks and fades into the haze downwind over the last 25 s. |
+| inside | 30 (55 before 15 Nov) | Visibility 8.5 m (5% contrast; gusts move it between 7.1 and 9.9 m), coloured from the time's own light: dark amber at dusk, near black at ember, a glowing ochre at day. The suns are dim glows with a faint disc. Ribbons and sheets of sand race past along the wind (11 m round the camera, about 11 to 24 m/s, densest low), and on the ground a dense fast layer of streaming sand under the drift. Gusts (3 to 8 s) move the visibility, the sand, the cloak and the sound. Every 8 to 15 s a gust hole opens it to 40 to 80 m for about 2 s (since 15 Nov). |
+| passing | 25 | It thins from the upwind side; light returns from there over about 6 s (10 to 16 s). Turn downwind and the wall is leaving across the dunes, lit by a sun behind you, hiding a sun beyond it. A near-silence of 3.5 s as the trailing edge passes (since 15 Nov). |
+| after | 30 (60 before 15 Nov) | Calm. No tracks anywhere. The drift stays stronger (1.5x, easing to normal); the wall sinks and fades into the haze downwind over the last 25 s. |
 
 Inside, the dust thins toward the eye (its density ramps up from nothing over 12 m), so the figure 5 m
 off is about 35% through the dust and readable as a silhouette while the sand 8.5 m off is gone. That
@@ -558,7 +558,7 @@ to 5 m, eased over about 3 s like the rest (without it the figure is lost in the
 the steps' bus down 90%; all of it eases in and out over about 1.5 s. No thunder, no lightning.
 
 **Switches and test API.** `storm=off` (never), `storm=now` (the approach 8 s after ready), `storm=fast`
-(every phase and the schedule at 4x), `seed=N` (seeds the schedule). The first storm comes 150 to 240 s
+(every phase and the schedule at 4x), `seed=N` (seeds the schedule). The first storm comes 60 to 120 s (150 to 240 s before 15 Nov)
 after ready, then one 300 to 480 s after the last one ended. With `test=1` there is no schedule unless
 `storm=` asks. `__walk.storm.start({ scale })`, `state()` -> `{ phase, t, k, next }` (k: 0..1, the storm's
 strength at the visitor), `skipTo(phase | 'none')`, `hold(bool)` (stops the phase clock),
@@ -673,8 +673,445 @@ regression, and the look test on all three renderers above its readout: all iden
 sweep (a full storm at 8x while walking, six configurations): empty. Calm frame at 1440x900 and
 DPR 2, four directions: within the run-to-run spread of `main`.
 
+## The event system, 15 Nov 2026
+
+The storm is now one of the engine's events (`../engine/events.js`, its header is the contract; the
+playbook's "Adding an event to a world" is the how-to). The director there owns every event's phase
+clock and schedule, keeps one live at a time (a scheduled start waits behind a live event and its
+`quiet`), takes the staff strike for events that can be called, and folds the live event's hooks into
+the walker, the follow camera, the figure's wind, the trace's healing, the light and the sound.
+`storm.js` exports `stormDef` (its `createStorm` is now the Event: no clock of its own), the world
+lists it in `graphics().events`, and `main.js` names no event. The material hooks in `opts.walk` are
+`event`, `eventSky` and `eventSkyFull` (were `storm`, `stormSky`). The URL keeps `?storm=` (any event
+takes `?<name>=now|fast|off`; `?events=off` turns all off); `__walk.storm` keeps `start`, `state`,
+`skipTo`, `hold`, `raw` (its state with the clock's `phase`, `t`, `scale`, `next` writable) and
+`visibility`, and `__walk.events` gains `list/start/skipTo/hold/state` beside its step counters.
+
+Not done: renaming the event push the engine's modules take (walker `intent.storm`, follow
+`f.storm`/`f.stormBoom`, pilgrim `wind.storm`, sound `storm`/`stormGust`). `events.js` maps an event's
+hooks onto those names; renaming them is the optional last step of the move and was left.
+
+Checked against a worktree of the branch's starting commit served beside this one (headless Chrome):
+twelve calm stills (third person at dusk, day and ember, an orbit, walked; first person still and
+walked; WebGL2 third, walked and first; reduced motion; `storm=off`) and forty seeded storm stills
+(`seed=7`: eleven phases at dusk on WebGPU and WebGL2, eleven at day on WebGPU, four at ember on
+WebGL2 with reduced motion) byte-identical, except the day `after` still, which differs between two
+runs of the old tree too (109 dB) and matched the old tree's repeat exactly. The schedule (five URL
+cases, 260 stepped seconds each), `smoke.mjs` and `measure.mjs` printed identical numbers on both
+trees. Console sweep (a full storm at 8x while walking, six configurations): empty. Held calm and
+inside frame times sat within the run-to-run spread of the old tree (noisy: other browsers were
+running).
+
+## The storm cleanup, 15 Nov 2026
+
+The owner asked how to see the storm wall and when it comes, and found it a little boring. Four
+changes (the critic's first four), all in `../worlds/dust-sea/storm.js` and `sound.js`, plus one line in
+`../engine/main.js` (the listener's heading for the sound).
+
+**How to see it.** It comes on its own 60 to 120 s after the page is ready (it was 150 to 240 s), and
+again 300 to 480 s after each one ends; a whole storm is 168 s (it was 223 s). To see it on purpose open
+`/surface/walk/?storm=now`: the approach starts 8 s after ready (`?storm=fast` runs everything at 4x).
+Face upwind, heading about 200 (the way the Pilgrim's cloak streams from), to watch the wall come; facing
+downwind only the light turns ochre until it is on you.
+
+**New baseline first.** Before any change the seeded storm stills (`seed=7`: eleven states at dusk on
+WebGPU and WebGL2, eleven at day on WebGPU, four at ember on WebGL2 with reduced motion) and the twelve
+calm stills were re-recorded from the event-system commit (0656786); they are the baseline this round is
+compared with.
+
+- *The hard line in the passing (S1).* Facing downwind early in the passing, the sky was the leaving
+  wall's dark dust and the sand in front of it was in full sun, with a lit rim along the crest at dusk.
+  Now: a sun downwind is covered while the slab is over or beyond the visitor (its trailing face's
+  distance under the top, with the leading face's 140 m ramp on how much slab is downwind), so the sand
+  and the crest rim lose it, and its glow in the blown dust goes too; the face's own colour and the blown
+  dust take only the light that is not hidden. Once the trailing face is within reach, the dust near the
+  eye is thin and lit by the light coming back (a sun's full light, not a surface's share), a sun upwind
+  lights the trailing face from the front (a sunlit wall leaving, up to 3x the face's sunlit share), and
+  dust blown out low behind the trailing face (0.012 per metre at the face, e-folding over 150 m, only
+  where a sun lights it, less of it looking upwind, gone 20 s into the after) lies over the sand at the
+  foot of the leaving wall. All of it is in `stormApply`, which the walk's ground, sky, figure and sand
+  share on both backends (`glsl-material.js` is the look test's own, older storm and was not touched).
+  The trailing face also slows over its last 70 m to the visitor (12 m/s from 10 to 16 s into the
+  passing; a monotone cubic through `STORM.pass`), because the dust is opaque through all but the last
+  few per cent of its ramp and the light came back in about one second.
+- *Sound from the wall (S2).* A rumble bus (brown noise held to 40 to 120 Hz and a hum on 55 and 110 Hz
+  with 165 and 220 Hz above them, for laptop speakers), panned to the wall's bearing against the camera's
+  heading, rising with the wall's nearness through the approach; at the arrival a 1.5 s swell of brown
+  noise and a low thud as the leading face reaches the visitor; 3.5 s of near-silence (the wind bed
+  down 14 dB) as the trailing edge passes, then the calm wind back over 4 s. `STORM_MIX` holds the levels.
+  **The owner is to judge it with the sound on; these numbers are not that judgement.**
+- *Gust holes inside (S3).* Every 8 to 15 s of the inside (seeded from the gusts' phase and the storm's
+  count, so the schedule's draws are untouched) a gust over 0.8 opens the visibility from 8.5 m to 40 to
+  80 m for about 2 s (0.5 s in, 1.1 s held, 0.7 s out), the suns' glow in the dust brightens fivefold
+  (a bright smear where the sun is), the nearest crest shows, and the racing sand thins with the air.
+  Reduced motion: the same holes with a 1 s ease each way, the gust itself does not race. A uniform and
+  numbers only; no new pass.
+- *Dead time cut (S4).* Inside 55 -> 30 s, after 60 -> 30 s (the wall now leaves faster, 420 + 38 t +
+  2.3 t^2 m, so it has gone about 3.6 km when it has faded), the first storm 60 to 120 s after ready.
+
+**Measured** (headless Chrome, M5 Pro, 1280x720, `seed=7`, the critic's pose: the third-person start on
+the windward face, the camera looking along heading 20 or 200 at pitch 0; luminance is linear, Rec. 709;
+"before" is a worktree of 0656786 served beside this one):
+
+| Passing, facing heading 20 | dusk before | dusk after | day before | day after |
+|---|---|---|---|---|
+| 10 s: ratio across the horizon line (10 px above / below, full width) | 1.08 | 1.05 | 1.01 | 1.00 |
+| 16 s | 2.04 | 1.05 | 4.65 | 1.24 |
+| 22 s | 1.20 | 1.15 | 2.76 | 1.34 |
+
+WebGPU and WebGL2 print the same ratios to the third decimal and the frames match at 45 to 53 dB. The
+horizon line per column is found by a march over `height()` from the camera. The upwind clearing (heading
+200, frame mean luminance stepped every second from 10 to 16 s into the passing) is now monotonic at dusk
+and day, the largest one-second step carrying 35% (dusk) and 34% (day) of the change (it was 67% and 51%,
+over about a second, and not monotonic at day). Contact sheets: `sheet-S1-dusk.jpg`, `sheet-S1-day.jpg`
+(rows: before WebGPU, after WebGPU, before WebGL2, after WebGL2; columns 10, 16, 22 s) and
+`sheet-S1-upwind.jpg` (not in the repo: the builder's test folder, `dustsea-work/storm/out/`, with the
+scripts `s1.mjs`, `s3.mjs`, `soundwall.mjs`, `perfab.mjs`).
+
+Sound, rendered offline (OfflineAudioContext at 24 kHz, the real `storm.js` values through a whole storm,
+against the same render with no storm at the same moments; exposure 0.6, then 0.3 and 1.0):
+
+| Window | 0.6 | 0.3 | 1.0 (a crest) |
+|---|---|---|---|
+| approach 28 to 32 s, RMS over calm | +6.3 dB | +10.4 | +2.6 |
+| approach 55 to 60 s | +9.9 | +13.9 | +5.4 |
+| arrival (8 s) | +8.8, peak -5.2 dBFS | +13.4, -5.7 | +4.0, -3.4 |
+| inside 5 to 25 s | +8.7 | +12.4 | +4.5 |
+| the hush, 16.3 to 19.5 s into the passing | -12.4 | -11.6 | -13.1 |
+| the calm back, 20 to 24 s | -0.4 | +0.3 | -0.6 |
+
+On a crest the calm wind alone peaks at -3.2 dBFS in the same render (the soft clip holds it), so the
+-4 dBFS peak is met at 0.6 and 0.3 and not on a crest, where the storm adds 0.4 dB to the peak the
+calm already has. In the approach the rumble sits about 4 dB to the right ear when facing heading 48
+with the wall upwind (the panner works from the camera's heading).
+
+Gust holes (stepped every 0.5 s through the inside from 3 s in, the frame's mean luminance against its
+median): 19% (heading 20) and 26% (heading 200) of frames more than 15% off at dusk, 17% and 15% at day,
+23% with reduced motion; the holes peak at +200% at dusk and +54 to +65% at day and each is 2 to 2.5 s
+above the line (3 s reduced). The old tree: 9 to 11% of frames, from the gusts alone, never more than
++21%. WebGPU and WebGL2 print the same numbers; the hole frames match at 49 dB. Sheet: `sheet-S3.jpg`.
+
+Calm stills: all twelve byte-identical to the baseline. Seeded storm stills: two runs of the new tree are
+byte-identical (37 of 37); against the baseline the approach and arrival stills are identical or above
+100 dB, and the inside, passing and after differ as intended (sheets `sheet-seeded-*.jpg`); the ember
+set's approach and arrival differ because they follow the schedule, which this round changed. Console
+sweep (a full storm at 8x while walking; WebGPU, WebGL2, reduced motion on both, first person on both):
+every phase seen, console empty.
+
+Cost (ms over calm, the same standing pose and method as `anim2/perfab.mjs`: storm and calm interleaved
+five times per view, 1440x900 at DPR 2, the median difference; views: the follow camera at heading 48,
+then turned to 20 (downwind), 290 (across) and 200 (upwind)). WebGPU, this tree / the event-system
+commit served beside it, run one after the other:
+
+| State | h48 | h20 | h290 | h200 |
+|---|---|---|---|---|
+| approach 68 s | 0.5 / 1.2 | 0.5 / -0.1 | 0.8 / 1.0 | 0.7 / 0.6 |
+| arrival 5 s | 0.5 / 0.5 | 0.6 / 0.4 | 0.8 / 1.0 | 0.7 / 0.7 |
+| inside 15 s | 0.7 / 0.8 | 0.7 / 0.6 | 1.0 / 0.8 | 0.5 / 1.5 |
+| inside, in a gust hole (old: no hole) | 0.7 / 0.7 | 0.7 / 0.7 | 0.9 / 1.1 | 0.6 / 0.4 |
+| passing 3 s | 0.9 / 0.6 | 0.5 / 1.0 | 1.1 / 0.9 | 0.9 / 1.2 |
+| passing 12 s | 1.0 / 1.2 | 0.9 / 1.6 | 1.5 / 2.9 | 1.0 / 1.0 |
+| passing 16 s | 0.4 / 0.7 | 0.9 / 0.5 | 1.4 / 0.9 | 0.9 / 0.5 |
+| passing 18 s | 0.6 / 0.5 | 0.5 / 0.5 | 0.6 / 0.7 | 0.5 / 0.7 |
+| after 10 s | 0.6 / 0.6 | 0.7 / 0.5 | 1.0 / 0.4 | 1.7 / 0.7 |
+
+The machine was shared with other browsers: the old tree's repeats spread by up to 2.9 ms and this
+tree's by up to 2.3 ms (after 10 s upwind: 1.7 with a spread of 1.6, and 1.1 / 0.6 / -2.2 / 0.6 when
+re-run alone, spread 5 to 11). The worst steady cell, passing 12 s across the wind (1.5, spread 0.3), is
+0.1 ms over the storm's 1.4 ms allowance and below the old tree's 2.9 (spread 2.2) in the same run. The same run on WebGL2
+stalled on both trees (frames of tens of ms from the passing on, other GPU work on the machine), so
+WebGL2 was taken from single back-to-back runs at the follow camera instead (median frame ms, storm held,
+this tree / old): calm 5.1 / 5.0, inside 15 s 7.2 / 7.1, passing 12 s 7.9 / 7.9, passing 16 s 6.9 / 6.8,
+after 10 s 6.4 / 6.3. The new shader work is one more closed-form dust term in the passing and the after,
+a mix in the dust's colour, and a gain on the trailing face; nothing new runs in the calm frame or deep
+inside. **The lead should re-time this on a quiet machine** (both backends, `perfab.mjs`).
+
+**Not checked:** any phone; the sound has not been heard by a person (the owner to judge, with the sound
+on); the passing's new light at ember was only seen through the reduced-motion seeded stills.
+
+## The colossus, 15 Nov 2026 (look reworked four times, 15 and 16 Nov)
+
+The owner asked for events "like the sand worm but massively updated". This is the hub's worm (the
+2D hub's verb, "call what moves beneath the sand") rebuilt as an event on the director:
+`../worlds/dust-sea/colossus.js`, listed after the storm in `world.js`, with its sound in `sound.js`.
+The playbook's "no other creatures" rule is lifted by the owner for this one colossus only. It is 700
+to 800 m tall, 1.6 to 2.2 km away (never nearer than 1.5 km), and mostly hidden: a dark mass in the
+haze at its distance and inside the glare of the sun it stands across, its top broken off at a slant
+and dissolving into the air, its foot in its own dust, a veil of that dust round it. No face, eyes,
+mouth, teeth, segments, rim all round, or round top.
+
+The first pass failed the owner on looks (a small, smooth capsule with a rim light, a grey-white
+smoke pillar by day, an orange blob at ember, a fall of cartoon cumulus balls). The second pass got
+the size, the sun crossing and the lantern beat, and failed an independent look critic (4/10) on
+four frames: a pale striped see-through tent in the fall, a dark cut-out dome by day, three puffs
+for a dome under reduced motion, and a floodlit ember frame; the body also stood in clear air as the
+darkest, crispest thing in the upper frame (a hooded statue), the glare was taken off the whole sky,
+the lantern was turned up instead of the world down, the shadow came as a fade, and the cost ran 1.2
+to 1.5 ms over calm through the fall. The third pass answered that list (16 Nov); the lead liked its
+dusk and ember from a dune crest (a tall hazy irregular mass), and a second critic scored it 5 of 10.
+The fourth pass (16 Nov) fixed that critic's list without redesigning dusk and ember: by day
+it is never seen; the pop at the impact; a pale egg with the sun's disc showing through its head in
+the rise (it read as an eye); rungs, stipple, a stair-stepped flank and a detached pink fin on the
+outline; a clean flared foot; a regular dome with spikes; a shadow that flipped instead of travelling;
+a phone camera left on the base while it fell sideways; and the hint bar and the line over it.
+
+The fifth pass (16 Nov, below) answers the third critic (6 of 10) without redesigning the frame the
+critic picked as the best (ember, from a dune crest, at the hold): a change of the time of day while it
+is live now eases it out before any day shading can show; the dome is rebuilt as one low, very wide mass
+with no end caps and a top broken at three scales; the shadow's front is scheduled by what the eye can see
+and takes most of the other sun's light too; the falling sand takes the body's own hazed colour; both
+flanks fray and the falling body comes apart in its dust; under reduced motion the view never turns; the
+sun's disc goes by what covers it; it stands farther off (larger) where no rows of dunes are in sight;
+and the cost is back under 0.9 ms.
+
+**One master presence** (fifth pass). `st.pres` multiplies everything of it that is seen: the body,
+the veil, the sand off the body, the dome, the shadow, the eclipse and the lantern's beat (`st.vis` =
+presence times the day weight). When the time of day changes while it is live, the presence eases to 0
+over 3 s (a smoothstep), and the engine's time blend waits for it: `events.js` has a new `holdTime()`
+the live event can answer, and `main.js` holds the blend's clock at 0 until it says no, so no day
+shading ever shows on it. The event then runs on unseen, as by day (the hush, the swell, the ground wave,
+the sound and the camera stay), and it does not come back in that event. When nothing of it is in sight
+yet (before the rise, or by day) it goes at once and the blend does not wait. A script's instant change
+of the time (`setTime(name, true)`) is a cut, and it goes at once with it. As the presence goes, the disc
+comes back as the square root of the presence, so the disc never shows behind a faint dark column. The
+day weight and the ember weight are blended across the time blend as the shading is (the engine now
+passes the time's name, where it is going and the blend's progress in the events' env), so nothing steps
+at the blend's end. The presence also eases out over the event's last 5.5 s (104.5 to 108.5 s), so
+`release()` writes back nothing that is still seen.
+
+**By day it is felt and heard, never seen** (the lead's decision, 16 Nov). No body, veil, dome or
+shadow is drawn by day: a scheduled or called colossus gives the hush, the travelling swell and its
+dust low in the far dunes, the sound, the ground wave running to the walker (a low ridge lit on its
+sunward face, 120 m/s from the impact), the camera's turn and lift and the Pilgrim's hood and brace,
+low sheets of dust rolling out over the far dunes where it went down, and then settles. It is blended
+out by the same sun-height value the shading uses (`seen = 1 - smoothstep(0.12, 0.3, the higher sun's
+height)`). The low dust takes the day sand's own colour (lit as the ground is, without the dusk tint),
+not a saturated orange.
+
+**How to see it.** It comes on its own 5 to 8 minutes after the page is ready, then every 12 to 18
+minutes (seeded; rarer than the storm, and never at the same time: each waits for the other's end and
+60 s of quiet). To see it on purpose: `/surface/walk/?colossus=now` (the hush 6 s after ready, 1.8 km
+asked; from a place with fewer than two rows of dunes in sight, the seed-7 start pose among them, it
+stands at 3 km at 1.67 times the size: see "Where it stands"), `?colossus=rise` (straight to the rise,
+for sharing), `?colossus=fast` (4x), `?colossus=off`. Or call it: stand still and strike the staff three
+times in time (F or Space; a 500 ms long press on the right half of a touch screen: a touch that begins
+on the left half, the thumb stick's half, never strikes, the stick itself or a second finger beside it).
+The hush starts 6 to 10 s later. The call cools down for 180 s and is refused during the storm or its
+quiet; a refused strike still thuds and rings the sand, and nothing comes. When it begins, a polite DOM
+line says where ("Far to the north, about 1.8 km, something rises from the sand"). The compass reads the
+world's heading degrees as on a map: 0 is north (+x), 90 east (+z), 180 south, 270 west.
+
+**The beats** (seconds from the hush): hush 0 to 12 (the wind ducks 12 dB, the hood turns to it, a
+sub-rumble from its bearing, the camera turns to its bearing after 3 s without input); swell 12 to 35
+(a swell runs a curved 600 m path toward the breach rolling low sheets of sand, then a 300 m funnel
+sinks); rise 35 to 55 (it climbs at H/19 m/s, the same ridges coming up out of the sand all the way; the
+first thing seen is torn dust and sand falling off its head with the dark mass inside it, never a round
+top; sand pours off the flank the wind blows toward; the sun's disc goes as the torn dust and then the
+body cover it from the eye, never before; the shadow's front leaves the far lit crests at 42 s and reaches
+the Pilgrim at 59 s, on a schedule made for each placement (see the shadow below): from a dune crest it is
+seen crossing the rows of dunes from about 46 to 56 s and then the near slope from 56.5 to 59 s; from the
+start pose it climbs the near crest from about 46.7 to 59 s; the glow round the sun and the lantern ease
+in after it); call 55 to 68 (a sway with a 24 s period, eased out over the fall's first 2 s, more falling
+sand; the call leaves it at 57 s and arrives distance/343 s later); fall 68 to 82 (it keels over to the
+side it leans, across the view and a little away, and from 72 s dives into the sand; from 70 s to the
+impact it comes apart in its dust: its torn top runs down the whole body, its outline frays deeper and it
+thins to 0.6, while the veil round it thickens a little and follows it toward the falling body's middle,
+so no crisp back reads; from the impact it fades over 2.5 s; the veil's own dust goes over the first
+1.2 s while the dome comes in (its look over 0.8 s, its volume over 1 s); the dome grows to its height in
+6 s and surges out over 18 s, then slumps and spreads; a ground wave runs out at 120 m/s and the Pilgrim
+braces as it passes; the boom arrives distance/343 s later (84.6 s at 1.8 km from the crest) with a 0.3
+degree shake for a second); settle 82 to 110 (the dome drifts downwind and thins by about 106 s, every
+grain still in the air is let go at 80 s, the sun comes back, the wind returns over 6 s, the funnel's
+scar heals). The camera turns (after 3 s without input) to the centre of what is happening, eased: the
+base as it rises, between the base and the head as it falls, the dome's own middle as it is seen once it
+is down (its envelope stands 0.35 of its half width toward where the head came down); the follow camera
+now turns 4.5 degrees further, its own framing offset, so that point is at the middle of the frame (on a
+phone held upright the dome had been aimed at 0.63 of the width and cut at its edge). In first person the
+view now turns to the same point and pitches to frame it (its height: the middle of the column, or 0.35
+of the dome's peak), after 3 s without input, eased; never under reduced motion. While any event is live
+the controls hint bar is hidden; the line that says where it rises is taken down by 31 s.
+
+**Reduced motion** is a designed state: nothing climbs, sways or topples, and the camera never turns:
+its yaw stays as the visitor left it (the fourth pass's cut to the sun's line is gone). When the sun's
+line is inside 60% of the half field of view it stands on it; when it is not, it stands inside the frame
+the visitor has, as near the line as that allows, off the sun's line and so with no eclipse. At the rise
+the whole body is there behind its veil and develops half way out of it over 6 s, and the sun's disc is
+already covered from its first frame (no easing: the disc never glows through the developing body). At
+the fall it cuts (the engine's 0.4 s cross-fade) to the dome at its full width, one held mid-life shape,
+which then thins by fade. No ground wave, no shake. The third-person view still tilts up 0.06 rad over
+about 3 s at the hush and back at 88 s.
+
+**Where it stands.** On the key sun's line (the lowest sun worth standing across: dusk the pale sun at
+19, day the red sun at 206, ember the red sun at 58), 1.2 degrees to a seeded side, stepping out 0.25
+degrees at a time until a JavaScript march over `height()` from the camera finds a clear sightline,
+preferring a place with two rows of dunes or more in sight between (a row: a run of ground in sight that
+begins past 150 m and ends 150 m short of it). New in the fifth pass: where the chosen place has fewer
+than two rows (one near crest and then the thing read as a few hundred metres off), it stands farther
+off, at the first of 2.6, 3.0 and 3.4 km with two rows in sight, or at 3 km where there are none, and
+every length of it (the body's profile, its height, the veil, the dome, the sand, the shadow's bound) is
+scaled by that distance over the one asked, so it keeps the same angular height and the haze of the
+larger distance carries it. From the seed-7 start pose that is 3 km at 1.67 times (a 1,309 m column);
+from the crest there are three rows and it stays at 1.8 km. And the body and its falling sand fade into
+the haze above the crest that hides its foot: every 10 frames a march from the eye along the line to the
+base finds the height the nearest crest hides it up to, and both fade in over 0.24 of its height above
+that line (with the torn noise in the fade), so no dark column runs down to a crest line.
+`state().sightline` says what was found (`onSun`, `baseHidden`, `rows`); `raw().S` is the scale.
+
+**How it is built.**
+- *The body.* One tube, 64 rings x 48 sides, rigid along its length (its profile and normals fixed to
+  the body from the head down, turned with each ring), 55 m at the head to 120 m at the dune line (times
+  the scale), flutes, one heavy shoulder, an axis kinked up to 0.2 R, a lean of 7 to 11 degrees and a
+  top sheared at a slant and split by a cleft. One dark value, a little uneven along fibres; a thin
+  broken lobe on the sunward flank; the full haze of its distance per vertex; its lower third lost in a
+  skirt of dust and haze; its top torn into dust by real alpha from the head down; its outline frayed by
+  the ring's own roundness. Fifth pass: both flanks fray deeper (the tears and the fibres at 0.5 and
+  0.36, the fray band 0.08 to 0.72), so neither flank is one clean edge; its noises are 2D, across it
+  and up it as it is seen (a 3D noise per pixel cost about twice as much); the finer tears are worked
+  out only where its top is torn; it fades into the haze above the crest line (above); and as it goes
+  over (`look.w`) its torn top runs down the whole body, its fray deepens and it thins to 0.6.
+- *The veil.* Before the fall the dome's mesh is a thin half-ellipsoid of dust round the body (480 m
+  half width times the scale, 0.95 times its exposed height, density 0.1, 3.2 times as dense near the
+  ground). Fifth pass: in the fall it thickens to 1.7 times, widens by a third and slides toward the
+  falling body's middle; its broad patches are a 2D noise; the light reaching a point in it is taken
+  through its depth along the view (it stands across the low sun and is seen looking toward it) rather
+  than a chord toward each sun. From the impact its own dust goes over 1.2 s.
+- *The sand.* One instanced Sprite of 384 streaks, each turned along its motion on screen. Fifth pass:
+  a streak falling off the body takes the body's own hazed colour (its dark value in the haze at its
+  distance, as the body's shader makes it), a fifth of the way to the air's, worked out per streak in the
+  vertex stage: never redder, darker or more saturated than the body behind it (the lit streak was a dark
+  red column with a pink-magenta top). A low sheet (the swell's, the funnel's, the skirt's, the day's
+  dust) is lit as the ground is. Curtains 9 a second rising, 10 at the call, 14 in the fall, 20 to 42 m
+  wide (times the scale), living 6 to 9 s; the streak's ragged top is two sines and its fibres a 2D
+  noise (cost). The rest as before: shed on the side toward the eye, let go by fading over its own time.
+- *The dome* (rebuilt in the fifth pass). The same half-ellipsoid mesh, but only as the volume it is
+  drawn in, well outside the dome (1.5 times its half width, 1.45 times its peak plus 30 m, its base
+  plane 160 m under the ground where it went down, so the dunes in front, never its base plane, cut its
+  foot). The dome is a height field: where the view ray passes closest to its middle across the ground,
+  its local top is an envelope times a top broken at three scales. The envelope is `exp(-0.9 r^6)` (its
+  height falls only near its ends) in a frame across the view, offset 0.12 of its half width and longer
+  (0.78) toward where the head came down, shorter (1.3) on the base's side: no symmetry about its centre.
+  Its density falls from well inside its ends (`exp(-2.4 r^2)`), so both ends are thin sand going to
+  haze along the ground, never a round end cap. The top is broken by continuous noise at 520, 150 and
+  60 m (the two finer ones also varying with height, so it billows rather than standing in streaks),
+  seeded per rising and evolving over its life, plus a billow on its flanks and a long low skirt; the top
+  feathers into the air as the cube of its height over its local top, so even through a long chord it
+  thins over its upper third and beyond. Its depth along the view is taken across its footprint, so its
+  outline is its own top, never the volume's. Over its life it grows (6 s), surges out (18 s), slumps to
+  55% of its peak and spreads to 1.3 times its width (8 to 32 s after the impact) and thins in the settle;
+  under reduced motion it is one held mid-life shape. Peak 340 m and 1.7 km across at full surge, times
+  the scale. Light: a dark core; where it is thin and its side faces the sun, the sun's light comes in
+  (never brighter than 1.05 of the air behind it); at ember none of that and its dust 0.4 as bright, a
+  near black mass thinning into the sky (the haze over it 0.42 of the air's at ember, 0.62 at dusk).
+- *The shadow.* The true direction of the sun that lights the ground most, soft by distance times the
+  drawn disc's diameter; fifth pass: one segment, the base to the head (two cost about 0.05 ms more over
+  the ground). On the ground it takes off that sun's direct light (now written out in the hook with its
+  powers as products, the view terms shared), 85% of the other sun's diffuse light and sheen (the dust in
+  the air cuts it too: at dusk from the crest the slope facing the red sun had stayed vivid orange), 80%
+  of the fill and 65% of the sky's light; the suns' and the fill's directions come as uniforms. Its
+  front is scheduled for each placement (`frontSchedule`): from 900 m at 42 s to the Pilgrim at 59 s, its
+  time spent in proportion to the ground the eye can see along the line to the base (a march from the
+  camera; a hidden trough weighs 0.06 of seen ground, and far ground less per metre), with at least 2.5 s
+  over the last 25 m. The figure darkens by the same shadow; the lantern's glass never does.
+- *The sky.* The disc of the shadow sun goes as `(1 - k)^3`, k being what covers it from the eye (fifth
+  pass): the sun's ray within the body's frayed outline (0.8 to 1.2 radii of the spine), times how solid
+  it is that far from the head (its torn top takes 0.6 of the disc, the body below a third of its height
+  all of it), nothing above the head, eased 0.12 s (none under reduced motion), and the dome's depth on
+  the sun line. The shadow at the visitor (`ecl`) no longer dims the disc: the disc went out about 3 s
+  before anything reached it. The tight glow loses 60% times `ecl`; the wide glow stays.
+- *The lantern.* Its pool raised at most 1.42 times calm, times the presence.
+- *Engine changes (fifth pass).* `events.js`: `holdTime()`. `main.js`: the time blend waits while the
+  live event holds it; the events' env carries `timeName`, `timeTo`, `sunsTo`, `timeF`; first person
+  turns to and frames an event's `toward` (now `[x, z, beat, y]`) after 3 s without input, never under
+  reduced motion. `follow.js`: `toward` is turned to with the framing offset added. `input.js`: a touch
+  that begins on the left half never strikes. The fourth pass's reduced-motion `cutTo` is no longer used
+  by the colossus. Nothing of this touches a calm frame (the calm stills are byte-identical).
+
+**Measured, fifth pass** (16 Nov; scripts in `colossus-work/r4/` and `colossus-work/gate3/`; seed 7,
+1280x720 unless said, drained steps only):
+- Calm stills (`gate3/calm.mjs`, 58 stills: third and first person, both backends, reduced motion, the
+  phone, every time of day, walking): byte-identical against 228af05 (the fourth pass, served from a
+  `git archive` on port 8789), 58 identical, 0 different, taken twice (before and after the last changes to the follow camera, the first-person framing and the sand's rates; the one change after that, the skirt's dust under the presence, is in the particles' update, which does not run with no event live). Seeded storm stills (`gate3/stormset.sh`, 37 states on both
+  backends): 37 identical, 0 different.
+- Console sweep (`gate3/sweep.mjs colossus dusk,ember,day,cycle`): the colossus at 8x while walking in
+  six configurations (WebGPU, WebGL2, reduced, reduced WebGL2, first person, first person WebGL2) at dusk,
+  ember and day and with the time of day changed by fade during it: 24 runs, every phase seen, console
+  empty. Re-run after the last changes (dusk and the mid-event time change, six configurations): 12 runs, console empty.
+- Switches (`r4/switches.mjs`, gate3's with `colossus=now` allowed to stand at 3 km where fewer than two
+  rows are in sight): PASS on both backends (gate3's own fails `colossus=now` only on its expected 1800 m: it stands at 3 km from the start pose by design). Strike (`gate3/strike.mjs`): PASS on both backends. Touch with real
+  touch points (`r4/touch.mjs`, gate3's with the second finger on the left half added to the pass): 18
+  scenes, TOUCH PASS; the second finger held still beside a held stick: 0 strikes.
+- Reduced motion (`gate3/reduced.mjs all`): 15 of 18 cases pass outright (yaw constant, no shake, desk and
+  phone, both backends, every time of day, first and third person, walking). The three "turned" cases
+  report YAW MOVED, and in each the yaw differs from the same run with no colossus by at most 3.6e-12
+  degrees: the movement is the script's own orbit or pose settling in the 5.6 s before the hush (all 337
+  steps at event time 0; one step at frame 1 in first person). The fourth pass differed there by 178
+  degrees (the cut).
+- A change of the time of day at 60 s, stepped at 60 fps (`r4/tc.mjs`): the presence eases from 1 to 0 over 60 to 63 s; the engine bakes the new time's shadow
+  map meanwhile and its blend's clock is held at 0 until 63.0 s, then runs 63.0 to 65.95 s. No frame
+  shows a column in a day sky (`r4/out/g-tcD2.jpg`, dusk to day from the crest; `g-tcA.jpg` from the
+  start pose; `g-tcE.jpg` dusk to ember). Steps against their neighbours: dusk to day from the start
+  pose at most 2.07, from the crest 1.07 and dusk to ember 1.0 to 2.3, except one or two steps at 65.95 to 65.97 s
+  (13.8 to 14.3 times its neighbours, 0.5% of pixels over 8 levels): the end of the engine's own time
+  blend, where its shadow map and its values are swapped; the critic's control with no event live
+  (`critic3/seq/calm-tc-*`) shows the same step (13.4 to 17.0). It is the engine's, not the colossus's,
+  and is not fixed here. The ground's shadow lifts with the presence over the 3 s (no disc round the
+  Pilgrim); the disc comes back as the square root of the presence.
+- No pops (`r4/seq.mjs`, `r4/pops.py`: each step's mean change against the median of its six neighbours
+  either side): the impact from the crest at dusk, 77.5 to 81.5 s: at most 1.86 (the veil's 1.2 s fade into
+  the dome included); the end, 103 to 111.5 s: at most 1.68, the eclipse as seen (`ecl` times presence) 0
+  from 108.5 s.
+- The shadow from the crest (`r4/probeK.mjs`, the schedule): the rows at 140 to 240 m are crossed from
+  47.2 to 54.6 s, the hidden trough in 0.5 s, the near slope (25 m to the feet) from 56.5 to 59 s; the
+  slope at the hold (64 s) measures (114, 54, 25) where the fourth pass gave (174, 76, 31), with the
+  lantern pool (138, 74, 31) the brightest thing near the Pilgrim.
+- Cost (`r4/cost.mjs`: gate3's method, 1440x900 at DPR 2, the camera at rest and pinned in both halves,
+  played from the hush at its own pace, each beat 90 drained frames, calm before and after each
+  playthrough, the placement made as a visitor gets it; trimmed mean ms over calm, mean of the clean
+  playthroughs, five playthroughs):
+
+  | Beat | WebGPU crest | WebGPU start | WebGL2 crest | WebGL2 start |
+  |---|---|---|---|---|
+  | call 60 s | 0.72 | 0.81 | 0.71 | 0.67 |
+  | call 64 s | 0.77 | 0.81 | 0.69 | 0.64 |
+  | fall 69 s | 0.78 | 0.81 | 0.72 | 0.68 |
+  | fall 72 s | 0.74 | 0.77 | 0.71 | 0.65 |
+
+  Worst 0.81 ms (WebGPU, start pose). WebGPU ember from the crest: 0.73, 0.70, 0.77, 0.76; by day 0.16 to
+  0.26. Single playthroughs ranged up to 0.99 (WebGPU crest, 64 s, the first of five) and 0.94 (WebGPU
+  start, 69 s): the machine was shared (other sessions, fseventsd at 100%), and an earlier quiet set gave
+  WebGPU crest at most 0.74 and start 0.71. The fourth pass, by the same method, ran 1.03 at 69 s. Where
+  it went (WebGL2 crest, parts hidden one at a time before the last cuts): the ground about 0.47, the
+  body 0.2, the veil 0.2, the sand 0.15.
+- The clip: `colossus-work/colossus4.mp4`, 60 s from 38 s to 98 s after the hush, at dusk from the crest (heading 30), seed 7, stepped at
+  30 fps with drained steps on WebGPU at 1280x720, the sound rendered offline from the values the page fed
+  its sound module each frame: the shadow's front over the rows, the call, the fall coming apart in its
+  dust, the dome, the boom at 84.6 s with the shake, the hiss, and the ground wave reaching the Pilgrim at
+  about 95 s. Its offline render peaks at -3.63 dBFS (the boom), over the playbook's -4 dBFS; `sound.js` is
+  untouched by this pass. **Owner to judge with the sound on.**
+
+Contact sheets: `frames/sheet-colossus.jpg` (rows: dusk from the start pose, dusk from the crest,
+ember from the crest, day from the crest, reduced motion at dusk from the start pose, WebGL2 dusk from the
+crest, WebGL2 day; columns: 20, 44, 52, 60, 72, 85 (impact + 6) and 96 s) and
+`frames/sheet-colossus-peak.jpg` (columns 54 and 60 s at 1.6 km, then at 2.2 km, from the crest; rows
+dusk, ember, day, WebGL2 dusk). By day the rows show only the swell's dust, the low dust where it went
+down and the world as it is: that is the design.
+
+**What is still weak, and was not checked.** The critic has not seen this pass. The dome is one dark billowing mass with
+feathered ends and no caps, lips or ears at seeds 3, 7 and 11 and 1.8 and 2.2 km, but it is a soft mass
+rather than visibly falling sand, and from a crest at dusk its lower part can show a paler band where far
+lit dunes sit in front of it. From the start pose the column now stands at 3 km and reads far, but it is
+paler and less present there (the haze of 3 km). From the crest the near slope in the shadow is dark
+red-brown, not neutral: the sand's own albedo under the sky's light. The front from the crest crosses the
+rows from about 46 to 56 s, but the row nearest (140 to 240 m) takes most of that time and the near slope
+still goes in 2.5 s. The veil's ellipsoid edge can still be seen as a faint bell round the column in
+first person and on a phone. When the time of day changes at the moment the disc is behind the body, the
+disc comes back through the last faint second of it. The fall now dissolves the body from 70 s; its arc
+over is less seen than before. The end of the engine's own time blend steps (above). Cost single
+playthroughs reached 0.99 ms on a busy machine; the means are 0.81 at worst. Not checked: a phone or a
+real finger, the sound by a person, timing on a quiet machine, WebGL2 ember and day cost.
+
 ## Not built yet
 
-Brink plumes, the hub landing and leaving, the shuttle, the colossus and the score. There
+Brink plumes, the hub landing and leaving, the shuttle and the score. There
 are no collisions (nothing to collide with). In first person the trail reads for about 24 m behind
 you (the trace window); in third person about 40 m.

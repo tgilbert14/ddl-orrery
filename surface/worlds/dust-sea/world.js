@@ -3,7 +3,8 @@
 // and its numbers (height.js, params.js), the ground and sky shading (tsl-material.js for the
 // WebGPURenderer, glsl-material.js for the look test's classic renderer), the times of day
 // (times.js), what the walker leaves in the sand (trace.js, pour.js, puffs.js), the calm air
-// (air.js), the event that happens to you (storm.js) and the sound (sound.js).
+// (air.js), the events that happen to you (storm.js, colossus.js; the engine's events.js runs them) and the
+// sound (sound.js).
 
 import * as params from './params.js';
 import { height, heightD, findCrest, WIND } from './height.js';
@@ -33,16 +34,15 @@ export function starts() {
 
 // The graphics-bound modules (they import three), loaded when the renderer is made.
 export async function graphics() {
-  const [materials, trace, pour, puffs, air, storm] = await Promise.all([
-    import('./tsl-material.js'), import('./trace.js'), import('./pour.js'), import('./puffs.js'), import('./air.js'), import('./storm.js'),
+  const [materials, trace, pour, puffs, air, storm, colossus] = await Promise.all([
+    import('./tsl-material.js'), import('./trace.js'), import('./pour.js'), import('./puffs.js'), import('./air.js'), import('./storm.js'), import('./colossus.js'),
   ]);
   return {
     createMaterials: materials.createTslMaterials,
     trace, pour, puffs, air,
-    // the event: the storm front. create() is its state machine; apply() its hook in the ground and
-    // sky shaders; createSky() the half-resolution pass over the sky; createParticles() the sand
-    // racing past; fog() what it does to the figure's colour.
-    event: { create: storm.createStorm, apply: storm.stormApply, createSky: storm.createStormSky, createParticles: storm.createStormSand, fog: storm.stormFog },
+    // the events (surface/engine/events.js has the def contract): the storm front, and the colossus
+    // (the storm first: it keeps the plain ?seed= stream)
+    events: [storm.stormDef, colossus.colossusDef],
   };
 }
 
