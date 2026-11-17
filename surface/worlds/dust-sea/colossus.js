@@ -126,9 +126,11 @@ export const CU = {
   dome: uniform(V4()),       // the dome: centre x, y, z, grown 0..1
   domeR: uniform(V4()),      // the volume it is drawn in: half width, height, density 0..1, drift time
   domeS: uniform(V4()),      // the dome's own shape: envelope half width, peak height, its evolving clock, unused
-  domeD: uniform(V4()),      // densities: the veil's, the dome's; unused, unused
+  domeD: uniform(V4()),      // densities: the veil's, the dome's; the falling core's (0..1); unused
   tw: uniform(V4()),         // day weight, ember weight, how much of the sun it covers from the eye, veil (0) or dome (1)
   slant: uniform(V4()),      // its top's slanted break: across x, z (signed to the low side), the base x, z
+  // the fall: the darker core leaning over inside the veil, along the spine (base, middle, head: xyz, radius)
+  core0: uniform(V4()), core1: uniform(V4()), core2: uniform(V4()),
 };
 
 // ---- closed forms shared by the ground, the figure and the dome
@@ -888,8 +890,12 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     const T = COL.T, want = st.tAbs < T.back ? 1 : 0;
     st.lift += (want - st.lift) * (1 - Math.exp(-dt / 1.0));
     if (st.tAbs > T.back + 4) st.lift *= Math.exp(-dt / 0.5);
-    // the brace when the ground wave passes
-    st.brace = st.waveAt !== null && !reduced ? sstep(st.waveAt - 0.3, st.waveAt, st.tAbs) * (1 - sstep(st.waveAt + 1.2, st.waveAt + 2.2, st.tAbs)) : 0;
+    // the brace when the ground wave passes. (A far impact's wave reaches the visitor late, about
+    // 105 s at 3 km: the brace kicks the lantern's pendulum, which then still swung a millionth of a
+    // metre at release and left the lantern's glass one level off 2 s after the end. It is let go
+    // from 10 s before the end and gone 7 s before it, so the swing has died out by release.)
+    const braceOut = 1 - sstep(T.end - 10, T.end - 7, st.tAbs);
+    st.brace = st.waveAt !== null && !reduced ? sstep(st.waveAt - 0.3, st.waveAt, st.tAbs) * (1 - sstep(st.waveAt + 1.2, st.waveAt + 2.2, st.tAbs)) * braceOut : 0;
     return out;
   }
 
@@ -930,24 +936,37 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     const fk = st.fallK, hd = st.head || st.B;
     const veilK = v.dens * (reduced ? st.develop * 2 : 1) * sstep(0, 150, st.hcur) * (1 + 0.7 * fk);
     const vC = [lerp(st.B[0], (st.B[0] + hd[0]) / 2, 0.8 * fk), st.B[1], lerp(st.B[2], (st.B[2] + hd[2]) / 2, 0.8 * fk)];
-    const vW = v.w * (st.S || 1) * (1 + 0.35 * fk), vH = Math.max(st.hcur * v.h, 4);
+    // (its volume a third taller as it goes over: its broken top, look.w in the shader, stands inside it,
+    // so the volume's own round top is never seen)
+    const vW = v.w * (st.S || 1) * (1 + 0.35 * fk), vH = Math.max(st.hcur * v.h * (1 + 0.35 * fk), 4);
     st.veilNow = { C: vC, w: vW, h: vH };
+    // (the core leaning over inside the veil: in as it starts to go over, out from 76.4 s and gone by
+    // 77.8 s, so the topple reads through the veil before it all comes apart; never by day)
+    const coreK = reduced ? 0 : st.vis * sstep(T.fall + 1, T.fall + 4, t) * (1 - sstep(T.fall + 8.4, T.fall + 9.8, t));
     if (D) {
       // (the veil's own dust goes over its first 1.2 s, faster than its volume changes shape, so no round
       // ghost of it is left between; the dome's look comes in over 0.8 s while the dome is still small)
       const u = D.u, kv = reduced ? 1 : sstep(0, 1.2, u), k = reduced ? 1 : sstep(0, 1.0, u), Va = st.veilAt || { C: st.B, h: 4 };
       const C = [0, 1, 2].map((i) => lerp(Va.C[i], D.C[i], k));
       CU.dome.value.set(C[0], C[1], C[2], 1);
-      CU.domeD.value.set(veilK * (1 - kv), D.dens, 0, 0);
+      CU.domeD.value.set(veilK * (1 - kv), D.dens, coreK * (1 - kv), 0);
       // (the volume it is drawn in: well outside its envelope, so its outline is never the ellipsoid's)
       CU.domeR.value.set(lerp(Va.w || v.w, 1.5 * D.A, k), lerp(Va.h, 1.45 * D.Hp + 30, k), seen, reduced ? 0 : t);
       CU.domeS.value.set(D.A, D.Hp, 7.3 + D.u * 0.035, st.domeSeed || 0);
       CU.tw.value.w = reduced ? 1 : sstep(0, 0.8, u);
     } else if (st.hcur > 1 && st.bodyOn) {
       CU.dome.value.set(vC[0], vC[1], vC[2], 1); CU.domeR.value.set(vW, vH, seen, reduced ? 0 : t);
-      CU.domeD.value.set(veilK, 0, 0, 0);
+      CU.domeD.value.set(veilK, 0, coreK, 0);
       CU.tw.value.w = 0;
     } else CU.dome.value.w = 0;
+    // (the falling core's spine: base, middle, head)
+    if (coreK > 0 && st.prof && st.centres.length) {
+      const S = st.centres, ex = st.hcur, P = st.prof, idx = (e) => Math.max(0, Math.min(NR - 1, Math.round(NR - 1 - (ex - e) / P.ds)));
+      const a = S[idx(ex * 0.08)], b = S[idx(ex * 0.55)], c = S[NR - 1];
+      CU.core0.value.set(a[0], a[1], a[2], radiusAt(ex * 0.08) * 0.75);
+      CU.core1.value.set(b[0], b[1], b[2], radiusAt(ex * 0.55) * 0.75);
+      CU.core2.value.set(c[0], c[1], c[2], radiusAt(0) * 0.75);
+    }
     // the ground wave: from the impact out over the dunes, fading as it goes (none under reduced motion)
     if (st.impactP && !reduced) {
       const r = (t - st.impactAt) * COL.wave;
@@ -1051,7 +1070,7 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
 
   // the sound (every frame, at rest when not live): each voice as it reaches the listener
   function sound() {
-    if (st.phase === 'none') return { colRumble: 0, colGrind: 0, colRoar: 0, colHiss: 0, colDuck: 0, colAM: 0, colCall: st.calls, colBoom: st.booms, colRing: st.rings, colReduced: reduced };
+    if (st.phase === 'none') return { colRumble: 0, colGrind: 0, colRoar: 0, colHiss: 0, colDuck: 0, colPre: 0, colAM: 0, colCall: st.calls, colBoom: st.booms, colRing: st.rings, colReduced: reduced };
     const t = st.tAbs, T = COL.T, da = st.dist / 343;
     const duck = sstep(0, 6, t) * (1 - sstep(T.settle, T.back, t));
     const rumble = sstep(0, 12, t) * (0.6 + 0.4 * sstep(T.swell, T.funnelEnd, t)) * (1 - sstep(T.settle, T.end - 6, t));
@@ -1060,14 +1079,17 @@ export function createColossus({ reduced = false, rnd, mode = null } = {}) {
     const tr = t - da;
     const roar = sstep(T.rise, T.rise + 5, tr) * (1 - sstep(T.fall, T.fall + 6, tr));
     if (t >= T.cry + da && !st.callDone) { st.callDone = true; st.calls++; }
-    let hiss = 0;
+    let hiss = 0, pre = 0;
     if (st.impactAt !== null) {
       const di = st.impactD / 343, th = t - st.impactAt - di;
       if (th >= 0 && !st.boomDone) { st.boomDone = true; st.booms++; }
       hiss = sstep(0, 2, th) * (1 - sstep(8, 24, th));
+      // (the rumble bed held down for the 0.3 s before the boom reaches the visitor, and let back over
+      // the boom's swell, so the boom stands out of it)
+      pre = sstep(-0.4, -0.3, th) * (1 - sstep(0.2, 2.2, th));
     }
     if (t < 1) { st.callDone = false; st.boomDone = false; }
-    return { colRumble: rumble, colYaw: st.bearing, colGrind: grind, colRoar: roar, colHiss: hiss, colDuck: duck,
+    return { colRumble: rumble, colYaw: st.bearing, colGrind: grind, colRoar: roar, colHiss: hiss, colDuck: duck, colPre: pre,
       colAM: t > T.swell && t < T.funnelEnd ? 1 : 0.25, colCall: st.calls, colBoom: st.booms, colRing: st.rings, colReduced: reduced };
   }
 
@@ -1286,12 +1308,50 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     const big = mx_noise_float(vec2(Ms.x.add(Ms.z).div(420.0), Ms.y.div(260.0))).mul(0.5).add(0.5).toVar();
     If(m.greaterThan(0.001), () => { big.assign(mix(big, mx_noise_float(Ms.mul(vec3(1.0 / 420.0, 1.0 / 260.0, 1.0 / 420.0))).mul(0.5).add(0.5), m)); });
     const fall = mx_noise_float(vec3(Ms.x.div(48.0), Ms.y.div(420.0), Ms.z.div(48.0))).mul(0.5).add(0.5).toVar();
+    const edgeK = smoothstep(0.0, 0.7, q.w.add(big.sub(0.5).mul(0.5))).toVar();
+    // as it goes over (look.w), the veil round it is not a round-topped bell of even streaks: its top is
+    // broken at three scales (340, 120 and 83 m across it) so it is never one arc; its streaks are warped
+    // across (irregular spacing and width), each column with its own length, at two scales with noise
+    // along them, so no two neighbours match; and the body's core leans over inside it, darker, until
+    // about 77.5 s (domeD.z). None for the dome; none of it is worked out before the fall (cost)
+    const vk = CU.look.w.mul(float(1.0).sub(m)).toVar();
+    const topK = float(1.0).toVar(), coreT = float(0.0).toVar();
+    // (each of these is set here, outside the branch, before the branch reads or writes it: a variable
+    // first met inside an If is set only when the branch runs)
+    topK.assign(1.0); coreT.assign(0.0); fall.assign(fall); edgeK.assign(edgeK);
+    If(vk.greaterThan(0.001), () => {
+      const ax = normalize(vec2(CU.slant.x, CU.slant.y));
+      const hx = dot(Ms.xz, ax).toVar(), yv = Ms.y.sub(CU.dome.y).toVar(), ck = CU.domeR.w;
+      const wv = mx_noise_float(vec2(hx.div(230.0).add(11.0), yv.div(380.0).add(ck.mul(0.02)))).toVar();
+      const hw = hx.add(wv.mul(95.0)).toVar();
+      const s1 = mx_noise_float(vec2(hw.div(29.0).add(2.0), yv.div(wv.mul(120.0).add(270.0)).add(ck.mul(0.08)))).toVar();
+      const s2 = mx_noise_float(vec2(hw.div(83.0).add(5.0), yv.div(560.0).add(ck.mul(0.05)))).toVar();
+      const sN = s1.mul(0.55).add(s2.mul(0.45)).mul(0.6).add(0.5);
+      fall.assign(mix(fall, sN, vk));
+      // (its top: a local height across it, at most 0.95 of the volume's (made a third taller for it), so
+      // the volume's own round top never shows)
+      const t1 = mx_noise_float(vec2(hx.div(340.0).add(ck.mul(0.015)), 4.0));
+      const t2 = mx_noise_float(vec2(hx.div(120.0).add(1.7), ck.mul(0.03).add(8.0)));
+      const tf = clamp(t1.mul(0.3).add(t2.mul(0.15)).add(s2.mul(0.08)).add(0.8), 0.45, 0.95);
+      const yr = max(yv, 0.0).div(CU.domeR.y.mul(tf)).toVar(), y2 = yr.mul(yr);
+      // (and a little denser below it, so as much of it stands in front of the sun as before)
+      topK.assign(mix(float(1.0), exp(y2.mul(y2).mul(-1.6)).mul(1.25), vk));
+      // (its flanks broken up it too: no clean shoulder)
+      edgeK.mulAssign(mix(float(1.0), smoothstep(-0.25, 0.45, wv.mul(0.5).add(t2.mul(0.4)).add(q.w.mul(1.6)).sub(0.2)), vk));
+      // the core: the ray's closest pass to the spine (two segments), soft and torn by the same streaks
+      If(CU.domeD.z.greaterThan(0.001), () => {
+        const g0 = segRay(ro, rd, CU.core0.xyz, CU.core1.xyz).toVar(), g1 = segRay(ro, rd, CU.core1.xyz, CU.core2.xyz).toVar();
+        const w0 = mix(CU.core0.w, CU.core1.w, g0.z), w1 = mix(CU.core1.w, CU.core2.w, g1.z);
+        const r0 = g0.x.div(w0), r1 = g1.x.div(w1);
+        const k0 = exp(r0.mul(r0).negate()), k1 = exp(r1.mul(r1).negate());
+        coreT.assign(max(k0, k1).mul(s1.mul(0.45).add(s2.mul(0.3)).add(0.8)).mul(CU.domeD.z).mul(1.6).mul(smoothstep(0.0, 0.25, q.w)));
+      });
+    });
     // the veil: denser low (it is falling back), the noise only shaping it, and a wide low skirt of dust
     // and haze its foot is lost in
     const yN = max(M.y.sub(Cn.y), 0.0).div(rad.y).toVar();
-    const dn = big.mul(1.6).add(0.4).mul(fall.mul(0.6).add(0.7)).mul(exp(yN.mul(-1.3)).mul(0.75).add(0.4)).mul(CU.domeD.x).toVar();
+    const dn = big.mul(1.6).add(0.4).mul(fall.mul(0.6).add(0.7)).mul(exp(yN.mul(-1.3)).mul(0.75).add(0.4)).mul(CU.domeD.x).mul(topK).toVar();
     dn.mulAssign(float(1.0).add(exp(M.y.sub(Cn.y).div(-COL.veil.skirtH)).mul(COL.veil.skirt).mul(float(1.0).sub(m))));
-    const edgeK = smoothstep(0.0, 0.7, q.w.add(big.sub(0.5).mul(0.5))).toVar();
     // the dome: one low, very wide mass of falling sand. Its height over the ground at a point is an
     // envelope (longer and lower toward where the head came down, shorter on the base's side: no
     // symmetry about its centre; it falls to nothing at both ends, so they thin out into haze along the
@@ -1337,7 +1397,7 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
       tauD.assign(A.mul(1.5).mul(sqrt(env)).mul(COL.dome.k).mul(d).mul(smoothstep(0.0, 0.05, q.w)));
       dn.addAssign(d);
     });
-    const tau = q.x.mul(COL.dome.k).mul(dn.sub(sk.x)).mul(edgeK).add(tauD).mul(CU.domeR.z).mul(CU.tw.x.mul(0.4).add(1.0)).toVar();
+    const tau = q.x.mul(COL.dome.k).mul(dn.sub(sk.x)).mul(edgeK).add(tauD).add(coreT).mul(CU.domeR.z).mul(CU.tw.x.mul(0.4).add(1.0)).toVar();
     const a = float(1.0).sub(exp(tau.negate()));
     // how thin the sand is along the view (its edges and its torn top) and how much its side faces the sun
     const thin = exp(tau.mul(-0.9)).toVar();
@@ -1376,6 +1436,8 @@ export function createColossusBody({ U, scene, event, fns, reduced = false }) {
     const c0 = U.uSand.mul(CU.cardTint).mul(mix(float(0.55), float(1.0), CU.tw.x)).mul(light).mul(float(1.0).sub(CU.tw.y.mul(m).mul(0.6)));
     // (by day the dust is the pale of sunlit sand, not its deep ochre)
     const c = mix(c0, vec3(dot(c0, vec3(0.3333))).mul(vec3(1.08, 1.0, 0.86)), CU.tw.x.mul(0.45)).toVar();
+    // (the falling core: darker, its own dark value)
+    c.mulAssign(float(1.0).sub(float(1.0).sub(exp(coreT.negate())).mul(0.6)));
     const hz = vec4(domeHazeV).toVar();
     c.assign(mix(c, hz.xyz, hz.w));
     // (its lit side never brighter than the air behind it)
