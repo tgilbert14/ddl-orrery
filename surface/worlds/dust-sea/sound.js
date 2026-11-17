@@ -21,7 +21,8 @@
 //   sub-rumble at 28 to 40 Hz with harmonics at 90 to 180 Hz, panned to colYaw, its amplitude
 //   wavering at 0.8 Hz as much as colAM says; colGrind 0..1 the swell's grind (brown noise and a
 //   granular crackle); colRoar 0..1 the sand pouring off it; colHiss 0..1 the falling sand after the
-//   fall; colDuck 0..1 the wind bed down 12 dB; colCall, colBoom, colRing counts: each step up is the
+//   fall; colDuck 0..1 the wind bed down 12 dB; colPre 0..1 the sub-rumble down 5 dB (held just before
+//   the boom arrives, so the boom stands out); colCall, colBoom, colRing counts: each step up is the
 //   call (a 30 to 55 Hz glide with 110/165/220 Hz partials), the long soft boom, a faint lantern
 //   ring. colReduced: 3 dB lower and no wavering. strike(): the staff, at once (a dry thud and a
 //   crunch of sand). Every delay (sound in air, ground-borne) is colossus.js's.
@@ -62,7 +63,8 @@ export const COL_MIX = {
   grind: 0.22, crackle: 0.05,
   roar: 0.2, hiss: 0.06,
   duck: 0.25,              // the wind bed's gain at the duck's depth (-12 dB)
-  call: 0.22, boom: 0.42, ring: 0.025,
+  pre: 0.56,               // the sub-rumble's gain held just before the boom (-5 dB)
+  call: 0.22, boom: 0.40, ring: 0.025,
   strike: 0.55,            // the staff's thud (the crunch is a landing's grain at this share)
   reduced: 0.71,           // -3 dB under reduced motion
 };
@@ -286,7 +288,7 @@ export function createSound(opts = {}) {
     sinceParams: 1, stepSide: 1,
     stormIn: 0, storm: 0, stormGust: 0.5,
     wallIn: 0, wall: 0, wallYaw: 0, wallFocus: 1, listenerYaw: 0, impactN: null, hushIn: 0, hush: 0,
-    col: { rumble: 0, grind: 0, roar: 0, hiss: 0, duck: 0, am: 0, yaw: 0, red: false, call: null, boom: null, ring: null },
+    col: { rumble: 0, grind: 0, roar: 0, hiss: 0, duck: 0, pre: 0, am: 0, yaw: 0, red: false, call: null, boom: null, ring: null },
   };
 
   function now() { return ctx.currentTime; }
@@ -570,8 +572,10 @@ export function createSound(opts = {}) {
     {
       const c = st.col, k = c.red ? COL_MIX.reduced : 1;
       set(g.colPan.pan, 0.75 * Math.sin(c.yaw - st.listenerYaw), 0.3);
-      set(g.crV.gain, COL_MIX.rumble * k * Math.pow(c.rumble, 0.6), tau);
-      set(g.chV.gain, COL_MIX.hum * k * Math.pow(c.rumble, 0.9), tau);
+      // (held down before the boom: fast, 40 ms, so the dip is heard as a breath before it)
+      const pre = lerp(1, COL_MIX.pre, c.pre), pt = c.pre > 0.001 ? 0.04 : tau;
+      set(g.crV.gain, COL_MIX.rumble * k * pre * Math.pow(c.rumble, 0.6), pt);
+      set(g.chV.gain, COL_MIX.hum * k * pre * Math.pow(c.rumble, 0.9), pt);
       set(g.lfoD.gain, c.red ? 0 : COL_MIX.am * c.am * c.rumble, 0.3);
       set(g.cgV.gain, COL_MIX.grind * k * c.grind, tau);
       set(g.ckV.gain, COL_MIX.crackle * k * c.grind, tau);
@@ -682,6 +686,7 @@ export function createSound(opts = {}) {
     {
       const c = st.col, ease = (k, v, tau) => { if (Number.isFinite(v)) c[k] += (clamp(v) - c[k]) * (1 - Math.exp(-dt / tau)); if (c[k] < 1e-4 && !(v > 0)) c[k] = 0; };
       ease('rumble', state.colRumble, 0.8); ease('grind', state.colGrind, 0.4); ease('roar', state.colRoar, 0.8); ease('hiss', state.colHiss, 1.0); ease('duck', state.colDuck, 0.8);
+      c.pre = Number.isFinite(state.colPre) ? clamp(state.colPre) : 0;
       if (Number.isFinite(state.colAM)) c.am = clamp(state.colAM);
       if (Number.isFinite(state.colYaw)) c.yaw = state.colYaw;
       if (state.colReduced !== undefined) c.red = !!state.colReduced;

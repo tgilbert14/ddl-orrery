@@ -67,8 +67,13 @@ run, and a README section saying what was measured and what was not.
   Check it: calm stills must be pixel-identical before and after a change.
 - **The figure has no face except two dim amber eyes in the hood, no visible limbs or legs; no text
   in the canvas; no other people or creatures.** One written exception (the owner, 15 Nov 2026): the
-  Dust Sea's colossus. It stays massive (350 to 420 m), far (never nearer than 1.5 km), mostly hidden
-  in its own falling sand, and only silhouette and rim: no face, eyes, teeth or countable segments.
+  Dust Sea's colossus. It stays massive (700 to 800 m), far (never nearer than 1.5 km), mostly hidden
+  in haze, glare and its own falling sand, and only a dark mass: no face, eyes, mouth, teeth, rim all
+  round or countable segments, nothing round on top, nothing horizontal (tiers read as a tower).
+  By day it is felt and heard, never seen (the lead, 16 Nov 2026): no body, veil, dome or shadow is
+  drawn by day, blended out by the same sun-height value the shading uses, so nothing switches at a
+  time-of-day boundary; the hush, the swell and its low dust, the sound, the ground wave, the camera
+  and the figure carry it. A far creature in clear daylight reads as a model however it is drawn.
   It is not a precedent for close creatures on other worlds; a world that wants one asks again. (The owner chose the dim eyes on 13 Nov 2026 from a
   sheet of three; `?eyes=0` removes them.)
 - **Reduced motion** is a designed state: cuts with a short fade, nothing races, nothing shakes.
@@ -169,11 +174,68 @@ the contract) runs every event of a world; the world only describes them.
    then the motion; then the sound (offline render, peaks at or under -4 dBFS); then timing, the
    sweep, reduced motion and the switches; then a 30 to 40 s clip with sound for the owner.
    Hooks an event can lean on: `figure()` turns the hood and braces the Pilgrim; `camera()` gives
-   `lift` (boom +3 m, the view raised), `toward` (after 3 s without input) and `shake` (0.3 degrees,
+   `lift` (the view raised 0.06 rad; the boom keeps its length, so the figure keeps its size),
+   `toward` (after 3 s without input) and `shake` (0.3 degrees,
    never under reduced motion); `update(dt, P)` gets `P.env` (the visitor, the camera, the suns);
    `?<name>=<phase>` jumps straight to a phase (`?colossus=rise`); `announce()` gives the polite DOM
    line when it begins. Meshes and sprites go in `particles({ U, scene, fns })` (`fns` has the world's
-   `skyColor`, `fogAmount` and `finish`, so they sit in the same haze and tone).
+   `skyColor`, `fogAmount` and `finish`, so they sit in the same haze and tone). The ground hook also
+   gets `lit` (the sand's normal, albedo, both suns' shadow terms, its fog and `sunOnSand`), so a cast
+   shadow can take one sun's direct light off the sand (lit sand falls to the dunes' own shade) rather
+   than multiply everything. (Multiplying the sand's own shadow terms before it is lit was tried and is
+   cheaper, but it moved ten first-person calm pixels by one level even inside a branch on a uniform:
+   the calm shader must not change outside the event's own branch. Inside the branch too: terms written
+   exactly like the sand's own, such as its ambient and fill, were shared by the WebGL2 compiler with
+   the calm path and moved two calm pixels; write the event's copies differently.) To dim the sky (an
+   eclipse), go through `modify()` on the sun's `Sky` (the disc) and at most its tight `Glow`, as
+   storm.js does: a `sky` hook never runs while another event owns the half-resolution sky pass. Never
+   turn the wide glow or `uFill` down over the whole frame; darken the ground inside the shadow in the
+   ground hook instead. And `fog(col, P, lamp)` is also called for the lantern's glass with no
+   `lamp`: an event's shadow must leave the glass alone.
+   **Lessons from the colossus** (the owner failed the first pass on looks, a critic the second): a far
+   creature built as a clean tube with a cap, a uniform rim and its own sprites reads as a small model
+   beside the sun; a dark body in clear air, darker than the dunes in front of it, reads as a statue.
+   What works is scale felt through the world: standing on the sun's line so the disc goes behind it
+   while the glare stays, the full haze of its distance over it (aerial perspective must not reverse),
+   a veil of its own dust round it, its top dissolving by alpha (never a mix to the sky colour), the
+   shadow's front crossing the dunes to the figure while the ground, not the lantern, is turned down.
+   Its sand must only fall, darker than the sky where thick; a fall must keep the body dark until
+   something opaque covers it; a dome of sand is one soft volume, never thresholded into heads. Look
+   at every time of day, the crest pose, reduced motion and a phone, not only the showcase path, and
+   measure cost with real playback and one fixed view.
+   **Lessons from its fourth pass** (a second critic, 5 of 10): every term that changes at a beat must
+   ease (a volume that becomes another blends its centre, size, density and look over seconds; a grain
+   let go fades over its own time, never by shortening its life; a sway eases out; a noise warp that
+   switches on mid-blend jumps); step each beat at 60 fps and check no step changes more than about
+   twice its neighbours. A sun disc behind a dissolving top reads as an eye: take the disc away by what
+   covers it from the eye, not only by the shadow at the visitor. Alpha, not dither, and no depth of its
+   own: a depth pass cuts what is drawn after it along a hard line, so shed its sand on the side toward
+   the eye instead, and budget the sand (without depth every streak's pixels are paid for). Dissolve a
+   top by distance from the head, not by height up what is exposed, or the rise is an egg; fray the
+   outline by the ring's roundness, not the surface normal, or creases fray as lines inside it. A shadow
+   front reads as travelling only if it takes seconds over the visible ground: slow it near the visitor
+   and narrow its terminator. A dome wants an irregular top (its local height from a broad octave), a
+   lit thin rim, a dark core and its haze taken at one height. Aim the camera at the centre of what is
+   happening; under reduced motion cut once to the sun's line rather than stand beside the sun. Prefer a
+   place with rows of dunes in sight; where there are none, a low skirt of haze over its foot carries the
+   distance.
+   **Lessons from its fifth pass** (a third critic, 6 of 10): give an event one master presence that
+   multiplies every term that is seen, and when the time of day changes under it, ease it out first and
+   make the time's blend wait (`holdTime()`): an event's look keyed to a time weight that switches at
+   the blend's end shows the wrong look in the new light for the length of the blend and then vanishes.
+   A volume drawn in an ellipsoid shows the ellipsoid (round end caps, a hairline arc, a slit where its
+   base plane meets lower ground): draw it in a bound well outside it, take its depth across its own
+   footprint and its top as a height field where the view ray passes closest, let its density fall from
+   well inside its ends and its top feather as a power of its height, and break the top at several scales
+   with noise that also varies with height (noise only across the ground stands in streaks). Two or three
+   big lobes read as lips, ears or a head: keep the largest octave broad and weak. Under reduced motion
+   never turn the view, not even by a cut: stand it inside the frame the visitor has. Dim a sun's disc only
+   by what covers it from the eye. A cast shadow on ground lit by two suns must take most of both, or the
+   other sun's colour floods it. A shadow's front reads as travelling only where the eye sees the ground it
+   crosses: schedule it by a march of what is in sight. Falling sand in front of a body takes the body's
+   own hazed colour. A thing seen over one near crest reads as near: stand it farther off and larger, and
+   fade it into the haze above the crest line. 2D noise across and up a far body is half the cost of 3D and
+   looks the same from the one side it is seen from.
 
 The storm moved onto this on 15 Nov 2026 with no visible change (every calm and seeded storm still
 byte-identical, the six-configuration sweep empty, the schedule and the anim2 smoke and measure
@@ -267,4 +329,4 @@ Not started. What this session knows that bears on it:
 - (Fixed 15 Nov 2026: the hard line between dark sky and bright sand early in the storm's passing;
   see the walk README, "The storm cleanup".)
 - Not built: brink plumes, the landing and leaving, the shuttle overhead, the caravan tracks, the
-  score. (The colossus is built, 15 Nov 2026: see the walk README, "The colossus".)
+  score. (The colossus is built, 15 Nov 2026, and its look reworked four times, 15 and 16 Nov: see the walk README, "The colossus".)

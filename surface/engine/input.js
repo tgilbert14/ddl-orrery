@@ -10,7 +10,8 @@
 // quickly to run), the right half looks, and a quick tap anywhere walks you to that point.
 // Any other movement input stops a walk-to.
 // The staff strike: F or Space (Space only when no button has focus), or a long press (500 ms, under
-// 12 px of drag) on touch, which sets no walk target. read() gives the frame's count as intent.strike.
+// 12 px of drag) on touch in the right half (the left half's thumb stick never strikes), which sets
+// no walk target. read() gives the frame's count as intent.strike.
 
 const MOVE = { KeyW: [1, 0], ArrowUp: [1, 0], KeyS: [-1, 0], ArrowDown: [-1, 0], KeyA: [0, -1], ArrowLeft: [0, -1], KeyD: [0, 1], ArrowRight: [0, 1] };
 const LOOK_MOUSE = 0.0022;   // rad per CSS px
@@ -76,11 +77,15 @@ export function createInput(el, { onTime, onGesture, onFirstMove, onView } = {})
     pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: performance.now(), type: e.pointerType, dragged: false });
     if (e.pointerType === 'touch') {
       const id = e.pointerId;
-      setTimeout(() => { const p = pointers.get(id); if (p && Math.hypot(p.x - p.x0, p.y - p.y0) < LONG_PX) { p.struck = true; strikes++; } }, LONG_MS);
       const left = e.clientX < window.innerWidth / 2;
+      // (a touch on the left half, the thumb stick's half, never strikes: a thumb held still on the
+      // stick is not a call, and neither is a second finger resting beside it)
+      if (left) pointers.get(id).noStrike = true;
+      setTimeout(() => { const p = pointers.get(id); if (p && !p.stick && !p.noStrike && Math.hypot(p.x - p.x0, p.y - p.y0) < LONG_PX) { p.struck = true; strikes++; } }, LONG_MS);
       if (left && !stick) {
         const now = performance.now();
         stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, run: now - lastStickEnd < DOUBLE_MS };
+        pointers.get(id).stick = true;
       } else if (!left && !lookTouch) lookTouch = { id: e.pointerId, x: e.clientX, y: e.clientY };
       el.setPointerCapture?.(e.pointerId);
     }

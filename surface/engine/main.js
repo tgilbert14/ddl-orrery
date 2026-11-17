@@ -378,6 +378,8 @@ export async function start(world) {
   }
   function updateTime(dt) {
     if (!timeFade || timeFade.phase !== 'fading') return;
+    // (a live event may ask the blend to wait while it eases what is seen of it out)
+    if (timeFade.t === 0 && director && director.holdTime()) return;
     timeFade.t += dt;
     const f = Math.min(1, timeFade.t / TIME_FADE), ff = f * f * (3 - 2 * f);
     applyBlend(G.mats.set, timeNow, timeFade.to, ff, ws.ground);
@@ -458,7 +460,14 @@ export async function start(world) {
     if (n === announced) return;
     announced = n;
     const ev = n ? director.event(n) : null, line = ev && ev.announce ? ev.announce() : '';
-    if (line && eventLineEl) { eventLineEl.textContent = line; eventLineEl.classList.add('on'); clearTimeout(announce.t); announce.t = setTimeout(() => eventLineEl.classList.remove('on'), 12000); }
+    if (line && eventLineEl) { eventLineEl.textContent = line; eventLineEl.classList.add('on'); clearTimeout(announce.t); announce.t = setTimeout(() => eventLineEl.classList.remove('on'), 8000); }
+    // while an event is live the controls hint bar is hidden (it comes back when the event ends)
+    if (hintEl) hintEl.classList.toggle('event', !!n);
+  }
+  // the line goes early once the event says so (the colossus: before anything of it stands in the sky)
+  function lineCheck() {
+    const n = director.live, ev = n ? director.event(n) : null;
+    if (ev && ev.lineDone && eventLineEl && eventLineEl.classList.contains('on') && ev.lineDone()) eventLineEl.classList.remove('on');
   }
   function tickThird(dt, intent) {
     const F = G.follow;
@@ -583,9 +592,12 @@ export async function start(world) {
     let evCut = false;
     if (director) {
       const c = G.camera.position, ce = G.camera.matrixWorld.elements;
-      const r = director.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, cam: [c.x, c.y, c.z], yaw: Math.atan2(-ce[10], -ce[8]),
-        suns: [timeNow.uSun1Dir, timeNow.uSun2Dir], cols: [timeNow.uSun1Col, timeNow.uSun2Col] });
-      announce();
+      // (and the time of day: its name, and while it changes, where it is going and how far the blend is)
+      const tf = timeFade && timeFade.phase === 'fading' ? Math.min(1, timeFade.t / TIME_FADE) : 0;
+      const r = director.update(dt, { x: ws.x, z: ws.z, ground: ws.ground, cam: [c.x, c.y, c.z], yaw: Math.atan2(-ce[10], -ce[8]), view: viewMode,
+        suns: [timeNow.uSun1Dir, timeNow.uSun2Dir], cols: [timeNow.uSun1Col, timeNow.uSun2Col],
+        timeName: timeNow.name, timeTo: timeFade ? timeFade.to.name : null, sunsTo: timeFade ? [timeFade.to.uSun1Dir, timeFade.to.uSun2Dir] : null, timeF: tf * tf * (3 - 2 * tf) });
+      announce(); lineCheck();
       if (r.cleared) { G.trace.clear(); G.pour?.clear(); traceC = null; }
       evCut = r.cut;
     }

@@ -25,8 +25,13 @@
 //   wind(env) -> { strength, gust, mix, figure? }   env = { lamp: [x,y,z] | null, cam: {x,y,z} | null }
 //   walk() -> { k, ... } | null            the walker's push (the largest k wins)
 //   camera() -> { boom?, amount, lift?, toward?: [x, z, beat], shake? }   (shortest boom, largest amount;
-//                                          lift 0..1 a longer, raised view; toward the point to turn to
-//                                          after 3 s without input; shake 0..1 at most 0.3 degrees)
+//                                          lift 0..1 a raised view (0.06 rad); toward the point to turn to
+//                                          after 3 s without input; shake 0..1 at most 0.3 degrees;
+//                                          cutTo [x, z, id]: under reduced motion only, the view cuts to
+//                                          face it once per id, cross-faded)
+//   lineDone?() -> boolean                 its DOM line (announce) is taken down early once true
+//   holdTime?() -> boolean                 while true, a change of the time of day waits before its
+//                                          blend starts (the event eases what is seen of it out first)
 //   trace() -> { healMul, clear? }         (healMul multiplied, clear ORed)
 //   figure() -> { look?: [x, z], brace?: 0..1 }
 //   strike?(e) -> boolean | number         a staff strike (only defs with `call`); e.blocked when it
@@ -37,7 +42,8 @@
 //
 // EventGraphics = { ground?(a), sky?(a), skyPass?: { hook, render(cam, force) }, fog?(col, P, lamp),
 //                   particles?({ U, scene }) -> { update(dt, camera), clear(), live }, readout?() }
-//   ground and sky are the material hooks (a = { col, ro, rd, dist, face }); sky is the full-resolution
+//   ground and sky are the material hooks (a = { col, ro, rd, dist, face, lit }; lit: the sand's own light
+//   terms, so a cast shadow can take one sun's direct light off); sky is the full-resolution
 //   path (?skyfull=1), skyPass the half-resolution one; particles is made once the scene holds the
 //   figure (its sprites sort after the Pilgrim's) and updates every frame (it hides itself when off).
 
@@ -177,7 +183,8 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
       const c = e.ev.camera();
       if (c) {
         camAmt = c.amount; if (c.boom !== undefined) camBoom = c.boom;
-        return { storm: camAmt, stormBoom: camBoom, lift: c.lift || 0, toward: reduced ? null : c.toward || null, shake: reduced ? 0 : c.shake || 0 };
+        return { storm: camAmt, stormBoom: camBoom, lift: c.lift || 0, toward: reduced ? null : c.toward || null, shake: reduced ? 0 : c.shake || 0,
+          cutTo: reduced ? c.cutTo || null : null };
       }
     }
     return { storm: camAmt, stormBoom: camBoom === Infinity ? 0 : camBoom, lift: 0, toward: null, shake: 0 };
@@ -263,8 +270,11 @@ export function createDirector({ defs, seed = null, url = null, testMode = false
     });
   }
 
+  // true while the live event asks the time of day's blend to wait (it is easing itself out first)
+  function holdTime() { const e = live(); return !!(e && e.ev.holdTime && e.ev.holdTime()); }
+
   return {
-    update, wind, walk, camera, trace, sound, figure, light, strike,
+    update, wind, walk, camera, trace, sound, figure, light, strike, holdTime,
     list: () => list.map((e) => e.def.name), start, skipTo, hold, state, raw,
     has: (n) => !!byName(n), event: (n) => byName(n)?.ev || null, defs: () => list.map((e) => e.def),
     get live() { const e = live(); return e ? e.def.name : null; },
